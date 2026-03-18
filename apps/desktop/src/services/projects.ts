@@ -3,6 +3,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { eq } from "drizzle-orm";
 import type { CreateProjectInput, Project } from "@iara/contracts";
+import { gitClone } from "@iara/shared/git";
 import { getDb, schema } from "../db.js";
 import { getProjectsDir } from "./config.js";
 
@@ -18,7 +19,7 @@ export function getProject(id: string): Project | null {
   return row ? deserializeProject(row) : null;
 }
 
-export function createProject(input: CreateProjectInput): Project {
+export async function createProject(input: CreateProjectInput): Promise<Project> {
   const db = getDb();
   const now = new Date().toISOString();
   const id = crypto.randomUUID();
@@ -34,12 +35,24 @@ export function createProject(input: CreateProjectInput): Project {
 
   db.insert(schema.projects).values(row).run();
 
-  // Create project directory with PROJECT.md
+  // Create project directory structure
   const projectDir = getProjectDir(input.slug);
-  fs.mkdirSync(projectDir, { recursive: true });
+  const reposDir = path.join(projectDir, ".repos");
+  fs.mkdirSync(reposDir, { recursive: true });
+
+  // PROJECT.md
   const projectMdPath = path.join(projectDir, "PROJECT.md");
   if (!fs.existsSync(projectMdPath)) {
     fs.writeFileSync(projectMdPath, `# ${input.name}\n`);
+  }
+
+  // Clone repos into .repos/
+  for (const source of input.repoSources) {
+    const repoName = repoNameFromSource(source);
+    const dest = path.join(reposDir, repoName);
+    if (!fs.existsSync(dest)) {
+      await gitClone(source, dest);
+    }
   }
 
   return deserializeProject(row);
@@ -73,4 +86,12 @@ function deserializeProject(row: typeof schema.projects.$inferSelect): Project {
     ...row,
     repoSources: JSON.parse(row.repoSources) as string[],
   };
+}
+
+function repoNameFromSource(source: string): string {
+  // "https://github.com/user/repo.git" → "repo"
+  // "/home/user/projects/repo" → "repo"
+  const cleaned = source.replace(/\.git\/?$/, "").replace(/\/+$/, "");
+  const last = cleaned.split("/").pop();
+  return last || "repo";
 }

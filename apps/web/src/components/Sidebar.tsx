@@ -9,7 +9,8 @@ import { DevServerPanel } from "./DevServerPanel";
 import { BrowserToggle } from "./BrowserToggle";
 
 export function Sidebar() {
-  const { projects, selectedProjectId, loading, loadProjects, selectProject } = useProjectStore();
+  const { projects, selectedProjectId, loading, loadProjects, selectProject, deleteProject } =
+    useProjectStore();
   const [showCreateProject, setShowCreateProject] = useState(false);
   const [showCreateTask, setShowCreateTask] = useState(false);
 
@@ -39,6 +40,7 @@ export function Sidebar() {
                 projects={projects}
                 selectedId={selectedProjectId}
                 onSelect={selectProject}
+                onDelete={(id) => void deleteProject(id)}
               />
             )}
           </SidebarSection>

@@ -1,4 +1,4 @@
-import { FolderOpen } from "lucide-react";
+import { FolderOpen, Trash2 } from "lucide-react";
 import type { Project } from "@iara/contracts";
 import { cn } from "~/lib/utils";
 
@@ -6,13 +6,14 @@ interface ProjectListProps {
   projects: Project[];
   selectedId: string | null;
   onSelect: (id: string) => void;
+  onDelete: (id: string) => void;
 }
 
-export function ProjectList({ projects, selectedId, onSelect }: ProjectListProps) {
+export function ProjectList({ projects, selectedId, onSelect, onDelete }: ProjectListProps) {
   return (
     <ul className="space-y-0.5">
       {projects.map((project) => (
-        <li key={project.id}>
+        <li key={project.id} className="group relative">
           <button
             type="button"
             onClick={() => onSelect(project.id)}
@@ -25,6 +26,16 @@ export function ProjectList({ projects, selectedId, onSelect }: ProjectListProps
           >
             <FolderOpen size={14} className="shrink-0" />
             <span className="truncate">{project.name}</span>
+          </button>
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onDelete(project.id);
+            }}
+            className="absolute right-1 top-1/2 hidden -translate-y-1/2 rounded p-0.5 text-zinc-600 hover:text-red-400 group-hover:block"
+          >
+            <Trash2 size={12} />
           </button>
         </li>
       ))}
