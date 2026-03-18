@@ -6,6 +6,7 @@ import { defineConfig } from "vite";
 const port = Number(process.env.PORT ?? 5173);
 
 export default defineConfig({
+  clearScreen: false,
   plugins: [tanstackRouter(), react(), tailwindcss()],
   resolve: {
     tsconfigPaths: true,

@@ -42,9 +42,7 @@ devSupervisor.on("healthy", (_name: string, port: number) => {
   }
 });
 
-// Initialize database before starting
-import { ensureDb } from "./db.js";
-await ensureDb();
+// Initialize database
 
 // Start
 const { httpServer, stop: stopWs } = createServer({ port, authToken, webDir });
@@ -104,3 +102,5 @@ function shutdown() {
 
 process.on("SIGTERM", shutdown);
 process.on("SIGINT", shutdown);
+
+process.on("disconnect", shutdown);

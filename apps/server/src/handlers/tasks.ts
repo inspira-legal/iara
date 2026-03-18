@@ -3,11 +3,11 @@ import { listTasks, getTask, createTask, completeTask, deleteTask } from "../ser
 
 export function registerTaskHandlers(): void {
   registerMethod("tasks.list", async (params) => {
-    return await listTasks(params.projectId);
+    return listTasks(params.projectId);
   });
 
   registerMethod("tasks.get", async (params) => {
-    return await getTask(params.id);
+    return getTask(params.id);
   });
 
   registerMethod("tasks.create", async (params) => {

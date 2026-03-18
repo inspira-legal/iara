@@ -16,8 +16,6 @@
       "name": "@iara/desktop",
       "version": "0.0.1",
       "dependencies": {
-        "better-sqlite3": "^12.8.0",
-        "node-pty": "^1.1.0",
         "ws": "^8.18.0",
       },
       "devDependencies": {
@@ -38,15 +36,15 @@
       "name": "@iara/server",
       "version": "0.0.1",
       "dependencies": {
-        "@libsql/client": "^0.17.0",
+        "better-sqlite3": "^12.8.0",
         "drizzle-orm": "^0.45.0",
         "node-pty": "^1.1.0",
         "ws": "^8.18.0",
       },
       "devDependencies": {
-        "@electron/rebuild": "^3.7.1",
         "@iara/contracts": "workspace:*",
         "@iara/shared": "workspace:*",
+        "@types/better-sqlite3": "^7.6.13",
         "@types/node": "catalog:",
         "@types/ws": "^8.18.1",
         "drizzle-kit": "^0.31.0",

@@ -13,8 +13,6 @@
     "smoke-test": "node scripts/smoke-test.mjs"
   },
   "dependencies": {
-    "better-sqlite3": "^12.8.0",
-    "node-pty": "^1.1.0",
     "ws": "^8.18.0"
   },
   "devDependencies": {

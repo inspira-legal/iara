@@ -62,7 +62,6 @@ function spawnServer(): void {
 
   if (!isDevelopment) {
     env.IARA_WEB_DIR = path.join(process.resourcesPath, "web");
-    // Native addons (better-sqlite3, node-pty) are in app.asar.unpacked/node_modules
     const appRoot = app.getAppPath();
     env.NODE_PATH = path.join(appRoot.replace("app.asar", "app.asar.unpacked"), "node_modules");
   }
@@ -198,6 +197,13 @@ function createWindow(): BrowserWindow {
       wc.setZoomLevel(0);
       event.preventDefault();
     }
+  });
+
+  // Forward renderer console to terminal
+  win.webContents.on("console-message", (_event, level, message, line, sourceId) => {
+    const tag = ["[renderer]", "[renderer:warn]", "[renderer:error]"][level] ?? "[renderer]";
+    const source = sourceId ? ` (${sourceId}:${line})` : "";
+    console.log(`${tag} ${message}${source}`);
   });
 
   if (isDevelopment && process.env.VITE_DEV_SERVER_URL) {

@@ -88,7 +88,7 @@ export async function addRepo(
   }
 
   // Create worktrees for active tasks
-  const activeTasks = (await listTasks(projectId)).filter((t) => t.status === "active");
+  const activeTasks = listTasks(projectId).filter((t) => t.status === "active");
   for (const task of activeTasks) {
     const taskDir = path.join(projectDir, task.slug);
     const wtDir = path.join(taskDir, input.name);
