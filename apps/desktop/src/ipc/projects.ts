@@ -1,6 +1,7 @@
 import { BrowserWindow, dialog, ipcMain } from "electron";
-import type { CreateProjectInput, UpdateProjectInput } from "@iara/contracts";
+import type { AddRepoInput, CreateProjectInput, UpdateProjectInput } from "@iara/contracts";
 import * as projectService from "../services/projects.js";
+import * as repoService from "../services/repos.js";
 import { Channels } from "./channels.js";
 
 export function registerProjectHandlers(): void {
@@ -22,6 +23,28 @@ export function registerProjectHandlers(): void {
 
   ipcMain.handle(Channels.DELETE_PROJECT, (_event, id: string) => {
     projectService.deleteProject(id);
+  });
+
+  ipcMain.handle(Channels.GET_REPO_INFO, (_event, projectId: string) => {
+    const project = projectService.getProject(projectId);
+    if (!project) throw new Error(`Project not found: ${projectId}`);
+    return repoService.getRepoInfo(project.slug);
+  });
+
+  ipcMain.handle(Channels.ADD_REPO, async (_event, projectId: string, input: AddRepoInput) => {
+    const project = projectService.getProject(projectId);
+    if (!project) throw new Error(`Project not found: ${projectId}`);
+
+    const win = BrowserWindow.fromWebContents(_event.sender);
+    await repoService.addRepo(project.id, project.slug, input, (progress) => {
+      win?.webContents.send(Channels.CLONE_PROGRESS, progress);
+    });
+  });
+
+  ipcMain.handle(Channels.FETCH_REPOS, async (_event, projectId: string) => {
+    const project = projectService.getProject(projectId);
+    if (!project) return;
+    await repoService.fetchRepos(project.slug);
   });
 
   ipcMain.handle(Channels.PICK_FOLDER, async (event) => {

@@ -8,7 +8,115 @@ import { db, schema } from "../db.js";
 import { getProjectsDir } from "./config.js";
 import { listTasks } from "./tasks.js";
 
+/** Check if a project folder has .repos/ with at least one git repo inside. */
+function isValidProject(projectPath: string): boolean {
+  const reposDir = path.join(projectPath, ".repos");
+  if (!fs.existsSync(reposDir)) return false;
+  try {
+    return fs.readdirSync(reposDir).some((name) => {
+      const full = path.join(reposDir, name);
+      return fs.statSync(full).isDirectory() && fs.existsSync(path.join(full, ".git"));
+    });
+  } catch {
+    return false;
+  }
+}
+
+/** Regenerate missing project files (PROJECT.md) from existing .repos/. */
+function ensureProjectFiles(projectPath: string, name: string): void {
+  const projectMdPath = path.join(projectPath, "PROJECT.md");
+  if (!fs.existsSync(projectMdPath)) {
+    fs.writeFileSync(projectMdPath, `# ${name}\n`);
+  }
+}
+
+export function syncProjects(): void {
+  // 1. Scan projects dir — only folders with .repos/ containing at least one repo
+  const projectsDir = getProjectsDir();
+  fs.mkdirSync(projectsDir, { recursive: true });
+  const fsSlugs = fs.readdirSync(projectsDir).filter((name) => {
+    const full = path.join(projectsDir, name);
+    return fs.statSync(full).isDirectory() && !name.startsWith(".") && isValidProject(full);
+  });
+
+  // 2. Get all DB slugs
+  const dbRows = db.select().from(schema.projects).all();
+  const dbSlugMap = new Map(dbRows.map((r) => [r.slug, r]));
+
+  // 3. Folders on FS but not in DB -> insert with name = slug + regenerate missing files
+  const now = new Date().toISOString();
+  for (const slug of fsSlugs) {
+    if (!dbSlugMap.has(slug)) {
+      db.insert(schema.projects)
+        .values({
+          id: crypto.randomUUID(),
+          slug,
+          name: slug,
+          repoSources: JSON.stringify([]),
+          createdAt: now,
+          updatedAt: now,
+        })
+        .run();
+    }
+    // Regenerate missing files for all valid projects
+    ensureProjectFiles(path.join(projectsDir, slug), dbSlugMap.get(slug)?.name ?? slug);
+  }
+
+  // 4. Records in DB but folder gone -> delete record + associated tasks
+  const fsSlugSet = new Set(fsSlugs);
+  for (const row of dbRows) {
+    if (!fsSlugSet.has(row.slug)) {
+      db.delete(schema.tasks).where(eq(schema.tasks.projectId, row.id)).run();
+      db.delete(schema.projects).where(eq(schema.projects.id, row.id)).run();
+    }
+  }
+
+  // 5. Sync repos for existing projects
+  const updatedRows = db.select().from(schema.projects).all();
+  for (const row of updatedRows) {
+    const fsRepos = discoverRepos(row.slug);
+    const dbRepos: string[] = JSON.parse(row.repoSources);
+
+    const fsRepoSet = new Set(fsRepos);
+    const dbRepoNames = new Set(dbRepos.map((s) => repoNameFromSource(s)));
+
+    // New repos found on FS but not tracked in DB
+    const newRepos = fsRepos.filter((name) => !dbRepoNames.has(name));
+    // DB repos whose folder no longer exists
+    const removedRepos = dbRepos.filter((source) => !fsRepoSet.has(repoNameFromSource(source)));
+
+    if (newRepos.length > 0 || removedRepos.length > 0) {
+      const kept = dbRepos.filter((source) => fsRepoSet.has(repoNameFromSource(source)));
+      const updated = [...kept, ...newRepos];
+      db.update(schema.projects)
+        .set({ repoSources: JSON.stringify(updated), updatedAt: new Date().toISOString() })
+        .where(eq(schema.projects.id, row.id))
+        .run();
+    }
+  }
+}
+
+export async function withRetry<T>(operation: () => Promise<T>): Promise<T> {
+  try {
+    return await operation();
+  } catch {
+    // Sync and retry once
+    syncProjects();
+    return await operation();
+  }
+}
+
+export function withRetrySync<T>(operation: () => T): T {
+  try {
+    return operation();
+  } catch {
+    syncProjects();
+    return operation();
+  }
+}
+
 export function listProjects(): Project[] {
+  syncProjects();
   const rows = db.select().from(schema.projects).all();
   return rows.map(deserializeProject);
 }
@@ -33,25 +141,27 @@ export async function createProject(input: CreateProjectInput): Promise<Project>
 
   db.insert(schema.projects).values(row).run();
 
-  // Create project directory structure
-  const projectDir = getProjectDir(input.slug);
-  const reposDir = path.join(projectDir, ".repos");
-  fs.mkdirSync(reposDir, { recursive: true });
+  // Create project directory structure with retry on failure
+  await withRetry(async () => {
+    const projectDir = getProjectDir(input.slug);
+    const reposDir = path.join(projectDir, ".repos");
+    fs.mkdirSync(reposDir, { recursive: true });
 
-  // PROJECT.md
-  const projectMdPath = path.join(projectDir, "PROJECT.md");
-  if (!fs.existsSync(projectMdPath)) {
-    fs.writeFileSync(projectMdPath, `# ${input.name}\n`);
-  }
-
-  // Clone repos into .repos/
-  for (const source of input.repoSources) {
-    const repoName = repoNameFromSource(source);
-    const dest = path.join(reposDir, repoName);
-    if (!fs.existsSync(dest)) {
-      await gitClone(source, dest);
+    // PROJECT.md
+    const projectMdPath = path.join(projectDir, "PROJECT.md");
+    if (!fs.existsSync(projectMdPath)) {
+      fs.writeFileSync(projectMdPath, `# ${input.name}\n`);
     }
-  }
+
+    // Clone repos into .repos/
+    for (const source of input.repoSources) {
+      const repoName = repoNameFromSource(source);
+      const dest = path.join(reposDir, repoName);
+      if (!fs.existsSync(dest)) {
+        await gitClone(source, dest);
+      }
+    }
+  });
 
   return deserializeProject(row);
 }
@@ -137,19 +247,34 @@ export function deleteProject(id: string): void {
   db.delete(schema.tasks).where(eq(schema.tasks.projectId, id)).run();
   db.delete(schema.projects).where(eq(schema.projects.id, id)).run();
 
-  // Clean up project directory
+  // Clean up project directory with retry on failure
   if (project) {
-    const projectDir = getProjectDir(project.slug);
-    try {
+    withRetrySync(() => {
+      const projectDir = getProjectDir(project.slug);
       fs.rmSync(projectDir, { recursive: true, force: true });
-    } catch {
-      // Best effort cleanup
-    }
+    });
   }
 }
 
 export function getProjectDir(slug: string): string {
   return path.join(getProjectsDir(), slug);
+}
+
+/**
+ * Discover repos by scanning .repos/ directory of a project.
+ * Each subdirectory containing a .git folder (or file, for worktrees) is a repo.
+ * Returns array of repo names (directory names).
+ */
+export function discoverRepos(projectSlug: string): string[] {
+  const reposDir = path.join(getProjectDir(projectSlug), ".repos");
+  if (!fs.existsSync(reposDir)) return [];
+
+  return fs.readdirSync(reposDir).filter((name) => {
+    const full = path.join(reposDir, name);
+    if (!fs.statSync(full).isDirectory()) return false;
+    // Check for .git (file or directory — worktrees use .git file)
+    return fs.existsSync(path.join(full, ".git"));
+  });
 }
 
 function deserializeProject(row: typeof schema.projects.$inferSelect): Project {

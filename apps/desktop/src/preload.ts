@@ -11,6 +11,9 @@ contextBridge.exposeInMainWorld("desktopBridge", {
   createProject: (input) => ipcRenderer.invoke("desktop:create-project", input),
   updateProject: (id, input) => ipcRenderer.invoke("desktop:update-project", id, input),
   deleteProject: (id) => ipcRenderer.invoke("desktop:delete-project", id),
+  getRepoInfo: (projectId) => ipcRenderer.invoke("desktop:get-repo-info", projectId),
+  addRepo: (projectId, input) => ipcRenderer.invoke("desktop:add-repo", projectId, input),
+  fetchRepos: (projectId) => ipcRenderer.invoke("desktop:fetch-repos", projectId),
 
   // Tasks
   listTasks: (projectId) => ipcRenderer.invoke("desktop:list-tasks", projectId),
@@ -80,5 +83,13 @@ contextBridge.exposeInMainWorld("desktopBridge", {
   },
   offTerminalExit: () => {
     ipcRenderer.removeAllListeners("terminal:exit");
+  },
+
+  // Clone Progress Events
+  onCloneProgress: (cb) => {
+    ipcRenderer.on("clone:progress", (_e, progress) => cb(progress));
+  },
+  offCloneProgress: () => {
+    ipcRenderer.removeAllListeners("clone:progress");
   },
 } satisfies DesktopBridge);

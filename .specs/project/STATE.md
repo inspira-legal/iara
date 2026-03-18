@@ -38,6 +38,13 @@
 | 2026-03-18 | Setup project e new task sao fluxos do desktop                      | Fluxos da UI que usam claude -p internamente. Nao sao skills nem slash commands                                                   |
 | 2026-03-18 | M1 so scaffold + worktrees                                          | Nenhuma feature user-facing alem do shell. Domain layer + git ops. Features UI a partir do M2                                     |
 | 2026-03-18 | Terminal embutido promovido para M5 (v2)                            | Ao inves de launch externo, renderizar xterm.js dentro do app com Claude via node-pty. Spec em .specs/features/embedded-terminal/ |
+| 2026-03-18 | Filesystem como fonte de verdade para projetos                      | Pastas em ~/.iara/projects/ definem existencia. DB é cache de metadata. Pastas manuais reconhecidas automaticamente               |
+| 2026-03-18 | Rename de nome visual, slug/pasta imutavel                          | Nome é visual (DB). Slug é a pasta no filesystem. Renomear pasta quebraria worktrees e references                                 |
+| 2026-03-18 | Repos devem ter nome definido pelo usuario                          | Nome sugerido automaticamente da URL/pasta, mas editavel. Nome é o diretorio em .repos/                                           |
+| 2026-03-18 | Sem GitHub integration no wizard (futuro)                           | Apenas Git URL, pasta local, e repo vazio por enquanto. gh integration como feature futura                                        |
+| 2026-03-18 | File picker copia pasta + git init se necessario                    | Pasta local sem .git recebe git init. Pasta é copiada para .repos/, nao linkada                                                   |
+| 2026-03-18 | Dialogs de confirmacao in-app, nao nativos                          | Modal customizado dentro do app com contexto rico (lista repos, tasks ativas, etc)                                                |
+| 2026-03-18 | Projeto sem repos permitido apenas se pasta criada manualmente      | Wizard exige >= 1 repo. Pastas manuais sem .repos/ aparecem como projeto vazio                                                    |
 
 ## Blockers
 

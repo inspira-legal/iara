@@ -1,8 +1,10 @@
+import { useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { useProjectStore } from "~/stores/projects";
 import { useTaskStore } from "~/stores/tasks";
 import { TaskWorkspace } from "~/components/TaskWorkspace";
 import { ProjectView } from "~/components/ProjectView";
+import { ConfirmDialog } from "~/components/ConfirmDialog";
 import { useToast } from "~/components/Toast";
 
 export const Route = createFileRoute("/")({
@@ -14,6 +16,7 @@ function HomePage() {
   const { tasks, selectedTaskId } = useTaskStore();
   const { completeTask, deleteTask } = useTaskStore();
   const { toast } = useToast();
+  const [showDeleteTask, setShowDeleteTask] = useState(false);
 
   const project = projects.find((p) => p.id === selectedProjectId);
   const task = tasks.find((t) => t.id === selectedTaskId);
@@ -41,11 +44,32 @@ function HomePage() {
   };
 
   return (
-    <TaskWorkspace
-      project={project}
-      task={task}
-      onCompleteTask={() => void handleComplete()}
-      onDeleteTask={() => void handleDelete()}
-    />
+    <>
+      <TaskWorkspace
+        project={project}
+        task={task}
+        onCompleteTask={() => void handleComplete()}
+        onDeleteTask={() => setShowDeleteTask(true)}
+      />
+
+      <ConfirmDialog
+        open={showDeleteTask}
+        title="Delete Task"
+        description={`Delete task "${task.name}"?`}
+        details={
+          <div className="mt-2 text-xs text-zinc-500">
+            <p>Branch: {task.branch}</p>
+            <p>Worktrees will be removed.</p>
+          </div>
+        }
+        confirmText="Delete Task"
+        confirmVariant="danger"
+        onConfirm={() => {
+          void handleDelete();
+          setShowDeleteTask(false);
+        }}
+        onCancel={() => setShowDeleteTask(false)}
+      />
+    </>
   );
 }

@@ -1,4 +1,4 @@
-import { execFile } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
 import { promisify } from "node:util";
 
 const execFileAsync = promisify(execFile);
@@ -47,6 +47,43 @@ export async function gitClone(url: string, dest: string): Promise<void> {
   await gitExec(["clone", url, dest], parentDir);
 }
 
+export async function gitCloneWithProgress(
+  url: string,
+  dest: string,
+  onProgress?: (line: string) => void,
+): Promise<void> {
+  const path = await import("node:path");
+  const fs = await import("node:fs");
+  const parentDir = path.dirname(dest);
+  fs.mkdirSync(parentDir, { recursive: true });
+
+  return new Promise((resolve, reject) => {
+    const proc = spawn("git", ["clone", "--progress", url, dest], {
+      cwd: parentDir,
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+
+    // Git writes progress to stderr
+    proc.stderr?.on("data", (data: Buffer) => {
+      const text = data.toString().trim();
+      if (text && onProgress) onProgress(text);
+    });
+
+    proc.on("close", (code) => {
+      if (code === 0) resolve();
+      else reject(new GitOperationError(`clone ${url}`, `exit code ${code}`, code));
+    });
+
+    proc.on("error", (err) => {
+      if ((err as NodeJS.ErrnoException).code === "ENOENT") {
+        reject(new GitNotInstalledError());
+      } else {
+        reject(err);
+      }
+    });
+  });
+}
+
 export async function gitWorktreeAdd(
   repoDir: string,
   worktreeDir: string,
@@ -81,4 +118,26 @@ export async function gitStatus(cwd: string): Promise<GitStatus> {
 
 export async function gitBranchCreate(cwd: string, branch: string): Promise<void> {
   await gitExec(["checkout", "-b", branch], cwd);
+}
+
+/** Pull the current branch from origin. No-op if no upstream is configured. */
+export async function gitPull(cwd: string): Promise<void> {
+  try {
+    await gitExec(["pull", "--ff-only"], cwd);
+  } catch (err) {
+    // No upstream or network error — silently skip
+    if (err instanceof GitOperationError && err.stderr.includes("no tracking information")) {
+      return;
+    }
+    throw err;
+  }
+}
+
+/** Fetch from origin without merging. No-op on network errors. */
+export async function gitFetch(cwd: string): Promise<void> {
+  try {
+    await gitExec(["fetch", "--quiet"], cwd);
+  } catch {
+    // Network error — silently skip
+  }
 }

@@ -1,5 +1,5 @@
 import * as path from "node:path";
-import { app, BrowserWindow, protocol } from "electron";
+import { app, BrowserWindow, Menu, protocol } from "electron";
 import { syncShellEnvironment } from "./services/shell-env.js";
 import { registerIpcHandlers } from "./ipc/register.js";
 import { initBrowserHandlers } from "./ipc/browser.js";
@@ -52,7 +52,19 @@ function createWindow(): BrowserWindow {
   terminalManager.setWindow(win);
   win.on("resize", () => browserPanel.updateBounds());
 
-  // Enable Ctrl+/Ctrl- zoom
+  // Remove default menu in production (disables all default accelerators: reload, devtools, etc.)
+  if (!isDevelopment) {
+    Menu.setApplicationMenu(null);
+  }
+
+  // Block devtools in production
+  if (!isDevelopment) {
+    win.webContents.on("devtools-opened", () => {
+      win.webContents.closeDevTools();
+    });
+  }
+
+  // Ctrl+/Ctrl- zoom (works in both dev and prod)
   win.webContents.on("before-input-event", (event, input) => {
     if (input.type !== "keyDown") return;
     if (!(input.control || input.meta)) return;
@@ -216,10 +228,34 @@ app.on("window-all-closed", () => {
 });
 
 app.on("before-quit", () => {
-  try { terminalManager.destroyAll(); } catch { /* shutting down */ }
-  try { devSupervisor.stopAll(); } catch { /* shutting down */ }
-  try { void socketServer.stop(); } catch { /* shutting down */ }
-  try { browserPanel.detach(); } catch { /* shutting down */ }
-  try { if (pluginDir) cleanupPluginDir(pluginDir); } catch { /* shutting down */ }
-  try { removeHooks(); } catch { /* shutting down */ }
+  try {
+    terminalManager.destroyAll();
+  } catch {
+    /* shutting down */
+  }
+  try {
+    devSupervisor.stopAll();
+  } catch {
+    /* shutting down */
+  }
+  try {
+    void socketServer.stop();
+  } catch {
+    /* shutting down */
+  }
+  try {
+    browserPanel.detach();
+  } catch {
+    /* shutting down */
+  }
+  try {
+    if (pluginDir) cleanupPluginDir(pluginDir);
+  } catch {
+    /* shutting down */
+  }
+  try {
+    removeHooks();
+  } catch {
+    /* shutting down */
+  }
 });

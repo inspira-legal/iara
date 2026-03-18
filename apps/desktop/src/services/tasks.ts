@@ -6,6 +6,7 @@ import type { CreateTaskInput, Task } from "@iara/contracts";
 import { gitWorktreeAdd, gitWorktreeRemove } from "@iara/shared/git";
 import { db, schema } from "../db.js";
 import { getProject, getProjectDir } from "./projects.js";
+import { pullRepos } from "./repos.js";
 
 export function listTasks(projectId: string): Task[] {
   const rows = db.select().from(schema.tasks).where(eq(schema.tasks.projectId, projectId)).all();
@@ -35,6 +36,9 @@ export async function createTask(projectId: string, input: CreateTaskInput): Pro
     createdAt: now,
     updatedAt: now,
   };
+
+  // Pull repos to ensure worktrees start from latest
+  await pullRepos(project.slug);
 
   // Create worktrees BEFORE inserting into DB — rollback is just fs cleanup
   const projectDir = getProjectDir(project.slug);

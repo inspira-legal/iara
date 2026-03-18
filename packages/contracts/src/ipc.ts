@@ -1,4 +1,4 @@
-import type { Project, Task } from "./models.js";
+import type { CloneProgress, Project, RepoInfo, Task } from "./models.js";
 
 export interface AppInfo {
   version: string;
@@ -9,6 +9,13 @@ export interface AppInfo {
 export interface GitStatusResult {
   branch: string;
   dirtyFiles: string[];
+}
+
+export interface AddRepoInput {
+  method: "git-url" | "local-folder" | "empty";
+  name: string;
+  url?: string;
+  folderPath?: string;
 }
 
 export interface CreateProjectInput {
@@ -83,6 +90,9 @@ export interface DesktopBridge {
   createProject(input: CreateProjectInput): Promise<Project>;
   updateProject(id: string, input: UpdateProjectInput): Promise<void>;
   deleteProject(id: string): Promise<void>;
+  getRepoInfo(projectId: string): Promise<RepoInfo[]>;
+  addRepo(projectId: string, input: AddRepoInput): Promise<void>;
+  fetchRepos(projectId: string): Promise<void>;
 
   // Tasks
   listTasks(projectId: string): Promise<Task[]>;
@@ -144,4 +154,8 @@ export interface DesktopBridge {
   // Dialogs
   pickFolder(): Promise<string | null>;
   confirmDialog(message: string): Promise<boolean>;
+
+  // Clone Progress Events
+  onCloneProgress(callback: (progress: CloneProgress) => void): void;
+  offCloneProgress(): void;
 }

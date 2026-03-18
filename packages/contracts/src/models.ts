@@ -7,6 +7,14 @@ export interface Project {
   updatedAt: string;
 }
 
+export interface RepoInfo {
+  name: string;
+  branch: string;
+  dirtyCount: number;
+  ahead: number;
+  behind: number;
+}
+
 export interface Task {
   id: string;
   projectId: string;
@@ -17,4 +25,11 @@ export interface Task {
   status: "active" | "completed";
   createdAt: string;
   updatedAt: string;
+}
+
+export interface CloneProgress {
+  repo: string;
+  status: "started" | "progress" | "done" | "error";
+  message?: string;
+  error?: string;
 }

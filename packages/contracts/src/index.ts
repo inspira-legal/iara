@@ -1,4 +1,5 @@
 export type {
+  AddRepoInput,
   AppInfo,
   AppNotification,
   CreateProjectInput,
@@ -12,4 +13,4 @@ export type {
   SessionInfo,
   UpdateProjectInput,
 } from "./ipc.js";
-export type { Project, Task } from "./models.js";
+export type { CloneProgress, Project, RepoInfo, Task } from "./models.js";

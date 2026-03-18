@@ -8,6 +8,9 @@ export const Channels = {
   CREATE_PROJECT: "desktop:create-project",
   UPDATE_PROJECT: "desktop:update-project",
   DELETE_PROJECT: "desktop:delete-project",
+  GET_REPO_INFO: "desktop:get-repo-info",
+  ADD_REPO: "desktop:add-repo",
+  FETCH_REPOS: "desktop:fetch-repos",
 
   // Tasks
   LIST_TASKS: "desktop:list-tasks",
@@ -67,4 +70,7 @@ export const Channels = {
   TERMINAL_WRITE: "desktop:terminal-write",
   TERMINAL_RESIZE: "desktop:terminal-resize",
   TERMINAL_DESTROY: "desktop:terminal-destroy",
+
+  // Events (main → renderer)
+  CLONE_PROGRESS: "clone:progress",
 } as const;
