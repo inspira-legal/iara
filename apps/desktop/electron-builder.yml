@@ -1,0 +1,55 @@
+appId: com.iara.desktop
+productName: iara
+copyright: Copyright © 2026
+
+directories:
+  output: ../../release
+  buildResources: resources
+
+files:
+  - dist-electron/**/*
+  - "!dist-electron/**/*.map"
+
+extraResources:
+  - from: ../web/dist
+    to: web
+
+mac:
+  target:
+    - target: dmg
+      arch:
+        - x64
+        - arm64
+  category: public.app-category.developer-tools
+  icon: resources/icon.icns
+  hardenedRuntime: true
+  entitlements: resources/entitlements.mac.plist
+  entitlementsInherit: resources/entitlements.mac.plist
+
+dmg:
+  artifactName: iara-${version}-${arch}.dmg
+
+linux:
+  target:
+    - target: AppImage
+      arch:
+        - x64
+        - arm64
+  category: Development
+  icon: resources/icon.png
+
+appImage:
+  artifactName: iara-${version}-${arch}.AppImage
+
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+        - arm64
+  icon: resources/icon.ico
+
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  artifactName: iara-${version}-setup.exe

@@ -25,6 +25,7 @@
     "fmt": "oxfmt",
     "fmt:check": "oxfmt --check",
     "smoke-test": "turbo run smoke-test --filter=@iara/desktop",
+    "package": "bun build:desktop && cd apps/desktop && npx electron-builder --config electron-builder.yml",
     "clean": "rm -rf node_modules apps/*/node_modules packages/*/node_modules apps/*/dist apps/*/dist-electron packages/*/dist .turbo apps/*/.turbo packages/*/.turbo"
   },
   "devDependencies": {
