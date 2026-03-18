@@ -21,6 +21,13 @@ contextBridge.exposeInMainWorld("desktopBridge", {
   // Launcher
   launchClaude: (input) => ipcRenderer.invoke("desktop:launch-claude", input),
 
+  // Sessions
+  listSessions: (taskId) => ipcRenderer.invoke("desktop:list-sessions", taskId),
+
+  // Prompts
+  readPrompt: (filePath) => ipcRenderer.invoke("desktop:read-prompt", filePath),
+  writePrompt: (filePath, content) => ipcRenderer.invoke("desktop:write-prompt", filePath, content),
+
   // Git
   getGitStatus: (cwd) => ipcRenderer.invoke("desktop:get-git-status", cwd),
 

@@ -34,6 +34,14 @@ export interface LaunchResult {
   sessionId: string;
 }
 
+export interface SessionInfo {
+  id: string;
+  filePath: string;
+  createdAt: string;
+  lastMessageAt: string;
+  messageCount: number;
+}
+
 export interface DesktopBridge {
   // App
   getAppInfo(): Promise<AppInfo>;
@@ -53,6 +61,13 @@ export interface DesktopBridge {
 
   // Launcher
   launchClaude(input: LaunchClaudeInput): Promise<LaunchResult>;
+
+  // Sessions
+  listSessions(taskId: string): Promise<SessionInfo[]>;
+
+  // Prompts
+  readPrompt(filePath: string): Promise<string>;
+  writePrompt(filePath: string, content: string): Promise<void>;
 
   // Git
   getGitStatus(cwd: string): Promise<GitStatusResult>;

@@ -6,5 +6,6 @@ export type {
   GitStatusResult,
   LaunchClaudeInput,
   LaunchResult,
+  SessionInfo,
 } from "./ipc.js";
 export type { Project, Task } from "./models.js";
