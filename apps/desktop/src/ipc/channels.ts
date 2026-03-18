@@ -59,4 +59,5 @@ export const Channels = {
 
   // Dialogs
   PICK_FOLDER: "desktop:pick-folder",
+  CONFIRM_DIALOG: "desktop:confirm-dialog",
 } as const;

@@ -58,4 +58,5 @@ contextBridge.exposeInMainWorld("desktopBridge", {
 
   // Dialogs
   pickFolder: () => ipcRenderer.invoke("desktop:pick-folder"),
+  confirmDialog: (message) => ipcRenderer.invoke("desktop:confirm-dialog", message),
 } satisfies DesktopBridge);

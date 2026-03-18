@@ -124,4 +124,5 @@ export interface DesktopBridge {
 
   // Dialogs
   pickFolder(): Promise<string | null>;
+  confirmDialog(message: string): Promise<boolean>;
 }

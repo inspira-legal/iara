@@ -1,6 +1,7 @@
 import { FolderOpen, Trash2 } from "lucide-react";
 import type { Project } from "@iara/contracts";
 import { cn } from "~/lib/utils";
+import { ensureNativeApi } from "~/nativeApi";
 
 interface ProjectListProps {
   projects: Project[];
@@ -10,6 +11,20 @@ interface ProjectListProps {
 }
 
 export function ProjectList({ projects, selectedId, onSelect, onDelete }: ProjectListProps) {
+  const handleDelete = async (e: React.MouseEvent, project: Project) => {
+    e.stopPropagation();
+    try {
+      const api = ensureNativeApi();
+      const confirmed = await api.confirmDialog(
+        `Delete project "${project.name}"?\n\nThis removes all cloned repos and worktrees. This cannot be undone.`,
+      );
+      if (confirmed) onDelete(project.id);
+    } catch {
+      // Not in Electron — delete directly
+      onDelete(project.id);
+    }
+  };
+
   return (
     <ul className="space-y-0.5">
       {projects.map((project) => (
@@ -29,10 +44,7 @@ export function ProjectList({ projects, selectedId, onSelect, onDelete }: Projec
           </button>
           <button
             type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              onDelete(project.id);
-            }}
+            onClick={(e) => void handleDelete(e, project)}
             className="absolute right-1 top-1/2 hidden -translate-y-1/2 rounded p-0.5 text-zinc-600 hover:text-red-400 group-hover:block"
           >
             <Trash2 size={12} />
