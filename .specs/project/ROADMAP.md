@@ -50,13 +50,13 @@
 
 ### Features
 
-**Project Management** - PLANNED
+**Project Management** - DONE
 
 - Criar/listar/renomear/deletar projetos na sidebar
 - Adicionar/remover repos a um projeto
 - Setup project via claude -p (mapeia codebase, sugere metadata → UI confirma)
 
-**Task Management** - PLANNED
+**Task Management** - DONE
 
 - Criar/listar/completar tasks
 - Git worktree setup/teardown por task
@@ -64,14 +64,14 @@
 - Sidebar metadata (branch, dirty files, last active)
 - Toda interacao requer task — nao existe abrir projeto sem worktree
 
-**Session Management** - PLANNED
+**Session Management** - DONE
 
 - Listar sessions lendo JSONL do Claude (~/.claude/projects/<path-hash>/)
 - Extrair metadata: session ID, timestamps, summary do transcript
 - Resume session existente (--resume <id>) ou iniciar nova
 - Zero duplicacao — Claude Code e a fonte de verdade
 
-**Claude Launcher** - PLANNED
+**Claude Launcher** - DONE
 
 - Lancar Claude Code no terminal externo (platform-specific)
 - --append-system-prompt com contexto efemero (editavel na UI)
@@ -80,7 +80,7 @@
 - Env vars injetadas (session ID, task ID, project dir, socket path, projeto envs)
 - Resume session (--resume <id>) ou nova (--session-id <uuid>)
 
-**System Prompt Editor** - PLANNED
+**System Prompt Editor** - DONE
 
 - PROJECT.md na raiz do projeto (compartilhado entre tasks)
 - TASK.md no task root (especifico por task)
@@ -89,7 +89,7 @@
 - Ambos injetados via --append-system-prompt ao lancar Claude
 - Preview do prompt completo antes de lancar
 
-**Plugin-Dir Generation** - PLANNED
+**Plugin-Dir Generation** - DONE
 
 - Gerar .claude-plugin/plugin.json + commands/\*.md em dir temporario
 - Slash commands: /browser (navigate, click, fill, screenshot, get-tree)
@@ -97,7 +97,7 @@
 - Slash commands: /dev (launch, stop, status, logs)
 - Template com variaveis ($ARGUMENTS, etc)
 
-**Socket Server & CLI Bridge** - PLANNED
+**Socket Server & CLI Bridge** - DONE
 
 - Unix socket (Linux/macOS) / Named pipe (Windows) — padrao unico
 - Desktop inicia socket ao abrir, IARA_DESKTOP_SOCKET em env
@@ -105,7 +105,7 @@
 - Comandos: browser._, notify._, status.\*
 - Respostas sincronas (screenshot retorna path da imagem)
 
-**Environment Management** - PLANNED
+**Environment Management** - DONE
 
 - Env files no projeto (como iara CLI) com symlinks globais
 - Editor visual na UI + editavel em qualquer IDE/editor
@@ -114,7 +114,7 @@
 - Prompt de restart ao detectar alteracao
 - Restart relanca Claude Code com --resume <same-session-id> + novas envs
 
-**Hooks Integration** - PLANNED
+**Hooks Integration** - DONE
 
 - Merge hooks em ~/.claude/settings.json (nao overwrite)
 - Guard: hooks checam IARA_DESKTOP_SOCKET env var, no-op se ausente
@@ -129,14 +129,14 @@
 
 ### Features
 
-**Browser Panel** - PLANNED
+**Browser Panel** - DONE
 
 - Webview embutido (Electron BrowserView/webContentsView)
 - Agent-browser API (navigate, click, fill, screenshot, get_accessibility_tree)
 - Controlavel por Claude via plugin commands + socket
 - Toggle split vertical (main panel | browser)
 
-**Dev Server Supervisor** - PLANNED
+**Dev Server Supervisor** - DONE
 
 - Auto-discover dev commands (package.json, Makefile, etc)
 - Launch/stop/restart servers via child_process
@@ -146,7 +146,7 @@
 - Status na sidebar (porta, health, PID)
 - Env vars do projeto injetadas nos dev servers
 
-**Dev + Browser Integration** - PLANNED
+**Dev + Browser Integration** - DONE
 
 - Frontend server pronto → auto-abre browser panel
 - Heuristica: vite/next/remix/astro = frontend → browseable
@@ -162,20 +162,20 @@
 
 ### Features
 
-**Notifications** - PLANNED
+**Notifications** - DONE
 
 - Notificacoes por task (dev server crash, session events)
 - Badge na sidebar
 - System notifications nativas (Electron Notification API)
 
-**UX Polish** - PLANNED
+**UX Polish** - DONE
 
 - Keyboard shortcuts
 - Error handling visual
 - Loading states
 - Dark/light theme
 
-**Packaging** - PLANNED
+**Packaging** - DONE
 
 - DMG para macOS
 - AppImage para Linux
