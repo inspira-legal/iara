@@ -10,23 +10,20 @@
     "build": "tsdown",
     "typecheck": "tsc --noEmit",
     "test": "vitest run --passWithNoTests",
-    "smoke-test": "node scripts/smoke-test.mjs",
-    "postinstall": "npx @electron/rebuild -v 40.6.0",
-    "rebuild-electron": "npx @electron/rebuild -v 40.6.0"
+    "smoke-test": "node scripts/smoke-test.mjs"
   },
   "dependencies": {
     "better-sqlite3": "^12.8.0",
-    "drizzle-orm": "^0.45.0",
-    "electron": "40.6.0",
-    "node-pty": "^1.1.0"
+    "node-pty": "^1.1.0",
+    "ws": "^8.18.0"
   },
   "devDependencies": {
     "@electron/rebuild": "^3.7.1",
     "@iara/contracts": "workspace:*",
     "@iara/shared": "workspace:*",
-    "@types/better-sqlite3": "^7.6.13",
     "@types/node": "catalog:",
-    "drizzle-kit": "^0.31.0",
+    "@types/ws": "^8.18.0",
+    "electron": "40.6.0",
     "electron-builder": "^25.1.8",
     "tsdown": "catalog:",
     "typescript": "catalog:",

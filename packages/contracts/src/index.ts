@@ -14,3 +14,14 @@ export type {
   UpdateProjectInput,
 } from "./ipc.js";
 export type { CloneProgress, Project, RepoInfo, Task } from "./models.js";
+export type {
+  WsClientMessage,
+  WsMethods,
+  WsPush,
+  WsPushEvents,
+  WsRequest,
+  WsResponse,
+  WsResponseError,
+  WsResponseOk,
+  WsServerMessage,
+} from "./ws.js";

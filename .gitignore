@@ -14,3 +14,4 @@ packages/*/dist
 .idea/
 .vitest-*
 **/routeTree.gen.ts
+release/

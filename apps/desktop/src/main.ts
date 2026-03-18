@@ -1,37 +1,155 @@
+import * as crypto from "node:crypto";
+import * as net from "node:net";
+import * as os from "node:os";
 import * as path from "node:path";
-import { app, BrowserWindow, Menu, protocol } from "electron";
+import { spawn, type ChildProcess } from "node:child_process";
+import { app, BrowserWindow, dialog, ipcMain, Menu, Notification, protocol } from "electron";
+import WebSocket from "ws";
 import { syncShellEnvironment } from "./services/shell-env.js";
-import { registerIpcHandlers } from "./ipc/register.js";
-import { initBrowserHandlers } from "./ipc/browser.js";
-import { initDevServerHandlers } from "./ipc/devservers.js";
-import { initNotificationHandlers } from "./ipc/notifications.js";
 import { BrowserPanel } from "./services/browser-panel.js";
-import { DevServerSupervisor } from "./services/devservers.js";
-import { NotificationService } from "./services/notifications.js";
-import { SocketServer } from "./services/socket.js";
-import { mergeHooks, removeHooks } from "./services/hooks.js";
-import { generatePluginDir, cleanupPluginDir } from "./services/plugins.js";
-import { TerminalManager } from "./services/terminal.js";
-import { initTerminalHandlers } from "./ipc/terminal.js";
 
 syncShellEnvironment();
 
 const isDevelopment = Boolean(process.env.VITE_DEV_SERVER_URL);
 const APP_SCHEME = "iara";
+const stateDir = path.join(os.homedir(), ".config", "iara");
 
-// Singletons
+let serverChild: ChildProcess | null = null;
+let serverPort = 0;
+let authToken = "";
+let restartAttempt = 0;
+let restartTimer: ReturnType<typeof setTimeout> | null = null;
+let ws: WebSocket | null = null;
+
 const browserPanel = new BrowserPanel();
-const devSupervisor = new DevServerSupervisor();
-const socketServer = new SocketServer();
-const notificationService = new NotificationService();
-const terminalManager = new TerminalManager();
-let pluginDir: string | null = null;
 
-// Initialize handler dependencies
-initBrowserHandlers(() => browserPanel);
-initDevServerHandlers(() => devSupervisor);
-initNotificationHandlers(() => notificationService);
-initTerminalHandlers(() => terminalManager);
+// ---------------------------------------------------------------------------
+// Port & Token
+// ---------------------------------------------------------------------------
+
+function reservePort(): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const srv = net.createServer();
+    srv.listen(0, "127.0.0.1", () => {
+      const addr = srv.address();
+      const port = typeof addr === "object" && addr ? addr.port : 0;
+      srv.close(() => resolve(port));
+    });
+    srv.on("error", reject);
+  });
+}
+
+function generateToken(): string {
+  return crypto.randomBytes(24).toString("hex");
+}
+
+// ---------------------------------------------------------------------------
+// Server child process
+// ---------------------------------------------------------------------------
+
+function spawnServer(): void {
+  const serverEntry = isDevelopment
+    ? path.resolve(__dirname, "../../server/dist/main.mjs")
+    : path.join(process.resourcesPath, "server", "main.mjs");
+
+  const env: Record<string, string | undefined> = {
+    ...process.env,
+    ELECTRON_RUN_AS_NODE: "1",
+    IARA_PORT: String(serverPort),
+    IARA_AUTH_TOKEN: authToken,
+    IARA_STATE_DIR: stateDir,
+  };
+
+  if (!isDevelopment) {
+    env.IARA_WEB_DIR = path.join(process.resourcesPath, "web");
+    // Native modules (better-sqlite3, node-pty) are in app.asar.unpacked/node_modules
+    env.NODE_PATH = path.join(app.getAppPath().replace("app.asar", "app.asar.unpacked"), "node_modules");
+  }
+
+  const child = spawn(process.execPath, [serverEntry], {
+    env,
+    stdio: isDevelopment ? "inherit" : ["ignore", "pipe", "pipe"],
+  });
+
+  serverChild = child;
+
+  if (!isDevelopment && child.stdout) {
+    child.stdout.on("data", (data: Buffer) => {
+      process.stdout.write(data);
+    });
+  }
+  if (!isDevelopment && child.stderr) {
+    child.stderr.on("data", (data: Buffer) => {
+      process.stderr.write(data);
+    });
+  }
+
+  child.on("exit", (code, signal) => {
+    console.error(`Server exited: code=${code} signal=${signal}`);
+    serverChild = null;
+    scheduleRestart();
+  });
+
+  child.on("error", (err) => {
+    console.error("Server spawn error:", err);
+    serverChild = null;
+    scheduleRestart();
+  });
+
+  // Reset restart counter on successful start (give it 2s to prove stability)
+  setTimeout(() => {
+    if (serverChild === child) {
+      restartAttempt = 0;
+    }
+  }, 2000);
+}
+
+function scheduleRestart(): void {
+  if (restartTimer) return;
+  const delay = Math.min(500 * 2 ** restartAttempt, 8000);
+  restartAttempt++;
+  console.error(`Restarting server in ${delay}ms (attempt ${restartAttempt})`);
+  restartTimer = setTimeout(() => {
+    restartTimer = null;
+    spawnServer();
+  }, delay);
+}
+
+// ---------------------------------------------------------------------------
+// WebSocket connection to server (for push notifications)
+// ---------------------------------------------------------------------------
+
+function connectWs(): void {
+  const url = `ws://127.0.0.1:${serverPort}/?token=${authToken}`;
+  ws = new WebSocket(url);
+
+  ws.on("message", (data) => {
+    try {
+      const msg = JSON.parse(String(data));
+      if (msg.push === "notification" && msg.params) {
+        new Notification({ title: msg.params.title, body: msg.params.body ?? "" }).show();
+      }
+    } catch {
+      // ignore non-JSON messages
+    }
+  });
+
+  ws.on("close", () => {
+    ws = null;
+    // Reconnect after a short delay
+    setTimeout(() => {
+      if (serverChild) connectWs();
+    }, 1000);
+  });
+
+  ws.on("error", () => {
+    // error is followed by close, reconnect handled there
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Window
+// ---------------------------------------------------------------------------
 
 function createWindow(): BrowserWindow {
   const win = new BrowserWindow({
@@ -39,6 +157,7 @@ function createWindow(): BrowserWindow {
     height: 800,
     minWidth: 800,
     minHeight: 600,
+    backgroundColor: "#000000",
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
       contextIsolation: true,
@@ -49,10 +168,9 @@ function createWindow(): BrowserWindow {
   });
 
   browserPanel.attach(win);
-  terminalManager.setWindow(win);
   win.on("resize", () => browserPanel.updateBounds());
 
-  // Remove default menu in production (disables all default accelerators: reload, devtools, etc.)
+  // Remove default menu in production
   if (!isDevelopment) {
     Menu.setApplicationMenu(null);
   }
@@ -64,7 +182,7 @@ function createWindow(): BrowserWindow {
     });
   }
 
-  // Ctrl+/Ctrl- zoom (works in both dev and prod)
+  // Ctrl+/Ctrl- zoom
   win.webContents.on("before-input-event", (event, input) => {
     if (input.type !== "keyDown") return;
     if (!(input.control || input.meta)) return;
@@ -90,16 +208,19 @@ function createWindow(): BrowserWindow {
   return win;
 }
 
+// ---------------------------------------------------------------------------
+// Custom protocol (prod)
+// ---------------------------------------------------------------------------
+
 function registerCustomProtocol(): void {
   const fs = require("node:fs") as typeof import("node:fs");
-  const staticRoot = path.join(__dirname, "..", "web");
+  const staticRoot = path.join(process.resourcesPath, "web");
   const fallbackIndex = path.join(staticRoot, "index.html");
 
   protocol.handle(APP_SCHEME, (request) => {
     const url = new URL(request.url);
     let filePath = path.join(staticRoot, url.pathname);
 
-    // SPA fallback: if file doesn't exist, serve index.html
     if (!fs.existsSync(filePath)) {
       filePath = fallbackIndex;
     }
@@ -126,91 +247,76 @@ function getMimeType(filePath: string): string {
   return types[ext] ?? "application/octet-stream";
 }
 
-function registerSocketHandlers(): void {
-  socketServer.on("notify", (params) => {
-    const message = String(params.message ?? "");
-    if (message) {
-      notificationService.send("iara", message);
-    }
-    return { ok: true };
+// ---------------------------------------------------------------------------
+// IPC handlers (browser panel + dialogs + ws url)
+// ---------------------------------------------------------------------------
+
+function registerLocalIpcHandlers(): void {
+  // WS URL for renderer
+  ipcMain.handle("desktop:get-ws-url", () => {
+    return `ws://127.0.0.1:${serverPort}/?token=${authToken}`;
   });
 
-  socketServer.on("browser.navigate", async (params) => {
-    const url = String(params.url ?? "");
-    if (url) {
-      browserPanel.show();
-      await browserPanel.navigate(url);
-    }
-    return { ok: true };
+  // Dialogs
+  ipcMain.handle("desktop:pick-folder", async () => {
+    const result = await dialog.showOpenDialog({ properties: ["openDirectory"] });
+    return result.canceled ? null : (result.filePaths[0] ?? null);
   });
 
-  socketServer.on("browser.screenshot", async () => {
-    return { path: await browserPanel.screenshot() };
+  ipcMain.handle("desktop:confirm-dialog", async (_event, message: string) => {
+    const result = await dialog.showMessageBox({
+      type: "question",
+      buttons: ["Cancel", "OK"],
+      defaultId: 1,
+      message,
+    });
+    return result.response === 1;
   });
 
-  socketServer.on("browser.get-tree", async () => {
-    return { tree: await browserPanel.getAccessibilityTree() };
+  // Browser panel
+  ipcMain.handle("desktop:browser-navigate", async (_event, url: string) => {
+    await browserPanel.navigate(url);
   });
-
-  socketServer.on("dev.start", (params) => {
-    const cmd = params as unknown as import("./services/devservers.js").DevCommand;
-    devSupervisor.start(cmd);
-    return { ok: true };
+  ipcMain.handle("desktop:browser-show", () => {
+    browserPanel.show();
   });
-
-  socketServer.on("dev.stop", (params) => {
-    devSupervisor.stop(String(params.name ?? ""));
-    return { ok: true };
+  ipcMain.handle("desktop:browser-hide", () => {
+    browserPanel.hide();
   });
-
-  socketServer.on("dev.status", () => {
-    return devSupervisor.status();
+  ipcMain.handle("desktop:browser-toggle", () => {
+    browserPanel.toggle();
   });
-
-  socketServer.on("status.tool-complete", () => ({ ok: true }));
-  socketServer.on("status.session-end", () => ({ ok: true }));
+  ipcMain.handle("desktop:browser-screenshot", async () => {
+    return browserPanel.screenshot();
+  });
+  ipcMain.handle("desktop:browser-get-tree", async () => {
+    return browserPanel.getAccessibilityTree();
+  });
+  ipcMain.handle("desktop:browser-click", async (_event, selector: string) => {
+    await browserPanel.click(selector);
+  });
+  ipcMain.handle("desktop:browser-fill", async (_event, selector: string, value: string) => {
+    await browserPanel.fill(selector, value);
+  });
 }
 
-// Auto-open browser when frontend server is healthy
-devSupervisor.on("healthy", (_name: string, port: number) => {
-  const status = devSupervisor.status();
-  const server = status.find((s) => s.port === port);
-  if (server?.type === "frontend") {
-    browserPanel.show();
-    void browserPanel.navigate(`http://localhost:${port}`);
-  }
-});
+// ---------------------------------------------------------------------------
+// App lifecycle
+// ---------------------------------------------------------------------------
 
 app.whenReady().then(async () => {
   if (!isDevelopment) {
     registerCustomProtocol();
   }
 
-  registerIpcHandlers();
-  registerSocketHandlers();
+  serverPort = await reservePort();
+  authToken = generateToken();
 
-  // Start socket server
-  try {
-    await socketServer.start();
-    process.env.IARA_DESKTOP_SOCKET = socketServer.getSocketPath();
-  } catch (err) {
-    console.error("Failed to start socket server:", err);
-  }
+  registerLocalIpcHandlers();
+  spawnServer();
 
-  // Generate plugin dir for Claude slash commands
-  const bridgePath = path.join(__dirname, "cli-bridge", "bridge.js");
-  pluginDir = generatePluginDir({
-    bridgePath,
-    socketPath: socketServer.getSocketPath(),
-  });
-  process.env.IARA_PLUGIN_DIR = pluginDir;
-
-  // Register hooks in Claude settings
-  try {
-    mergeHooks(bridgePath);
-  } catch (err) {
-    console.error("Failed to merge hooks:", err);
-  }
+  // Give the server a moment to start before connecting WS
+  setTimeout(() => connectWs(), 1500);
 
   createWindow();
 
@@ -228,33 +334,34 @@ app.on("window-all-closed", () => {
 });
 
 app.on("before-quit", () => {
+  // Close WS
   try {
-    terminalManager.destroyAll();
+    if (ws) {
+      ws.close();
+      ws = null;
+    }
   } catch {
     /* shutting down */
   }
+
+  // Kill server child process
   try {
-    devSupervisor.stopAll();
+    if (restartTimer) {
+      clearTimeout(restartTimer);
+      restartTimer = null;
+    }
+    if (serverChild) {
+      serverChild.removeAllListeners();
+      serverChild.kill("SIGTERM");
+      serverChild = null;
+    }
   } catch {
     /* shutting down */
   }
-  try {
-    void socketServer.stop();
-  } catch {
-    /* shutting down */
-  }
+
+  // Detach browser panel
   try {
     browserPanel.detach();
-  } catch {
-    /* shutting down */
-  }
-  try {
-    if (pluginDir) cleanupPluginDir(pluginDir);
-  } catch {
-    /* shutting down */
-  }
-  try {
-    removeHooks();
   } catch {
     /* shutting down */
   }

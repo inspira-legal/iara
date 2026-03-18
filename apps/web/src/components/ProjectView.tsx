@@ -11,7 +11,7 @@ import {
 } from "lucide-react";
 import type { Project, RepoInfo } from "@iara/contracts";
 import { useProjectStore } from "~/stores/projects";
-import { ensureNativeApi } from "~/nativeApi";
+import { transport } from "~/lib/ws-transport.js";
 import { EditableName } from "./EditableName";
 import { AddRepoDialog } from "./AddRepoDialog";
 import { ConfirmDialog } from "./ConfirmDialog";
@@ -97,9 +97,8 @@ export function ProjectView({ project }: ProjectViewProps) {
     let cancelled = false;
     setLoading(true);
 
-    const api = ensureNativeApi();
-    api
-      .getRepoInfo(project.id)
+    transport
+      .request("repos.getInfo", { projectId: project.id })
       .then((info) => {
         if (!cancelled) {
           setRepoInfo(info);
@@ -169,9 +168,8 @@ export function ProjectView({ project }: ProjectViewProps) {
         open={showAddRepo}
         onClose={() => setShowAddRepo(false)}
         onAdd={async (input) => {
-          const api = ensureNativeApi();
-          await api.addRepo(project.id, input);
-          const info = await api.getRepoInfo(project.id);
+          await transport.request("repos.add", { projectId: project.id, ...input });
+          const info = await transport.request("repos.getInfo", { projectId: project.id });
           setRepoInfo(info);
         }}
       />
@@ -202,8 +200,7 @@ export function ProjectView({ project }: ProjectViewProps) {
             }),
           });
           setRepoToDelete(null);
-          const api = ensureNativeApi();
-          const info = await api.getRepoInfo(project.id);
+          const info = await transport.request("repos.getInfo", { projectId: project.id });
           setRepoInfo(info);
         }}
         onCancel={() => setRepoToDelete(null)}

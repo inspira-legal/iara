@@ -18,7 +18,9 @@
   "scripts": {
     "dev:desktop": "bun scripts/dev-runner.ts",
     "build": "turbo run build",
-    "build:desktop": "turbo run build --filter=@iara/desktop --filter=@iara/web",
+    "build:desktop": "turbo run build --filter=@iara/desktop --filter=@iara/web --filter=@iara/server",
+    "build:server": "turbo run build --filter=@iara/server",
+    "dev:server": "cd apps/server && bun run dev",
     "typecheck": "turbo run typecheck",
     "lint": "oxlint --report-unused-disable-directives",
     "test": "turbo run test",
@@ -26,6 +28,8 @@
     "fmt:check": "oxfmt --check",
     "smoke-test": "turbo run smoke-test --filter=@iara/desktop",
     "package": "bun build:desktop && cd apps/desktop && npx electron-builder --config electron-builder.yml",
+    "package:server": "bun build:server",
+    "install:desktop": "bun scripts/install-desktop.ts",
     "clean": "rm -rf node_modules apps/*/node_modules packages/*/node_modules apps/*/dist apps/*/dist-electron packages/*/dist .turbo apps/*/.turbo packages/*/.turbo"
   },
   "devDependencies": {

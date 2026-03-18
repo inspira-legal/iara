@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { X, FolderOpen, Loader2 } from "lucide-react";
 import type { AddRepoInput } from "@iara/contracts";
-import { ensureNativeApi } from "~/nativeApi";
+import { isElectron } from "~/env";
 import { cn } from "~/lib/utils";
 import { useToast } from "./Toast";
 
@@ -79,9 +79,17 @@ export function AddRepoDialog({ open, onClose, onAdd }: AddRepoDialogProps) {
 
   const handlePickFolder = async () => {
     try {
-      const picked = await ensureNativeApi().pickFolder();
-      if (picked) {
-        setFolderPath(picked);
+      if (isElectron && window.desktopBridge) {
+        const picked = await window.desktopBridge.pickFolder();
+        if (picked) {
+          setFolderPath(picked);
+        }
+      } else {
+        // Browser fallback: prompt for path
+        const picked = window.prompt("Enter the absolute path to the folder:");
+        if (picked) {
+          setFolderPath(picked);
+        }
       }
     } catch (err) {
       toast(`Failed to pick folder: ${err instanceof Error ? err.message : String(err)}`, "error");

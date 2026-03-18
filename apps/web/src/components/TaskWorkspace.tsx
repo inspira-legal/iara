@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 import { GitBranch, CheckCircle, Trash2 } from "lucide-react";
 import type { Task, Project } from "@iara/contracts";
-import { ensureNativeApi } from "~/nativeApi";
+import { transport } from "~/lib/ws-transport.js";
 import { TerminalView } from "./TerminalView";
 
 const FETCH_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
@@ -17,11 +17,7 @@ export function TaskWorkspace({ project, task, onCompleteTask, onDeleteTask }: T
   // Auto-fetch repos every 5 minutes while a task is active
   useEffect(() => {
     const doFetch = () => {
-      try {
-        void ensureNativeApi().fetchRepos(project.id);
-      } catch {
-        // Not in Electron
-      }
+      void transport.request("repos.fetch", { projectId: project.id }).catch(() => {});
     };
 
     // Fetch immediately on task select

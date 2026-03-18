@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from "react";
-import { ensureNativeApi } from "~/nativeApi";
+import { transport } from "../lib/ws-transport.js";
 
 export type TerminalStatus = "idle" | "connecting" | "active" | "exited";
 
@@ -24,10 +24,13 @@ export function useTerminal(taskId: string): UseTerminalReturn {
   const create = useCallback(
     async (resumeSessionId?: string) => {
       try {
-        const api = ensureNativeApi();
         setStatus("connecting");
         setExitCode(null);
-        const result = await api.terminalCreate(taskId, resumeSessionId);
+        const params: { taskId: string; resumeSessionId?: string } = { taskId };
+        if (resumeSessionId !== undefined) {
+          params.resumeSessionId = resumeSessionId;
+        }
+        const result = await transport.request("terminal.create", params);
         terminalIdRef.current = result.terminalId;
         sessionIdRef.current = result.sessionId;
         setTerminalId(result.terminalId);
@@ -44,8 +47,7 @@ export function useTerminal(taskId: string): UseTerminalReturn {
 
   const destroy = useCallback(async () => {
     if (!terminalIdRef.current) return;
-    const api = ensureNativeApi();
-    await api.terminalDestroy(terminalIdRef.current);
+    await transport.request("terminal.destroy", { terminalId: terminalIdRef.current });
     terminalIdRef.current = null;
     sessionIdRef.current = null;
     setTerminalId(null);
@@ -61,19 +63,15 @@ export function useTerminal(taskId: string): UseTerminalReturn {
 
   // Listen for terminal exit
   useEffect(() => {
-    const api = ensureNativeApi();
-    const handleExit = (tid: string, code: number) => {
+    const unsub = transport.subscribe("terminal:exit", ({ terminalId: tid, exitCode: code }) => {
       if (tid === terminalIdRef.current) {
         setStatus("exited");
         setExitCode(code);
         terminalIdRef.current = null;
         setTerminalId(null);
       }
-    };
-    api.onTerminalExit(handleExit);
-    return () => {
-      api.offTerminalExit();
-    };
+    });
+    return unsub;
   }, []);
 
   return { terminalId, sessionId, status, exitCode, create, restart, destroy };

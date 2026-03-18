@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import { ensureNativeApi } from "~/nativeApi";
+import { transport } from "../lib/ws-transport.js";
 
 export interface AppNotification {
   id: string;
@@ -19,6 +19,7 @@ interface NotificationActions {
   loadNotifications(): Promise<void>;
   markRead(id: string): Promise<void>;
   markAllRead(): Promise<void>;
+  subscribePush(): () => void;
 }
 
 export const useNotificationStore = create<NotificationState & NotificationActions>((set) => ({
@@ -27,20 +28,18 @@ export const useNotificationStore = create<NotificationState & NotificationActio
 
   loadNotifications: async () => {
     try {
-      const api = ensureNativeApi();
       const [notifications, unreadCount] = await Promise.all([
-        api.getNotifications(),
-        api.getUnreadCount(),
+        transport.request("notifications.list", {}),
+        transport.request("notifications.unreadCount", {}),
       ]);
       set({ notifications, unreadCount });
     } catch {
-      // Not in Electron
+      // transport not ready
     }
   },
 
   markRead: async (id) => {
-    const api = ensureNativeApi();
-    await api.markNotificationRead(id);
+    await transport.request("notifications.markRead", { id });
     set((state) => ({
       notifications: state.notifications.map((n) => (n.id === id ? { ...n, read: true } : n)),
       unreadCount: Math.max(0, state.unreadCount - 1),
@@ -48,11 +47,23 @@ export const useNotificationStore = create<NotificationState & NotificationActio
   },
 
   markAllRead: async () => {
-    const api = ensureNativeApi();
-    await api.markAllRead();
+    await transport.request("notifications.markAllRead", {});
     set((state) => ({
       notifications: state.notifications.map((n) => ({ ...n, read: true })),
       unreadCount: 0,
     }));
+  },
+
+  subscribePush: () => {
+    const unsub = transport.subscribe("notification", () => {
+      // Reload notifications when a new push arrives
+      void transport.request("notifications.list", {}).then((notifications) => {
+        set({ notifications });
+      });
+      void transport.request("notifications.unreadCount", {}).then((unreadCount) => {
+        set({ unreadCount });
+      });
+    });
+    return unsub;
   },
 }));

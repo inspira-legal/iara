@@ -2,7 +2,7 @@ import { useState } from "react";
 import { X, Plus, ArrowLeft, Loader2, GitBranch, FolderOpen, FileText } from "lucide-react";
 import type { AddRepoInput } from "@iara/contracts";
 import { useProjectStore } from "~/stores/projects";
-import { ensureNativeApi } from "~/nativeApi";
+import { transport } from "~/lib/ws-transport.js";
 import { cn } from "~/lib/utils";
 import { useToast } from "./Toast";
 import { AddRepoDialog } from "./AddRepoDialog";
@@ -108,11 +108,10 @@ export function CreateProjectDialog({ open, onClose }: CreateProjectDialogProps)
         repoSources: [],
       });
 
-      const api = ensureNativeApi();
       const total = pendingRepos.length;
       for (const [i, repo] of pendingRepos.entries()) {
         setProgress(`Adding repos (${i + 1}/${total})...`);
-        await api.addRepo(project.id, repo.input);
+        await transport.request("repos.add", { projectId: project.id, ...repo.input });
       }
 
       // Reload projects to reflect added repos

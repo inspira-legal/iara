@@ -2,16 +2,14 @@ import { useMemo, type ReactNode } from "react";
 import { Sidebar } from "./Sidebar";
 import { MainPanel } from "./MainPanel";
 import { useKeyboardShortcuts } from "~/hooks/useKeyboardShortcuts";
-import { ensureNativeApi } from "~/nativeApi";
+import { isElectron } from "~/env";
 
 export function AppShell({ children }: { children: ReactNode }) {
   const shortcuts = useMemo(
     () => ({
       "mod+b": () => {
-        try {
-          void ensureNativeApi().browserToggle();
-        } catch {
-          /* not in electron */
+        if (isElectron && window.desktopBridge) {
+          void window.desktopBridge.browserToggle();
         }
       },
     }),

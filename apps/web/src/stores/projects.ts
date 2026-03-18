@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import type { CreateProjectInput, Project, UpdateProjectInput } from "@iara/contracts";
-import { ensureNativeApi } from "~/nativeApi";
+import { transport } from "../lib/ws-transport.js";
 
 interface ProjectState {
   projects: Project[];
@@ -24,8 +24,7 @@ export const useProjectStore = create<ProjectState & ProjectActions>((set) => ({
   loadProjects: async () => {
     set({ loading: true });
     try {
-      const api = ensureNativeApi();
-      const projects = await api.listProjects();
+      const projects = await transport.request("projects.list", {});
       set({ projects, loading: false });
     } catch {
       set({ loading: false });
@@ -37,8 +36,7 @@ export const useProjectStore = create<ProjectState & ProjectActions>((set) => ({
   },
 
   createProject: async (input) => {
-    const api = ensureNativeApi();
-    const project = await api.createProject(input);
+    const project = await transport.request("projects.create", input);
     set((state) => ({
       projects: [...state.projects, project],
       selectedProjectId: project.id,
@@ -47,16 +45,14 @@ export const useProjectStore = create<ProjectState & ProjectActions>((set) => ({
   },
 
   updateProject: async (id, input) => {
-    const api = ensureNativeApi();
-    await api.updateProject(id, input);
+    await transport.request("projects.update", { id, ...input });
     // Reload to get fresh state (repos may have been cloned)
-    const projects = await api.listProjects();
+    const projects = await transport.request("projects.list", {});
     set({ projects });
   },
 
   deleteProject: async (id) => {
-    const api = ensureNativeApi();
-    await api.deleteProject(id);
+    await transport.request("projects.delete", { id });
     set((state) => ({
       projects: state.projects.filter((p) => p.id !== id),
       selectedProjectId: state.selectedProjectId === id ? null : state.selectedProjectId,

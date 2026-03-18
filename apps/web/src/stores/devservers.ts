@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import type { DevCommand, DevServerStatus } from "@iara/contracts";
-import { ensureNativeApi } from "~/nativeApi";
+import { transport } from "../lib/ws-transport.js";
 
 interface DevServerState {
   servers: DevServerStatus[];
@@ -14,6 +14,7 @@ interface DevServerActions {
   startServer(cmd: DevCommand): Promise<void>;
   stopServer(name: string): Promise<void>;
   getLogs(name: string): Promise<string[]>;
+  subscribePush(): () => void;
 }
 
 export const useDevServerStore = create<DevServerState & DevServerActions>((set) => ({
@@ -23,40 +24,46 @@ export const useDevServerStore = create<DevServerState & DevServerActions>((set)
 
   loadStatus: async () => {
     try {
-      const api = ensureNativeApi();
-      const servers = await api.devStatus();
+      const servers = await transport.request("dev.status", {});
       set({ servers });
     } catch {
-      // Not in Electron
+      // transport not ready
     }
   },
 
   discoverCommands: async (dir) => {
     try {
-      const api = ensureNativeApi();
-      const commands = await api.devDiscover(dir);
+      const commands = await transport.request("dev.discover", { dir });
       set({ commands });
     } catch {
-      // Not in Electron
+      // transport not ready
     }
   },
 
   startServer: async (cmd) => {
-    const api = ensureNativeApi();
-    await api.devStart(cmd);
-    const servers = await api.devStatus();
+    await transport.request("dev.start", cmd);
+    const servers = await transport.request("dev.status", {});
     set({ servers });
   },
 
   stopServer: async (name) => {
-    const api = ensureNativeApi();
-    await api.devStop(name);
-    const servers = await api.devStatus();
+    await transport.request("dev.stop", { name });
+    const servers = await transport.request("dev.status", {});
     set({ servers });
   },
 
   getLogs: async (name) => {
-    const api = ensureNativeApi();
-    return api.devLogs(name);
+    return transport.request("dev.logs", { name });
+  },
+
+  subscribePush: () => {
+    const unsub = transport.subscribe("dev:healthy", ({ name, port }) => {
+      console.info(`[dev] Server "${name}" healthy on port ${port}`);
+      // Reload status to reflect the new healthy state
+      void transport.request("dev.status", {}).then((servers) => {
+        set({ servers });
+      });
+    });
+    return unsub;
   },
 }));

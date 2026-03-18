@@ -1,95 +1,21 @@
 import { contextBridge, ipcRenderer } from "electron";
-import type { DesktopBridge } from "@iara/contracts";
 
 contextBridge.exposeInMainWorld("desktopBridge", {
-  // App
-  getAppInfo: () => ipcRenderer.invoke("desktop:get-app-info"),
+  // WS URL to connect renderer to the server
+  getWsUrl: () => ipcRenderer.invoke("desktop:get-ws-url"),
 
-  // Projects
-  listProjects: () => ipcRenderer.invoke("desktop:list-projects"),
-  getProject: (id) => ipcRenderer.invoke("desktop:get-project", id),
-  createProject: (input) => ipcRenderer.invoke("desktop:create-project", input),
-  updateProject: (id, input) => ipcRenderer.invoke("desktop:update-project", id, input),
-  deleteProject: (id) => ipcRenderer.invoke("desktop:delete-project", id),
-  getRepoInfo: (projectId) => ipcRenderer.invoke("desktop:get-repo-info", projectId),
-  addRepo: (projectId, input) => ipcRenderer.invoke("desktop:add-repo", projectId, input),
-  fetchRepos: (projectId) => ipcRenderer.invoke("desktop:fetch-repos", projectId),
-
-  // Tasks
-  listTasks: (projectId) => ipcRenderer.invoke("desktop:list-tasks", projectId),
-  getTask: (id) => ipcRenderer.invoke("desktop:get-task", id),
-  createTask: (projectId, input) => ipcRenderer.invoke("desktop:create-task", projectId, input),
-  completeTask: (id) => ipcRenderer.invoke("desktop:complete-task", id),
-  deleteTask: (id) => ipcRenderer.invoke("desktop:delete-task", id),
-
-  // Launcher
-  launchClaude: (input) => ipcRenderer.invoke("desktop:launch-claude", input),
-
-  // Sessions
-  listSessions: (taskId) => ipcRenderer.invoke("desktop:list-sessions", taskId),
-
-  // Prompts
-  readPrompt: (filePath) => ipcRenderer.invoke("desktop:read-prompt", filePath),
-  writePrompt: (filePath, content) => ipcRenderer.invoke("desktop:write-prompt", filePath, content),
-
-  // Dev Servers
-  devStart: (cmd) => ipcRenderer.invoke("desktop:dev-start", cmd),
-  devStop: (name) => ipcRenderer.invoke("desktop:dev-stop", name),
-  devStatus: () => ipcRenderer.invoke("desktop:dev-status"),
-  devLogs: (name, limit) => ipcRenderer.invoke("desktop:dev-logs", name, limit),
-  devDiscover: (dir) => ipcRenderer.invoke("desktop:dev-discover", dir),
+  // Dialogs
+  pickFolder: () => ipcRenderer.invoke("desktop:pick-folder"),
+  confirmDialog: (message: string) => ipcRenderer.invoke("desktop:confirm-dialog", message),
 
   // Browser Panel
-  browserNavigate: (url) => ipcRenderer.invoke("desktop:browser-navigate", url),
+  browserNavigate: (url: string) => ipcRenderer.invoke("desktop:browser-navigate", url),
   browserShow: () => ipcRenderer.invoke("desktop:browser-show"),
   browserHide: () => ipcRenderer.invoke("desktop:browser-hide"),
   browserToggle: () => ipcRenderer.invoke("desktop:browser-toggle"),
   browserScreenshot: () => ipcRenderer.invoke("desktop:browser-screenshot"),
   browserGetTree: () => ipcRenderer.invoke("desktop:browser-get-tree"),
-  browserClick: (selector) => ipcRenderer.invoke("desktop:browser-click", selector),
-  browserFill: (selector, value) => ipcRenderer.invoke("desktop:browser-fill", selector, value),
-
-  // Notifications
-  sendNotification: (title, body, type) =>
-    ipcRenderer.invoke("desktop:send-notification", title, body, type),
-  getNotifications: () => ipcRenderer.invoke("desktop:get-notifications"),
-  getUnreadCount: () => ipcRenderer.invoke("desktop:get-unread-count"),
-  markNotificationRead: (id) => ipcRenderer.invoke("desktop:mark-notification-read", id),
-  markAllRead: () => ipcRenderer.invoke("desktop:mark-all-read"),
-
-  // Git
-  getGitStatus: (cwd) => ipcRenderer.invoke("desktop:get-git-status", cwd),
-
-  // Dialogs
-  pickFolder: () => ipcRenderer.invoke("desktop:pick-folder"),
-  confirmDialog: (message) => ipcRenderer.invoke("desktop:confirm-dialog", message),
-
-  // Terminal
-  terminalCreate: (taskId, resumeSessionId?) =>
-    ipcRenderer.invoke("desktop:terminal-create", taskId, resumeSessionId),
-  terminalWrite: (terminalId, data) =>
-    ipcRenderer.invoke("desktop:terminal-write", terminalId, data),
-  terminalResize: (terminalId, cols, rows) =>
-    ipcRenderer.invoke("desktop:terminal-resize", terminalId, cols, rows),
-  terminalDestroy: (terminalId) => ipcRenderer.invoke("desktop:terminal-destroy", terminalId),
-  onTerminalData: (cb) => {
-    ipcRenderer.on("terminal:data", (_e, terminalId, data) => cb(terminalId, data));
-  },
-  offTerminalData: () => {
-    ipcRenderer.removeAllListeners("terminal:data");
-  },
-  onTerminalExit: (cb) => {
-    ipcRenderer.on("terminal:exit", (_e, terminalId, exitCode) => cb(terminalId, exitCode));
-  },
-  offTerminalExit: () => {
-    ipcRenderer.removeAllListeners("terminal:exit");
-  },
-
-  // Clone Progress Events
-  onCloneProgress: (cb) => {
-    ipcRenderer.on("clone:progress", (_e, progress) => cb(progress));
-  },
-  offCloneProgress: () => {
-    ipcRenderer.removeAllListeners("clone:progress");
-  },
-} satisfies DesktopBridge);
+  browserClick: (selector: string) => ipcRenderer.invoke("desktop:browser-click", selector),
+  browserFill: (selector: string, value: string) =>
+    ipcRenderer.invoke("desktop:browser-fill", selector, value),
+});

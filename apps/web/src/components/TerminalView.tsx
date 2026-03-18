@@ -1,9 +1,8 @@
 import { useRef, useEffect, useCallback } from "react";
-import { Terminal } from "@xterm/xterm";
-import { FitAddon } from "@xterm/addon-fit";
 import { WebglAddon } from "@xterm/addon-webgl";
 import "@xterm/xterm/css/xterm.css";
-import { ensureNativeApi } from "~/nativeApi";
+import { transport } from "~/lib/ws-transport.js";
+import { getOrCreateTerminal, destroyTerminal } from "~/lib/terminal-cache.js";
 import { useTerminal } from "~/hooks/useTerminal";
 import { RotateCw } from "lucide-react";
 
@@ -13,8 +12,6 @@ interface TerminalViewProps {
 
 export function TerminalView({ taskId }: TerminalViewProps) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const termRef = useRef<Terminal | null>(null);
-  const fitAddonRef = useRef<FitAddon | null>(null);
   const { terminalId, status, exitCode, create, restart } = useTerminal(taskId);
   const terminalIdRef = useRef<string | null>(null);
 
@@ -26,81 +23,53 @@ export function TerminalView({ taskId }: TerminalViewProps) {
     }
   }, [status, create]);
 
+  // Attach/detach the cached xterm instance to the DOM
   useEffect(() => {
     if (!terminalId || !containerRef.current) return;
 
     const container = containerRef.current;
-    const api = ensureNativeApi();
-    const tid = terminalId;
+    const cached = getOrCreateTerminal(terminalId);
+    const { term, fitAddon } = cached;
 
-    const term = new Terminal({
-      fontFamily: "'JetBrains Mono', 'Fira Code', 'Cascadia Code', 'Menlo', monospace",
-      fontSize: 14,
-      lineHeight: 1.0,
-      letterSpacing: 0,
-      cursorBlink: true,
-      scrollback: 50000,
-      customGlyphs: true,
-      rescaleOverlappingGlyphs: true,
-      drawBoldTextInBrightColors: false,
-      theme: {
-        background: "#09090b",
-        foreground: "#f4f4f5",
-        cursor: "#f4f4f5",
-        selectionBackground: "#3f3f46",
-        black: "#09090b",
-        red: "#ef4444",
-        green: "#22c55e",
-        yellow: "#eab308",
-        blue: "#3b82f6",
-        magenta: "#a855f7",
-        cyan: "#06b6d4",
-        white: "#f4f4f5",
-        brightBlack: "#52525b",
-        brightRed: "#f87171",
-        brightGreen: "#4ade80",
-        brightYellow: "#facc15",
-        brightBlue: "#60a5fa",
-        brightMagenta: "#c084fc",
-        brightCyan: "#22d3ee",
-        brightWhite: "#ffffff",
-      },
-    });
-
-    const fitAddon = new FitAddon();
-    term.loadAddon(fitAddon);
-    term.open(container);
-
-    try {
-      const webglAddon = new WebglAddon();
-      webglAddon.onContextLoss(() => webglAddon.dispose());
-      term.loadAddon(webglAddon);
-    } catch {
-      // Canvas fallback
+    // If the terminal hasn't been opened yet, open it
+    if (!term.element) {
+      term.open(container);
+      try {
+        const webglAddon = new WebglAddon();
+        webglAddon.onContextLoss(() => webglAddon.dispose());
+        term.loadAddon(webglAddon);
+      } catch {
+        // Canvas fallback
+      }
+    } else {
+      // Re-attach to DOM: move the element into the container
+      container.appendChild(term.element);
     }
 
     fitAddon.fit();
-    termRef.current = term;
-    fitAddonRef.current = fitAddon;
 
-    api.terminalResize(tid, term.cols, term.rows).catch(() => {});
+    transport
+      .request("terminal.resize", { terminalId, cols: term.cols, rows: term.rows })
+      .catch(() => {});
 
-    term.onData((data) => {
+    const onData = term.onData((data) => {
       if (terminalIdRef.current) {
-        api.terminalWrite(terminalIdRef.current, data).catch(() => {});
-      }
-    });
-
-    api.onTerminalData((evtTid: string, data: string) => {
-      if (evtTid === tid) {
-        term.write(data);
+        transport
+          .request("terminal.write", { terminalId: terminalIdRef.current, data })
+          .catch(() => {});
       }
     });
 
     const resizeObserver = new ResizeObserver(() => {
       fitAddon.fit();
       if (terminalIdRef.current) {
-        api.terminalResize(terminalIdRef.current, term.cols, term.rows).catch(() => {});
+        transport
+          .request("terminal.resize", {
+            terminalId: terminalIdRef.current,
+            cols: term.cols,
+            rows: term.rows,
+          })
+          .catch(() => {});
       }
     });
     resizeObserver.observe(container);
@@ -108,13 +77,21 @@ export function TerminalView({ taskId }: TerminalViewProps) {
     term.focus();
 
     return () => {
-      api.offTerminalData();
+      onData.dispose();
       resizeObserver.disconnect();
-      term.dispose();
-      termRef.current = null;
-      fitAddonRef.current = null;
+      // Don't dispose the terminal — just detach from DOM so it survives navigation
+      if (term.element?.parentNode === container) {
+        container.removeChild(term.element);
+      }
     };
   }, [terminalId]);
+
+  // Cleanup on terminal exit
+  useEffect(() => {
+    if (status === "exited" && terminalId) {
+      destroyTerminal(terminalId);
+    }
+  }, [status, terminalId]);
 
   const handleRestart = useCallback(() => {
     void restart();

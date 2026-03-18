@@ -1,13 +1,12 @@
 import { Globe } from "lucide-react";
-import { ensureNativeApi } from "~/nativeApi";
+import { isElectron } from "~/env";
 
 export function BrowserToggle() {
+  if (!isElectron) return null;
+
   const handleToggle = () => {
-    try {
-      const api = ensureNativeApi();
-      void api.browserToggle();
-    } catch {
-      // Not in Electron
+    if (window.desktopBridge) {
+      void window.desktopBridge.browserToggle();
     }
   };
 

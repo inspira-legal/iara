@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Clock, MessageSquare, Play, Plus } from "lucide-react";
 import type { SessionInfo } from "@iara/contracts";
-import { ensureNativeApi } from "~/nativeApi";
+import { transport } from "~/lib/ws-transport.js";
 
 interface SessionListProps {
   taskId: string;
@@ -14,8 +14,8 @@ export function SessionList({ taskId, onLaunch }: SessionListProps) {
 
   useEffect(() => {
     setLoading(true);
-    ensureNativeApi()
-      .listSessions(taskId)
+    transport
+      .request("sessions.list", { taskId })
       .then(setSessions)
       .catch(() => setSessions([]))
       .finally(() => setLoading(false));

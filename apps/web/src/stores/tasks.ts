@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import type { CreateTaskInput, Task } from "@iara/contracts";
-import { ensureNativeApi } from "~/nativeApi";
+import { transport } from "../lib/ws-transport.js";
 
 interface TaskState {
   tasks: Task[];
@@ -25,8 +25,7 @@ export const useTaskStore = create<TaskState & TaskActions>((set) => ({
   loadTasks: async (projectId) => {
     set({ loading: true });
     try {
-      const api = ensureNativeApi();
-      const tasks = await api.listTasks(projectId);
+      const tasks = await transport.request("tasks.list", { projectId });
       set({ tasks, loading: false });
     } catch {
       set({ loading: false });
@@ -38,8 +37,7 @@ export const useTaskStore = create<TaskState & TaskActions>((set) => ({
   },
 
   createTask: async (projectId, input) => {
-    const api = ensureNativeApi();
-    const task = await api.createTask(projectId, input);
+    const task = await transport.request("tasks.create", { projectId, ...input });
     set((state) => ({
       tasks: [...state.tasks, task],
       selectedTaskId: task.id,
@@ -48,16 +46,14 @@ export const useTaskStore = create<TaskState & TaskActions>((set) => ({
   },
 
   completeTask: async (id) => {
-    const api = ensureNativeApi();
-    await api.completeTask(id);
+    await transport.request("tasks.complete", { id });
     set((state) => ({
       tasks: state.tasks.map((t) => (t.id === id ? { ...t, status: "completed" as const } : t)),
     }));
   },
 
   deleteTask: async (id) => {
-    const api = ensureNativeApi();
-    await api.deleteTask(id);
+    await transport.request("tasks.delete", { id });
     set((state) => ({
       tasks: state.tasks.filter((t) => t.id !== id),
       selectedTaskId: state.selectedTaskId === id ? null : state.selectedTaskId,
