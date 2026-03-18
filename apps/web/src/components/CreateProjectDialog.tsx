@@ -83,37 +83,39 @@ export function CreateProjectDialog({ open, onClose }: CreateProjectDialogProps)
 
           <div>
             <label className="mb-1 block text-sm text-zinc-400">Repos</label>
-            {repoUrls.map((url) => (
-              <div key={url} className="mb-1 flex items-center gap-2">
-                <code className="flex-1 truncate rounded bg-zinc-800 px-2 py-1 text-xs text-zinc-400">
-                  {url}
-                </code>
+            <div className="space-y-1">
+              {repoUrls.map((url) => (
+                <div key={url} className="flex items-center gap-1">
+                  <code className="flex-1 truncate rounded-md border border-zinc-700 bg-zinc-800 px-2 py-1.5 text-xs text-zinc-400">
+                    {url}
+                  </code>
+                  <button
+                    type="button"
+                    onClick={() => setRepoUrls((prev) => prev.filter((x) => x !== url))}
+                    className="shrink-0 rounded-md p-1.5 text-zinc-600 hover:bg-zinc-700 hover:text-zinc-300"
+                  >
+                    <X size={14} />
+                  </button>
+                </div>
+              ))}
+              <div className="flex items-center gap-1">
+                <input
+                  type="text"
+                  value={repoInput}
+                  onChange={(e) => setRepoInput(e.target.value)}
+                  onKeyDown={handleRepoKeyDown}
+                  placeholder="https://github.com/user/repo.git"
+                  className="flex-1 rounded-md border border-zinc-700 bg-zinc-800 px-2 py-1.5 text-xs text-zinc-100 placeholder-zinc-600 outline-none focus:border-blue-500"
+                />
                 <button
                   type="button"
-                  onClick={() => setRepoUrls((prev) => prev.filter((x) => x !== url))}
-                  className="text-zinc-500 hover:text-zinc-300"
+                  onClick={handleAddRepo}
+                  disabled={!repoInput.trim()}
+                  className="shrink-0 rounded-md p-1.5 text-zinc-600 hover:bg-zinc-700 hover:text-zinc-300 disabled:opacity-30"
                 >
-                  <X size={14} />
+                  <Plus size={14} />
                 </button>
               </div>
-            ))}
-            <div className="flex gap-1">
-              <input
-                type="text"
-                value={repoInput}
-                onChange={(e) => setRepoInput(e.target.value)}
-                onKeyDown={handleRepoKeyDown}
-                placeholder="https://github.com/user/repo.git"
-                className="flex-1 rounded-md border border-zinc-700 bg-zinc-800 px-2 py-1 text-xs text-zinc-100 placeholder-zinc-600 outline-none focus:border-blue-500"
-              />
-              <button
-                type="button"
-                onClick={handleAddRepo}
-                disabled={!repoInput.trim()}
-                className="rounded-md p-1 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-300 disabled:opacity-30"
-              >
-                <Plus size={14} />
-              </button>
             </div>
           </div>
 
