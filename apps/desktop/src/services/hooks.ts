@@ -7,9 +7,16 @@ interface ClaudeSettings {
   [key: string]: unknown;
 }
 
+// Claude Code hook format: { matcher: string, hooks: [{ type: "command", command: string }] }
+interface ClaudeHookEntry {
+  matcher: string;
+  hooks: Array<{ type: "command"; command: string }>;
+}
+
 interface HookDefinition {
-  command: string;
   event: string;
+  matcher: string;
+  command: string;
 }
 
 export function mergeHooks(bridgePath: string): void {
@@ -19,10 +26,12 @@ export function mergeHooks(bridgePath: string): void {
   const iaraHooks: HookDefinition[] = [
     {
       event: "PostToolUse",
+      matcher: "",
       command: `[ -n "$IARA_DESKTOP_SOCKET" ] && ${bridgePath} status.tool-complete || true`,
     },
     {
       event: "Stop",
+      matcher: "",
       command: `[ -n "$IARA_DESKTOP_SOCKET" ] && ${bridgePath} status.session-end || true`,
     },
   ];
@@ -31,20 +40,23 @@ export function mergeHooks(bridgePath: string): void {
     settings.hooks = {};
   }
 
-  const hooks = settings.hooks as Record<string, unknown[]>;
+  const hooks = settings.hooks as Record<string, ClaudeHookEntry[]>;
 
   for (const hook of iaraHooks) {
     if (!hooks[hook.event]) {
       hooks[hook.event] = [];
     }
 
-    const existing = hooks[hook.event] as Array<{ command?: string }>;
-    const alreadyRegistered = existing.some(
-      (h) => typeof h.command === "string" && h.command.includes("IARA_DESKTOP_SOCKET"),
+    const entries = hooks[hook.event]!;
+    const alreadyRegistered = entries.some((entry) =>
+      entry.hooks?.some((h) => h.command.includes("IARA_DESKTOP_SOCKET")),
     );
 
     if (!alreadyRegistered) {
-      existing.push({ command: hook.command });
+      entries.push({
+        matcher: hook.matcher,
+        hooks: [{ type: "command", command: hook.command }],
+      });
     }
   }
 
@@ -57,14 +69,15 @@ export function removeHooks(): void {
 
   if (!settings.hooks) return;
 
-  const hooks = settings.hooks as Record<string, unknown[]>;
+  const hooks = settings.hooks as Record<string, ClaudeHookEntry[]>;
 
   for (const event of Object.keys(hooks)) {
-    hooks[event] = (hooks[event] as Array<{ command?: string }>).filter(
-      (h) => typeof h.command !== "string" || !h.command.includes("IARA_DESKTOP_SOCKET"),
+    const filtered = (hooks[event] ?? []).filter(
+      (entry) => !entry.hooks?.some((h) => h.command.includes("IARA_DESKTOP_SOCKET")),
     );
+    hooks[event] = filtered;
 
-    if (hooks[event].length === 0) {
+    if (filtered.length === 0) {
       delete hooks[event];
     }
   }
