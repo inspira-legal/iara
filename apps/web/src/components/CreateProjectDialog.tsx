@@ -1,7 +1,6 @@
 import { useState } from "react";
-import { X, FolderPlus } from "lucide-react";
+import { X, Plus } from "lucide-react";
 import { useProjectStore } from "~/stores/projects";
-import { ensureNativeApi } from "~/nativeApi";
 import { useToast } from "./Toast";
 
 interface CreateProjectDialogProps {
@@ -11,24 +10,28 @@ interface CreateProjectDialogProps {
 
 export function CreateProjectDialog({ open, onClose }: CreateProjectDialogProps) {
   const [name, setName] = useState("");
-  const [repoPaths, setRepoPaths] = useState<string[]>([]);
+  const [repoUrls, setRepoUrls] = useState<string[]>([]);
+  const [repoInput, setRepoInput] = useState("");
   const [submitting, setSubmitting] = useState(false);
-  const { createProject } = useProjectStore();
+  const { projects, createProject } = useProjectStore();
   const { toast } = useToast();
 
   if (!open) return null;
 
-  const { projects } = useProjectStore();
   const slug = toSlug(name);
   const slugTaken = slug !== "" && projects.some((p) => p.slug === slug);
 
-  const handleAddRepo = async () => {
-    try {
-      const api = ensureNativeApi();
-      const folder = await api.pickFolder();
-      if (folder) setRepoPaths((prev) => [...prev, folder]);
-    } catch {
-      // Not in Electron
+  const handleAddRepo = () => {
+    const url = repoInput.trim();
+    if (!url || repoUrls.includes(url)) return;
+    setRepoUrls((prev) => [...prev, url]);
+    setRepoInput("");
+  };
+
+  const handleRepoKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      handleAddRepo();
     }
   };
 
@@ -36,10 +39,11 @@ export function CreateProjectDialog({ open, onClose }: CreateProjectDialogProps)
     if (!name.trim() || !slug || slugTaken) return;
     setSubmitting(true);
     try {
-      await createProject({ name: name.trim(), slug, repoSources: repoPaths });
+      await createProject({ name: name.trim(), slug, repoSources: repoUrls });
       toast("Project created", "success");
       setName("");
-      setRepoPaths([]);
+      setRepoUrls([]);
+      setRepoInput("");
       onClose();
     } catch (err) {
       toast(`Failed: ${err instanceof Error ? err.message : String(err)}`, "error");
@@ -79,28 +83,38 @@ export function CreateProjectDialog({ open, onClose }: CreateProjectDialogProps)
 
           <div>
             <label className="mb-1 block text-sm text-zinc-400">Repos</label>
-            {repoPaths.map((p) => (
-              <div key={p} className="mb-1 flex items-center gap-2">
+            {repoUrls.map((url) => (
+              <div key={url} className="mb-1 flex items-center gap-2">
                 <code className="flex-1 truncate rounded bg-zinc-800 px-2 py-1 text-xs text-zinc-400">
-                  {p}
+                  {url}
                 </code>
                 <button
                   type="button"
-                  onClick={() => setRepoPaths((prev) => prev.filter((x) => x !== p))}
+                  onClick={() => setRepoUrls((prev) => prev.filter((x) => x !== url))}
                   className="text-zinc-500 hover:text-zinc-300"
                 >
                   <X size={14} />
                 </button>
               </div>
             ))}
-            <button
-              type="button"
-              onClick={() => void handleAddRepo()}
-              className="flex items-center gap-1.5 rounded-md px-2 py-1 text-xs text-zinc-500 hover:bg-zinc-800 hover:text-zinc-300"
-            >
-              <FolderPlus size={14} />
-              Add repo folder
-            </button>
+            <div className="flex gap-1">
+              <input
+                type="text"
+                value={repoInput}
+                onChange={(e) => setRepoInput(e.target.value)}
+                onKeyDown={handleRepoKeyDown}
+                placeholder="https://github.com/user/repo.git"
+                className="flex-1 rounded-md border border-zinc-700 bg-zinc-800 px-2 py-1 text-xs text-zinc-100 placeholder-zinc-600 outline-none focus:border-blue-500"
+              />
+              <button
+                type="button"
+                onClick={handleAddRepo}
+                disabled={!repoInput.trim()}
+                className="rounded-md p-1 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-300 disabled:opacity-30"
+              >
+                <Plus size={14} />
+              </button>
+            </div>
           </div>
 
           <button
