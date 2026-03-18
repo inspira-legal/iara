@@ -1,20 +1,31 @@
-import { spawn, spawnSync } from "node:child_process";
-import { watch } from "node:fs";
+import { spawn, spawnSync, execSync } from "node:child_process";
+import { existsSync, watch } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import waitOn from "wait-on";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const desktopDir = resolve(__dirname, "..");
+const rootDir = resolve(desktopDir, "../..");
 const electronBin = resolve(desktopDir, "node_modules/.bin/electron");
 
-// Rebuild native modules for Electron before starting
-console.log("[dev-electron] Rebuilding native modules for Electron...");
-const rootDir = resolve(desktopDir, "../..");
-spawnSync("npx", ["@electron/rebuild", "-v", "40.6.0", "-m", rootDir], {
-  cwd: desktopDir,
-  stdio: "inherit",
-});
+// Rebuild better-sqlite3 for Electron's Node version
+const bsqlitePath = execSync("bun pm ls 2>/dev/null | grep better-sqlite3 | awk '{print $1}'", {
+  cwd: rootDir,
+  encoding: "utf-8",
+}).trim();
+
+if (bsqlitePath && existsSync(bsqlitePath)) {
+  const buildDir = join(bsqlitePath, "build", "Release", "better_sqlite3.node");
+  // Only rebuild if native module is missing or was built for wrong Node version
+  if (!existsSync(buildDir)) {
+    console.log("[dev-electron] Building better-sqlite3 for Electron...");
+    spawnSync("npx", ["--yes", "prebuild-install", "-r", "electron", "-t", "40.6.0"], {
+      cwd: bsqlitePath,
+      stdio: "inherit",
+    });
+  }
+}
 
 const port = Number(process.env.ELECTRON_RENDERER_PORT ?? 5173);
 const devServerUrl = `http://localhost:${port}`;
@@ -27,105 +38,50 @@ await waitOn({
   resources: [`tcp:${port}`, ...requiredFiles.map((f) => `file:${f}`)],
 });
 
-const childEnv = { ...process.env };
-delete childEnv.ELECTRON_RUN_AS_NODE;
+let child = null;
+let restarting = false;
 
-let shuttingDown = false;
-let restartTimer = null;
-let currentApp = null;
-let restartQueue = Promise.resolve();
-const expectedExits = new WeakSet();
-
-function startApp() {
-  if (shuttingDown || currentApp !== null) return;
-
-  const app = spawn(electronBin, ["dist-electron/main.js"], {
+function startElectron() {
+  child = spawn(electronBin, ["."], {
     cwd: desktopDir,
-    env: { ...childEnv, VITE_DEV_SERVER_URL: devServerUrl },
     stdio: "inherit",
+    env: { ...process.env, VITE_DEV_SERVER_URL: devServerUrl },
   });
 
-  currentApp = app;
-
-  app.once("error", () => {
-    if (currentApp === app) currentApp = null;
-    if (!shuttingDown) scheduleRestart();
-  });
-
-  app.once("exit", (code, signal) => {
-    if (currentApp === app) currentApp = null;
-    const abnormal = signal !== null || code !== 0;
-    if (!shuttingDown && !expectedExits.has(app) && abnormal) {
-      scheduleRestart();
+  child.on("exit", (code) => {
+    if (!restarting) {
+      process.exit(code ?? 0);
     }
   });
 }
 
-async function stopApp() {
-  const app = currentApp;
-  if (!app) return;
+let debounceTimer = null;
 
-  currentApp = null;
-  expectedExits.add(app);
+watch(join(desktopDir, "dist-electron"), (_, filename) => {
+  if (!filename || !watchedFiles.has(filename)) return;
 
-  await new Promise((resolve) => {
-    let settled = false;
-    const finish = () => {
-      if (settled) return;
-      settled = true;
-      resolve();
-    };
+  if (debounceTimer) clearTimeout(debounceTimer);
+  debounceTimer = setTimeout(() => {
+    restarting = true;
 
-    app.once("exit", finish);
-    app.kill("SIGTERM");
+    if (child) {
+      child.kill("SIGTERM");
+      const forceKill = setTimeout(() => {
+        try {
+          child?.kill("SIGKILL");
+        } catch {}
+      }, forcedShutdownTimeoutMs);
 
-    setTimeout(() => {
-      if (!settled) {
-        app.kill("SIGKILL");
-        finish();
-      }
-    }, forcedShutdownTimeoutMs).unref();
-  });
-}
-
-function scheduleRestart() {
-  if (shuttingDown) return;
-  if (restartTimer) clearTimeout(restartTimer);
-
-  restartTimer = setTimeout(() => {
-    restartTimer = null;
-    restartQueue = restartQueue
-      .catch(() => undefined)
-      .then(async () => {
-        await stopApp();
-        if (!shuttingDown) startApp();
+      child.on("exit", () => {
+        clearTimeout(forceKill);
+        restarting = false;
+        startElectron();
       });
-  }, restartDebounceMs);
-}
-
-const watcher = watch(
-  join(desktopDir, "dist-electron"),
-  { persistent: true },
-  (_eventType, filename) => {
-    if (typeof filename === "string" && watchedFiles.has(filename)) {
-      scheduleRestart();
+    } else {
+      restarting = false;
+      startElectron();
     }
-  },
-);
+  }, restartDebounceMs);
+});
 
-startApp();
-
-async function shutdown(exitCode) {
-  if (shuttingDown) return;
-  shuttingDown = true;
-  if (restartTimer) clearTimeout(restartTimer);
-  watcher.close();
-  await stopApp();
-  if (process.platform !== "win32") {
-    spawnSync("pkill", ["-TERM", "-P", String(process.pid)], { stdio: "ignore" });
-  }
-  process.exit(exitCode);
-}
-
-process.once("SIGINT", () => void shutdown(130));
-process.once("SIGTERM", () => void shutdown(143));
+startElectron();
