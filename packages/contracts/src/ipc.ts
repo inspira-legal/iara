@@ -1,4 +1,4 @@
-import type { Project } from "./models.js";
+import type { Project, Task } from "./models.js";
 
 export interface AppInfo {
   version: string;
@@ -17,9 +17,33 @@ export interface CreateProjectInput {
   repoSources: string[];
 }
 
+export interface CreateTaskInput {
+  slug: string;
+  name: string;
+  description?: string;
+  branch?: string;
+}
+
 export interface DesktopBridge {
+  // App
   getAppInfo(): Promise<AppInfo>;
-  getProjects(): Promise<Project[]>;
+
+  // Projects
+  listProjects(): Promise<Project[]>;
+  getProject(id: string): Promise<Project | null>;
   createProject(input: CreateProjectInput): Promise<Project>;
+  deleteProject(id: string): Promise<void>;
+
+  // Tasks
+  listTasks(projectId: string): Promise<Task[]>;
+  getTask(id: string): Promise<Task | null>;
+  createTask(projectId: string, input: CreateTaskInput): Promise<Task>;
+  completeTask(id: string): Promise<void>;
+  deleteTask(id: string): Promise<void>;
+
+  // Git
   getGitStatus(cwd: string): Promise<GitStatusResult>;
+
+  // Dialogs
+  pickFolder(): Promise<string | null>;
 }
