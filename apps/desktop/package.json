@@ -1,0 +1,32 @@
+{
+  "name": "@iara/desktop",
+  "version": "0.0.1",
+  "private": true,
+  "main": "dist-electron/main.js",
+  "scripts": {
+    "dev": "bun run --parallel dev:bundle dev:electron",
+    "dev:bundle": "tsdown --watch",
+    "dev:electron": "bun run scripts/dev-electron.mjs",
+    "build": "tsdown",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run --passWithNoTests",
+    "smoke-test": "node scripts/smoke-test.mjs"
+  },
+  "dependencies": {
+    "better-sqlite3": "^12.2.0",
+    "drizzle-orm": "^0.45.0",
+    "electron": "40.6.0"
+  },
+  "devDependencies": {
+    "@iara/contracts": "workspace:*",
+    "@iara/shared": "workspace:*",
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/node": "catalog:",
+    "drizzle-kit": "^0.31.0",
+    "tsdown": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:",
+    "wait-on": "^8.0.2"
+  },
+  "productName": "iara"
+}
