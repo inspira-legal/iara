@@ -10,7 +10,8 @@ const electronBin = resolve(desktopDir, "node_modules/.bin/electron");
 
 // Rebuild native modules for Electron before starting
 console.log("[dev-electron] Rebuilding native modules for Electron...");
-spawnSync("npx", ["@electron/rebuild", "-v", "40.6.0"], {
+const rootDir = resolve(desktopDir, "../..");
+spawnSync("npx", ["@electron/rebuild", "-v", "40.6.0", "-m", rootDir], {
   cwd: desktopDir,
   stdio: "inherit",
 });
