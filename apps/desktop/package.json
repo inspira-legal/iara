@@ -11,7 +11,7 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run --passWithNoTests",
     "smoke-test": "node scripts/smoke-test.mjs",
-    "postinstall": "npx @electron/rebuild -v 40.6.0"
+    "rebuild-electron": "npx @electron/rebuild -v 40.6.0"
   },
   "dependencies": {
     "better-sqlite3": "^12.2.0",

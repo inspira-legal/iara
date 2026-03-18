@@ -39,39 +39,54 @@ export async function createTask(projectId: string, input: CreateTaskInput): Pro
     updatedAt: now,
   };
 
-  db.insert(schema.tasks).values(task).run();
-
-  // Create worktrees for each repo
+  // Create worktrees BEFORE inserting into DB — rollback is just fs cleanup
   const projectDir = getProjectDir(project.slug);
   const taskDir = path.join(projectDir, input.slug);
-  fs.mkdirSync(taskDir, { recursive: true });
 
-  // Create TASK.md
-  fs.writeFileSync(
-    path.join(taskDir, "TASK.md"),
-    `# ${input.name}\n\n${input.description ?? ""}\n`,
-  );
+  try {
+    fs.mkdirSync(taskDir, { recursive: true });
 
-  // Symlink PROJECT.md
-  const projectMdSrc = path.join(projectDir, "PROJECT.md");
-  const projectMdDest = path.join(taskDir, "PROJECT.md");
-  if (fs.existsSync(projectMdSrc) && !fs.existsSync(projectMdDest)) {
-    fs.symlinkSync(projectMdSrc, projectMdDest);
-  }
+    // Create TASK.md
+    fs.writeFileSync(
+      path.join(taskDir, "TASK.md"),
+      `# ${input.name}\n\n${input.description ?? ""}\n`,
+    );
 
-  // Create worktrees from .repos/
-  const reposDir = path.join(projectDir, ".repos");
-  if (fs.existsSync(reposDir)) {
-    const repos = fs.readdirSync(reposDir).filter((name) => {
-      return fs.statSync(path.join(reposDir, name)).isDirectory();
-    });
-
-    for (const repo of repos) {
-      const repoDir = path.join(reposDir, repo);
-      const wtDir = path.join(taskDir, repo);
-      await gitWorktreeAdd(repoDir, wtDir, branch);
+    // Symlink PROJECT.md
+    const projectMdSrc = path.join(projectDir, "PROJECT.md");
+    const projectMdDest = path.join(taskDir, "PROJECT.md");
+    if (fs.existsSync(projectMdSrc) && !fs.existsSync(projectMdDest)) {
+      fs.symlinkSync(projectMdSrc, projectMdDest);
     }
+
+    // Create worktrees from .repos/
+    const reposDir = path.join(projectDir, ".repos");
+    if (fs.existsSync(reposDir)) {
+      const repos = fs.readdirSync(reposDir).filter((name) => {
+        return fs.statSync(path.join(reposDir, name)).isDirectory();
+      });
+
+      for (const repo of repos) {
+        const repoDir = path.join(reposDir, repo);
+        const wtDir = path.join(taskDir, repo);
+        await gitWorktreeAdd(repoDir, wtDir, branch);
+      }
+    }
+  } catch (err) {
+    // Rollback: clean up partial filesystem state
+    try {
+      fs.rmSync(taskDir, { recursive: true, force: true });
+    } catch {
+      // Best effort
+    }
+    throw new Error(
+      `Failed to create worktrees: ${err instanceof Error ? err.message : String(err)}`,
+      { cause: err },
+    );
   }
+
+  // Only insert into DB after worktrees are successfully created
+  db.insert(schema.tasks).values(task).run();
 
   return { ...task, status: "active", description: task.description ?? "" };
 }
@@ -118,20 +133,30 @@ async function cleanupWorktrees(projectSlug: string, taskSlug: string): Promise<
   const taskDir = path.join(projectDir, taskSlug);
   const reposDir = path.join(projectDir, ".repos");
 
-  if (!fs.existsSync(reposDir)) return;
+  // Remove git worktrees first
+  if (fs.existsSync(reposDir)) {
+    const repos = fs.readdirSync(reposDir).filter((name) => {
+      return fs.statSync(path.join(reposDir, name)).isDirectory();
+    });
 
-  const repos = fs.readdirSync(reposDir).filter((name) => {
-    return fs.statSync(path.join(reposDir, name)).isDirectory();
-  });
-
-  for (const repo of repos) {
-    const wtDir = path.join(taskDir, repo);
-    if (fs.existsSync(wtDir)) {
-      try {
-        await gitWorktreeRemove(path.join(reposDir, repo), wtDir);
-      } catch {
-        // Worktree may already be removed
+    for (const repo of repos) {
+      const wtDir = path.join(taskDir, repo);
+      if (fs.existsSync(wtDir)) {
+        try {
+          await gitWorktreeRemove(path.join(reposDir, repo), wtDir);
+        } catch {
+          // Worktree may already be removed
+        }
       }
+    }
+  }
+
+  // Remove the task directory (TASK.md, PROJECT.md symlink, any remaining files)
+  if (fs.existsSync(taskDir)) {
+    try {
+      fs.rmSync(taskDir, { recursive: true, force: true });
+    } catch {
+      // Best effort
     }
   }
 }
