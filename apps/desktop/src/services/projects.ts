@@ -3,9 +3,10 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { eq } from "drizzle-orm";
 import type { CreateProjectInput, Project, UpdateProjectInput } from "@iara/contracts";
-import { gitClone } from "@iara/shared/git";
+import { gitClone, gitWorktreeAdd, gitWorktreeRemove } from "@iara/shared/git";
 import { getDb, schema } from "../db.js";
 import { getProjectsDir } from "./config.js";
+import { listTasks } from "./tasks.js";
 
 export function listProjects(): Project[] {
   const db = getDb();
@@ -84,18 +85,47 @@ export async function updateProject(id: string, input: UpdateProjectInput): Prom
         : [],
     );
 
+    const activeTasks = listTasks(id).filter((t) => t.status === "active");
+    const newRepoNames = new Set(input.repoSources.map(repoNameFromSource));
+
+    // Clone new repos + create worktrees in active tasks
     for (const source of input.repoSources) {
       const repoName = repoNameFromSource(source);
       if (!existingRepoNames.has(repoName)) {
         const dest = path.join(reposDir, repoName);
         await gitClone(source, dest);
+
+        // Add worktree for each active task
+        for (const task of activeTasks) {
+          const taskDir = path.join(projectDir, task.slug);
+          const wtDir = path.join(taskDir, repoName);
+          if (fs.existsSync(taskDir) && !fs.existsSync(wtDir)) {
+            try {
+              await gitWorktreeAdd(dest, wtDir, task.branch);
+            } catch {
+              // Best effort — task may not have matching branch
+            }
+          }
+        }
       }
     }
 
-    // Remove repos that are no longer in the list
-    const newRepoNames = new Set(input.repoSources.map(repoNameFromSource));
+    // Remove repos no longer in list + clean worktrees from active tasks
     for (const existing of existingRepoNames) {
       if (!newRepoNames.has(existing)) {
+        // Remove worktrees from active tasks first
+        for (const task of activeTasks) {
+          const wtDir = path.join(projectDir, task.slug, existing);
+          if (fs.existsSync(wtDir)) {
+            try {
+              await gitWorktreeRemove(path.join(reposDir, existing), wtDir);
+            } catch {
+              // Worktree may not be registered
+              fs.rmSync(wtDir, { recursive: true, force: true });
+            }
+          }
+        }
+        // Then remove the repo itself
         fs.rmSync(path.join(reposDir, existing), { recursive: true, force: true });
       }
     }
