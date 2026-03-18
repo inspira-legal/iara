@@ -7,5 +7,5 @@ export default defineConfig({
   sourcemap: true,
   clean: true,
   external: ["better-sqlite3", "node-pty"],
-  noExternal: (id) => id.startsWith("@iara/") || id === "ws",
+  noExternal: (id) => id.startsWith("@iara/"),
 });

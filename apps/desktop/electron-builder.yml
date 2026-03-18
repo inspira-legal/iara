@@ -17,13 +17,12 @@ asarUnpack:
   - "node_modules/prebuild-install/**"
   - "node_modules/file-uri-to-path/**"
 
+# NOTE: This file is only a reference. Production builds use the staging
+# script (scripts/install-desktop.ts) which generates the config dynamically.
+
 extraResources:
   - from: ../web/dist
     to: web
-  - from: ../server/dist
-    to: server
-  - from: ../server/drizzle
-    to: server/drizzle
 
 mac:
   target:

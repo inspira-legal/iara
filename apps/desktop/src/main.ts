@@ -50,7 +50,7 @@ function generateToken(): string {
 function spawnServer(): void {
   const serverEntry = isDevelopment
     ? path.resolve(__dirname, "../../server/dist/main.mjs")
-    : path.join(process.resourcesPath, "server", "main.mjs");
+    : path.join(app.getAppPath(), "apps", "server", "dist", "main.mjs");
 
   const env: Record<string, string | undefined> = {
     ...process.env,
@@ -62,8 +62,9 @@ function spawnServer(): void {
 
   if (!isDevelopment) {
     env.IARA_WEB_DIR = path.join(process.resourcesPath, "web");
-    // Native modules (better-sqlite3, node-pty) are in app.asar.unpacked/node_modules
-    env.NODE_PATH = path.join(app.getAppPath().replace("app.asar", "app.asar.unpacked"), "node_modules");
+    // Native addons (better-sqlite3, node-pty) are in app.asar.unpacked/node_modules
+    const appRoot = app.getAppPath();
+    env.NODE_PATH = path.join(appRoot.replace("app.asar", "app.asar.unpacked"), "node_modules");
   }
 
   const child = spawn(process.execPath, [serverEntry], {
