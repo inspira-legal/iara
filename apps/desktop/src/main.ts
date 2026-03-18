@@ -56,11 +56,39 @@ function createWindow(): BrowserWindow {
 }
 
 function registerCustomProtocol(): void {
-  protocol.registerFileProtocol(APP_SCHEME, (request, callback) => {
+  const fs = require("node:fs") as typeof import("node:fs");
+  const staticRoot = path.join(__dirname, "..", "web");
+  const fallbackIndex = path.join(staticRoot, "index.html");
+
+  protocol.handle(APP_SCHEME, (request) => {
     const url = new URL(request.url);
-    const filePath = path.join(__dirname, "..", "web", url.pathname);
-    callback(filePath);
+    let filePath = path.join(staticRoot, url.pathname);
+
+    // SPA fallback: if file doesn't exist, serve index.html
+    if (!fs.existsSync(filePath)) {
+      filePath = fallbackIndex;
+    }
+
+    return new Response(fs.readFileSync(filePath), {
+      headers: { "Content-Type": getMimeType(filePath) },
+    });
   });
+}
+
+function getMimeType(filePath: string): string {
+  const ext = path.extname(filePath).toLowerCase();
+  const types: Record<string, string> = {
+    ".html": "text/html",
+    ".js": "application/javascript",
+    ".css": "text/css",
+    ".json": "application/json",
+    ".png": "image/png",
+    ".svg": "image/svg+xml",
+    ".ico": "image/x-icon",
+    ".woff": "font/woff",
+    ".woff2": "font/woff2",
+  };
+  return types[ext] ?? "application/octet-stream";
 }
 
 function registerSocketHandlers(): void {
