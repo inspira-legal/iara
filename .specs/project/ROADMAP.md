@@ -1,17 +1,17 @@
 # Roadmap
 
-**Current Milestone:** M1 — Scaffold & Worktrees
+**Current Milestone:** M2 — Project, Task & Claude Launcher
 **Status:** Planning
 
 ---
 
-## M1 — Scaffold & Worktrees
+## M1 — Scaffold & Worktrees ✓
 
 **Goal:** Monorepo funcional, Electron rodando com shell basico, git worktree operations funcionais. Nenhuma feature user-facing alem do shell.
 
 ### Features
 
-**Monorepo Scaffold** - PLANNED
+**Monorepo Scaffold** - DONE
 
 - Estrutura Turborepo (desktop, web, contracts, shared)
 - Electron main + preload + renderer com Vite
@@ -20,14 +20,14 @@
 - Cross-platform: macOS, Linux, Windows
 - DX: dev-runner, hot-restart Electron, smoke test
 
-**App Shell** - PLANNED
+**App Shell** - DONE
 
 - Layout base: sidebar + main panel (placeholder content)
 - Electron window management (size, position)
 - IPC bridge tipado (contracts)
 - syncShellEnvironment (importar PATH do shell do user)
 
-**Data Layer** - PLANNED
+**Data Layer** - DONE
 
 - SQLite + Drizzle ORM no userData do Electron
 - Project model (nome, slug, repos originais, metadata)
@@ -35,7 +35,7 @@
 - Environment model (global + override por repo)
 - Migrations tipadas via Drizzle
 
-**Git Operations** - PLANNED
+**Git Operations** - DONE
 
 - Branch create/switch/delete via child_process git
 - Worktree create/remove
