@@ -10,7 +10,7 @@
 
 iara-desktop is a workspace manager for builders who use Claude Code. It's a full rewrite of the iara Go CLI in TypeScript/Electron — visual project/task management, Claude Code launcher, browser panel for agents, and dev server integration.
 
-This repository is EARLY WIP (M1 scaffold complete, M2+ pending).
+MVP scaffold complete (M1-M4). All milestones implemented.
 
 ## Core Priorities
 
@@ -57,7 +57,7 @@ bun run smoke-test       # Electron smoke test
 
 - Architecture reference: `t3code/` in the project root (same monorepo structure)
 - Specs and roadmap: `.specs/` directory
-- Current milestone: M2 — Project, Task & Claude Launcher
+- Current state: MVP scaffold complete (M1-M4)
 
 ## Scope Boundaries
 

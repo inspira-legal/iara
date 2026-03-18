@@ -1,7 +1,7 @@
 # Roadmap
 
-**Current Milestone:** M3 — Browser Panel & Dev Servers
-**Status:** Planning
+**Current Milestone:** Complete (M1-M4)
+**Status:** MVP scaffold ready
 
 ---
 
@@ -129,14 +129,14 @@
 
 ### Features
 
-**Browser Panel** - PLANNED
+**Browser Panel** - DONE
 
 - Webview embutido (Electron BrowserView/webContentsView)
 - Agent-browser API (navigate, click, fill, screenshot, get_accessibility_tree)
 - Controlavel por Claude via plugin commands + socket
 - Toggle split vertical (main panel | browser)
 
-**Dev Server Supervisor** - PLANNED
+**Dev Server Supervisor** - DONE
 
 - Auto-discover dev commands (package.json, Makefile, etc)
 - Launch/stop/restart servers via child_process
@@ -146,7 +146,7 @@
 - Status na sidebar (porta, health, PID)
 - Env vars do projeto injetadas nos dev servers
 
-**Dev + Browser Integration** - PLANNED
+**Dev + Browser Integration** - DONE
 
 - Frontend server pronto → auto-abre browser panel
 - Heuristica: vite/next/remix/astro = frontend → browseable
@@ -162,20 +162,20 @@
 
 ### Features
 
-**Notifications** - PLANNED
+**Notifications** - DONE
 
 - Notificacoes por task (dev server crash, session events)
 - Badge na sidebar
 - System notifications nativas (Electron Notification API)
 
-**UX Polish** - PLANNED
+**UX Polish** - DONE
 
 - Keyboard shortcuts
 - Error handling visual
 - Loading states
 - Dark/light theme
 
-**Packaging** - PLANNED
+**Packaging** - DONE
 
 - DMG para macOS
 - AppImage para Linux
