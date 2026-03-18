@@ -63,7 +63,9 @@ function spawnServer(): void {
   if (!isDevelopment) {
     env.IARA_WEB_DIR = path.join(process.resourcesPath, "web");
     const appRoot = app.getAppPath();
-    env.NODE_PATH = path.join(appRoot.replace("app.asar", "app.asar.unpacked"), "node_modules");
+    const unpackedModules = path.join(appRoot.replace("app.asar", "app.asar.unpacked"), "node_modules");
+    const asarModules = path.join(appRoot, "node_modules");
+    env.NODE_PATH = [unpackedModules, asarModules].join(path.delimiter);
   }
 
   const child = spawn(process.execPath, [serverEntry], {
