@@ -1,0 +1,45 @@
+{
+  "name": "@iara/monorepo",
+  "private": true,
+  "workspaces": {
+    "packages": [
+      "apps/*",
+      "packages/*",
+      "scripts"
+    ],
+    "catalog": {
+      "@types/node": "^24.10.13",
+      "tsdown": "^0.20.3",
+      "typescript": "^5.7.3",
+      "vitest": "^4.0.0"
+    }
+  },
+  "type": "module",
+  "scripts": {
+    "dev:desktop": "bun scripts/dev-runner.ts",
+    "build": "turbo run build",
+    "build:desktop": "turbo run build --filter=@iara/desktop --filter=@iara/web",
+    "typecheck": "turbo run typecheck",
+    "lint": "oxlint --report-unused-disable-directives",
+    "test": "turbo run test",
+    "fmt": "oxfmt",
+    "fmt:check": "oxfmt --check",
+    "smoke-test": "turbo run smoke-test --filter=@iara/desktop",
+    "clean": "rm -rf node_modules apps/*/node_modules packages/*/node_modules apps/*/dist apps/*/dist-electron packages/*/dist .turbo apps/*/.turbo packages/*/.turbo"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "oxfmt": "^0.40.0",
+    "oxlint": "^1.55.0",
+    "turbo": "^2.3.3",
+    "vitest": "catalog:"
+  },
+  "overrides": {
+    "vite": "^8.0.0"
+  },
+  "engines": {
+    "bun": "^1.3.9",
+    "node": "^24.13.1"
+  },
+  "packageManager": "bun@1.3.9"
+}

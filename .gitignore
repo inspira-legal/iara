@@ -1,0 +1,16 @@
+node_modules
+.bun
+.turbo
+.DS_Store
+*.log
+*.tsbuildinfo
+apps/*/dist
+dist-electron
+packages/*/dist
+.env
+.env.local
+*.db
+*.db-journal
+.idea/
+.vitest-*
+**/routeTree.gen.ts
