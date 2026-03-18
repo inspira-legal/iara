@@ -3,6 +3,8 @@ export type {
   CreateProjectInput,
   CreateTaskInput,
   DesktopBridge,
+  DevCommand,
+  DevServerStatus,
   GitStatusResult,
   LaunchClaudeInput,
   LaunchResult,

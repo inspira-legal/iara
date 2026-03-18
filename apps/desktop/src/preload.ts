@@ -28,6 +28,23 @@ contextBridge.exposeInMainWorld("desktopBridge", {
   readPrompt: (filePath) => ipcRenderer.invoke("desktop:read-prompt", filePath),
   writePrompt: (filePath, content) => ipcRenderer.invoke("desktop:write-prompt", filePath, content),
 
+  // Dev Servers
+  devStart: (cmd) => ipcRenderer.invoke("desktop:dev-start", cmd),
+  devStop: (name) => ipcRenderer.invoke("desktop:dev-stop", name),
+  devStatus: () => ipcRenderer.invoke("desktop:dev-status"),
+  devLogs: (name, limit) => ipcRenderer.invoke("desktop:dev-logs", name, limit),
+  devDiscover: (dir) => ipcRenderer.invoke("desktop:dev-discover", dir),
+
+  // Browser Panel
+  browserNavigate: (url) => ipcRenderer.invoke("desktop:browser-navigate", url),
+  browserShow: () => ipcRenderer.invoke("desktop:browser-show"),
+  browserHide: () => ipcRenderer.invoke("desktop:browser-hide"),
+  browserToggle: () => ipcRenderer.invoke("desktop:browser-toggle"),
+  browserScreenshot: () => ipcRenderer.invoke("desktop:browser-screenshot"),
+  browserGetTree: () => ipcRenderer.invoke("desktop:browser-get-tree"),
+  browserClick: (selector) => ipcRenderer.invoke("desktop:browser-click", selector),
+  browserFill: (selector, value) => ipcRenderer.invoke("desktop:browser-fill", selector, value),
+
   // Git
   getGitStatus: (cwd) => ipcRenderer.invoke("desktop:get-git-status", cwd),
 

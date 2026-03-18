@@ -28,6 +28,23 @@ export const Channels = {
   READ_PROMPT: "desktop:read-prompt",
   WRITE_PROMPT: "desktop:write-prompt",
 
+  // Dev Servers
+  DEV_START: "desktop:dev-start",
+  DEV_STOP: "desktop:dev-stop",
+  DEV_STATUS: "desktop:dev-status",
+  DEV_LOGS: "desktop:dev-logs",
+  DEV_DISCOVER: "desktop:dev-discover",
+
+  // Browser Panel
+  BROWSER_NAVIGATE: "desktop:browser-navigate",
+  BROWSER_SHOW: "desktop:browser-show",
+  BROWSER_HIDE: "desktop:browser-hide",
+  BROWSER_TOGGLE: "desktop:browser-toggle",
+  BROWSER_SCREENSHOT: "desktop:browser-screenshot",
+  BROWSER_GET_TREE: "desktop:browser-get-tree",
+  BROWSER_CLICK: "desktop:browser-click",
+  BROWSER_FILL: "desktop:browser-fill",
+
   // Dialogs
   PICK_FOLDER: "desktop:pick-folder",
 } as const;

@@ -42,6 +42,23 @@ export interface SessionInfo {
   messageCount: number;
 }
 
+export interface DevCommand {
+  name: string;
+  command: string;
+  args: string[];
+  cwd: string;
+  type: "frontend" | "backend" | "unknown";
+  port?: number;
+}
+
+export interface DevServerStatus {
+  name: string;
+  pid: number | null;
+  port: number | null;
+  health: "starting" | "healthy" | "unhealthy" | "stopped";
+  type: "frontend" | "backend" | "unknown";
+}
+
 export interface DesktopBridge {
   // App
   getAppInfo(): Promise<AppInfo>;
@@ -68,6 +85,23 @@ export interface DesktopBridge {
   // Prompts
   readPrompt(filePath: string): Promise<string>;
   writePrompt(filePath: string, content: string): Promise<void>;
+
+  // Dev Servers
+  devStart(cmd: DevCommand): Promise<void>;
+  devStop(name: string): Promise<void>;
+  devStatus(): Promise<DevServerStatus[]>;
+  devLogs(name: string, limit?: number): Promise<string[]>;
+  devDiscover(dir: string): Promise<DevCommand[]>;
+
+  // Browser Panel
+  browserNavigate(url: string): Promise<void>;
+  browserShow(): Promise<void>;
+  browserHide(): Promise<void>;
+  browserToggle(): Promise<void>;
+  browserScreenshot(): Promise<string>;
+  browserGetTree(): Promise<string>;
+  browserClick(selector: string): Promise<void>;
+  browserFill(selector: string, value: string): Promise<void>;
 
   // Git
   getGitStatus(cwd: string): Promise<GitStatusResult>;

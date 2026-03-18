@@ -1,4 +1,6 @@
 import { registerAppHandlers } from "./app.js";
+import { registerBrowserHandlers } from "./browser.js";
+import { registerDevServerHandlers } from "./devservers.js";
 import { registerGitHandlers } from "./git.js";
 import { registerLauncherHandlers } from "./launcher.js";
 import { registerProjectHandlers } from "./projects.js";
@@ -13,5 +15,7 @@ export function registerIpcHandlers(): void {
   registerLauncherHandlers();
   registerSessionHandlers();
   registerPromptHandlers();
+  registerDevServerHandlers();
+  registerBrowserHandlers();
   registerGitHandlers();
 }
