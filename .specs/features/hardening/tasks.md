@@ -7,21 +7,21 @@
 
 ## Problemas Verificados (real vs falso positivo)
 
-| Issue da auditoria | Status | Veredicto |
-|---|---|---|
-| `resolve.tsconfigPaths` inválido no Vite 8 | ❌ FALSO | Vite 8 suporta nativamente (experimental) |
-| `registerFileProtocol` deprecated | ✅ REAL | Deprecated no Electron 40, mas t3code também usa. Funciona mas warn. |
-| Delete project sem confirmação | ✅ REAL | Um click destrói tudo |
-| Mac launcher via osascript keystroke | ✅ REAL | Frágil mas funcional. Melhorar depois. |
-| Browser panel sobrepõe UI | ✅ REAL | Sem split layout real |
-| Session list sem UI | ✅ REAL | Backend OK, zero frontend |
-| Dev server discover/start sem UI | ✅ REAL | Backend OK, zero frontend |
-| Notifications sem UI | ✅ REAL | Backend OK, zero frontend |
-| Env management sem UI | ✅ REAL | Backend OK, zero frontend |
-| Git worktree -b falha se branch existe | ✅ REAL | Sem fallback |
-| Task criada no DB antes de worktree | ✅ REAL | Sem rollback |
-| cleanupWorktrees não remove taskDir | ✅ REAL | Diretório órfão |
-| git clone cwd: "." | ✅ REAL | Frágil mas funciona |
+| Issue da auditoria                         | Status   | Veredicto                                                            |
+| ------------------------------------------ | -------- | -------------------------------------------------------------------- |
+| `resolve.tsconfigPaths` inválido no Vite 8 | ❌ FALSO | Vite 8 suporta nativamente (experimental)                            |
+| `registerFileProtocol` deprecated          | ✅ REAL  | Deprecated no Electron 40, mas t3code também usa. Funciona mas warn. |
+| Delete project sem confirmação             | ✅ REAL  | Um click destrói tudo                                                |
+| Mac launcher via osascript keystroke       | ✅ REAL  | Frágil mas funcional. Melhorar depois.                               |
+| Browser panel sobrepõe UI                  | ✅ REAL  | Sem split layout real                                                |
+| Session list sem UI                        | ✅ REAL  | Backend OK, zero frontend                                            |
+| Dev server discover/start sem UI           | ✅ REAL  | Backend OK, zero frontend                                            |
+| Notifications sem UI                       | ✅ REAL  | Backend OK, zero frontend                                            |
+| Env management sem UI                      | ✅ REAL  | Backend OK, zero frontend                                            |
+| Git worktree -b falha se branch existe     | ✅ REAL  | Sem fallback                                                         |
+| Task criada no DB antes de worktree        | ✅ REAL  | Sem rollback                                                         |
+| cleanupWorktrees não remove taskDir        | ✅ REAL  | Diretório órfão                                                      |
+| git clone cwd: "."                         | ✅ REAL  | Frágil mas funciona                                                  |
 
 ---
 
