@@ -26,10 +26,11 @@ function HomePage() {
     );
   }
 
-  const handleLaunchClaude = async () => {
+  const handleLaunchClaude = async (resumeSessionId?: string | undefined) => {
     try {
       const api = ensureNativeApi();
-      const result = await api.launchClaude({ taskId: task.id });
+      const input = resumeSessionId ? { taskId: task.id, resumeSessionId } : { taskId: task.id };
+      const result = await api.launchClaude(input);
       toast(`Claude launched (session: ${result.sessionId.slice(0, 8)}...)`, "success");
     } catch (err) {
       toast(
@@ -53,7 +54,7 @@ function HomePage() {
     <TaskWorkspace
       project={project}
       task={task}
-      onLaunchClaude={() => void handleLaunchClaude()}
+      onLaunchClaude={(sid) => void handleLaunchClaude(sid)}
       onCompleteTask={() => void handleComplete()}
       onDeleteTask={() => void handleDelete()}
     />

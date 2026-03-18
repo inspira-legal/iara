@@ -1,10 +1,11 @@
 import { GitBranch, Play, CheckCircle, Trash2 } from "lucide-react";
 import type { Task, Project } from "@iara/contracts";
+import { SessionList } from "./SessionList";
 
 interface TaskWorkspaceProps {
   project: Project;
   task: Task;
-  onLaunchClaude: () => void;
+  onLaunchClaude: (resumeSessionId?: string | undefined) => void;
   onCompleteTask: () => void;
   onDeleteTask: () => void;
 }
@@ -17,7 +18,7 @@ export function TaskWorkspace({
   onDeleteTask,
 }: TaskWorkspaceProps) {
   return (
-    <div className="flex h-full flex-col p-6">
+    <div className="flex h-full flex-col overflow-y-auto p-6">
       <div className="mb-6">
         <div className="mb-1 text-xs text-zinc-500">{project.name}</div>
         <h2 className="text-xl font-semibold text-zinc-100">{task.name}</h2>
@@ -40,12 +41,23 @@ export function TaskWorkspace({
       <div className="flex gap-2">
         {task.status === "active" && (
           <>
-            <ActionButton icon={Play} label="Launch Claude" onClick={onLaunchClaude} primary />
+            <ActionButton
+              icon={Play}
+              label="Launch Claude"
+              onClick={() => onLaunchClaude()}
+              primary
+            />
             <ActionButton icon={CheckCircle} label="Complete" onClick={onCompleteTask} />
           </>
         )}
         <ActionButton icon={Trash2} label="Delete" onClick={onDeleteTask} destructive />
       </div>
+
+      {task.status === "active" && (
+        <div className="mt-8">
+          <SessionList taskId={task.id} onLaunch={onLaunchClaude} />
+        </div>
+      )}
 
       <div className="mt-8">
         <h3 className="mb-2 text-sm font-medium text-zinc-300">Repos</h3>
