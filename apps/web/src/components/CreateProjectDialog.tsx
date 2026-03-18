@@ -86,7 +86,7 @@ export function CreateProjectDialog({ open, onClose }: CreateProjectDialogProps)
             <div className="space-y-1">
               {repoUrls.map((url) => (
                 <div key={url} className="flex items-center gap-1">
-                  <code className="flex-1 truncate rounded-md border border-zinc-700 bg-zinc-800 px-2 py-1.5 text-xs text-zinc-400">
+                  <code className="flex-1 truncate rounded-md border border-zinc-700 bg-zinc-800 px-2 py-1.5 text-xs text-zinc-100">
                     {url}
                   </code>
                   <button
