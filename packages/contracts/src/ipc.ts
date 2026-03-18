@@ -59,6 +59,15 @@ export interface DevServerStatus {
   type: "frontend" | "backend" | "unknown";
 }
 
+export interface AppNotification {
+  id: string;
+  title: string;
+  body: string;
+  type: "info" | "success" | "error";
+  timestamp: string;
+  read: boolean;
+}
+
 export interface DesktopBridge {
   // App
   getAppInfo(): Promise<AppInfo>;
@@ -102,6 +111,13 @@ export interface DesktopBridge {
   browserGetTree(): Promise<string>;
   browserClick(selector: string): Promise<void>;
   browserFill(selector: string, value: string): Promise<void>;
+
+  // Notifications
+  sendNotification(title: string, body: string, type?: string): Promise<AppNotification>;
+  getNotifications(): Promise<AppNotification[]>;
+  getUnreadCount(): Promise<number>;
+  markNotificationRead(id: string): Promise<void>;
+  markAllRead(): Promise<void>;
 
   // Git
   getGitStatus(cwd: string): Promise<GitStatusResult>;

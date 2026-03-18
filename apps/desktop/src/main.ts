@@ -1,11 +1,13 @@
 import * as path from "node:path";
-import { app, BrowserWindow, Notification, protocol } from "electron";
+import { app, BrowserWindow, protocol } from "electron";
 import { syncShellEnvironment } from "./services/shell-env.js";
 import { registerIpcHandlers } from "./ipc/register.js";
 import { initBrowserHandlers } from "./ipc/browser.js";
 import { initDevServerHandlers } from "./ipc/devservers.js";
+import { initNotificationHandlers } from "./ipc/notifications.js";
 import { BrowserPanel } from "./services/browser-panel.js";
 import { DevServerSupervisor } from "./services/devservers.js";
+import { NotificationService } from "./services/notifications.js";
 import { SocketServer } from "./services/socket.js";
 
 syncShellEnvironment();
@@ -17,10 +19,12 @@ const APP_SCHEME = "iara";
 const browserPanel = new BrowserPanel();
 const devSupervisor = new DevServerSupervisor();
 const socketServer = new SocketServer();
+const notificationService = new NotificationService();
 
 // Initialize handler dependencies
 initBrowserHandlers(() => browserPanel);
 initDevServerHandlers(() => devSupervisor);
+initNotificationHandlers(() => notificationService);
 
 function createWindow(): BrowserWindow {
   const win = new BrowserWindow({
@@ -63,7 +67,7 @@ function registerSocketHandlers(): void {
   socketServer.on("notify", (params) => {
     const message = String(params.message ?? "");
     if (message) {
-      new Notification({ title: "iara", body: message }).show();
+      notificationService.send("iara", message);
     }
     return { ok: true };
   });

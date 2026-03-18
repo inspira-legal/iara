@@ -45,6 +45,14 @@ contextBridge.exposeInMainWorld("desktopBridge", {
   browserClick: (selector) => ipcRenderer.invoke("desktop:browser-click", selector),
   browserFill: (selector, value) => ipcRenderer.invoke("desktop:browser-fill", selector, value),
 
+  // Notifications
+  sendNotification: (title, body, type) =>
+    ipcRenderer.invoke("desktop:send-notification", title, body, type),
+  getNotifications: () => ipcRenderer.invoke("desktop:get-notifications"),
+  getUnreadCount: () => ipcRenderer.invoke("desktop:get-unread-count"),
+  markNotificationRead: (id) => ipcRenderer.invoke("desktop:mark-notification-read", id),
+  markAllRead: () => ipcRenderer.invoke("desktop:mark-all-read"),
+
   // Git
   getGitStatus: (cwd) => ipcRenderer.invoke("desktop:get-git-status", cwd),
 

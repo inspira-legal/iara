@@ -1,5 +1,6 @@
 export type {
   AppInfo,
+  AppNotification,
   CreateProjectInput,
   CreateTaskInput,
   DesktopBridge,

@@ -45,6 +45,13 @@ export const Channels = {
   BROWSER_CLICK: "desktop:browser-click",
   BROWSER_FILL: "desktop:browser-fill",
 
+  // Notifications
+  SEND_NOTIFICATION: "desktop:send-notification",
+  GET_NOTIFICATIONS: "desktop:get-notifications",
+  GET_UNREAD_COUNT: "desktop:get-unread-count",
+  MARK_NOTIFICATION_READ: "desktop:mark-notification-read",
+  MARK_ALL_READ: "desktop:mark-all-read",
+
   // Dialogs
   PICK_FOLDER: "desktop:pick-folder",
 } as const;
