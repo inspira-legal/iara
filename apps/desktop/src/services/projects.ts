@@ -47,10 +47,21 @@ export function createProject(input: CreateProjectInput): Project {
 
 export function deleteProject(id: string): void {
   const db = getDb();
+  const project = getProject(id);
 
   // Delete all tasks first (FK constraint)
   db.delete(schema.tasks).where(eq(schema.tasks.projectId, id)).run();
   db.delete(schema.projects).where(eq(schema.projects.id, id)).run();
+
+  // Clean up project directory
+  if (project) {
+    const projectDir = getProjectDir(project.slug);
+    try {
+      fs.rmSync(projectDir, { recursive: true, force: true });
+    } catch {
+      // Best effort cleanup
+    }
+  }
 }
 
 export function getProjectDir(slug: string): string {

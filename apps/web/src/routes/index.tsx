@@ -2,6 +2,8 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useProjectStore } from "~/stores/projects";
 import { useTaskStore } from "~/stores/tasks";
 import { TaskWorkspace } from "~/components/TaskWorkspace";
+import { ensureNativeApi } from "~/nativeApi";
+import { useToast } from "~/components/Toast";
 
 export const Route = createFileRoute("/")({
   component: HomePage,
@@ -11,6 +13,7 @@ function HomePage() {
   const { projects, selectedProjectId } = useProjectStore();
   const { tasks, selectedTaskId } = useTaskStore();
   const { completeTask, deleteTask } = useTaskStore();
+  const { toast } = useToast();
 
   const project = projects.find((p) => p.id === selectedProjectId);
   const task = tasks.find((t) => t.id === selectedTaskId);
@@ -23,15 +26,36 @@ function HomePage() {
     );
   }
 
+  const handleLaunchClaude = async () => {
+    try {
+      const api = ensureNativeApi();
+      const result = await api.launchClaude({ taskId: task.id });
+      toast(`Claude launched (session: ${result.sessionId.slice(0, 8)}...)`, "success");
+    } catch (err) {
+      toast(
+        `Failed to launch Claude: ${err instanceof Error ? err.message : String(err)}`,
+        "error",
+      );
+    }
+  };
+
+  const handleComplete = async () => {
+    await completeTask(task.id);
+    toast("Task completed", "success");
+  };
+
+  const handleDelete = async () => {
+    await deleteTask(task.id);
+    toast("Task deleted", "info");
+  };
+
   return (
     <TaskWorkspace
       project={project}
       task={task}
-      onLaunchClaude={() => {
-        // T8: Claude launcher — will be implemented
-      }}
-      onCompleteTask={() => void completeTask(task.id)}
-      onDeleteTask={() => void deleteTask(task.id)}
+      onLaunchClaude={() => void handleLaunchClaude()}
+      onCompleteTask={() => void handleComplete()}
+      onDeleteTask={() => void handleDelete()}
     />
   );
 }

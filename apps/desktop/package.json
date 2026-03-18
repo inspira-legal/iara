@@ -18,11 +18,13 @@
     "electron": "40.6.0"
   },
   "devDependencies": {
+    "@electron/rebuild": "^3.7.1",
     "@iara/contracts": "workspace:*",
     "@iara/shared": "workspace:*",
     "@types/better-sqlite3": "^7.6.13",
     "@types/node": "catalog:",
     "drizzle-kit": "^0.31.0",
+    "electron-builder": "^25.1.8",
     "tsdown": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:",

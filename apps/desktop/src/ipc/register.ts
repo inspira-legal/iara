@@ -1,6 +1,7 @@
 import { registerAppHandlers } from "./app.js";
 import { registerBrowserHandlers } from "./browser.js";
 import { registerDevServerHandlers } from "./devservers.js";
+import { registerEnvHandlers } from "./env.js";
 import { registerGitHandlers } from "./git.js";
 import { registerLauncherHandlers } from "./launcher.js";
 import { registerNotificationHandlers } from "./notifications.js";
@@ -16,6 +17,7 @@ export function registerIpcHandlers(): void {
   registerLauncherHandlers();
   registerSessionHandlers();
   registerPromptHandlers();
+  registerEnvHandlers();
   registerDevServerHandlers();
   registerBrowserHandlers();
   registerNotificationHandlers();

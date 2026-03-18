@@ -9,6 +9,8 @@ import { BrowserPanel } from "./services/browser-panel.js";
 import { DevServerSupervisor } from "./services/devservers.js";
 import { NotificationService } from "./services/notifications.js";
 import { SocketServer } from "./services/socket.js";
+import { mergeHooks, removeHooks } from "./services/hooks.js";
+import { generatePluginDir, cleanupPluginDir } from "./services/plugins.js";
 
 syncShellEnvironment();
 
@@ -20,6 +22,7 @@ const browserPanel = new BrowserPanel();
 const devSupervisor = new DevServerSupervisor();
 const socketServer = new SocketServer();
 const notificationService = new NotificationService();
+let pluginDir: string | null = null;
 
 // Initialize handler dependencies
 initBrowserHandlers(() => browserPanel);
@@ -40,10 +43,7 @@ function createWindow(): BrowserWindow {
     title: isDevelopment ? "iara (Dev)" : "iara",
   });
 
-  // Attach browser panel to window
   browserPanel.attach(win);
-
-  // Update browser panel bounds on resize
   win.on("resize", () => browserPanel.updateBounds());
 
   if (isDevelopment && process.env.VITE_DEV_SERVER_URL) {
@@ -90,12 +90,8 @@ function registerSocketHandlers(): void {
   });
 
   socketServer.on("dev.start", (params) => {
-    const name = String(params.name ?? "");
-    const status = devSupervisor.status();
-    const existing = status.find((s) => s.name === name);
-    if (existing) {
-      return { error: `Server ${name} already running` };
-    }
+    const cmd = params as unknown as import("./services/devservers.js").DevCommand;
+    devSupervisor.start(cmd);
     return { ok: true };
   });
 
@@ -138,6 +134,21 @@ app.whenReady().then(async () => {
     console.error("Failed to start socket server:", err);
   }
 
+  // Generate plugin dir for Claude slash commands
+  const bridgePath = path.join(__dirname, "cli-bridge", "bridge.js");
+  pluginDir = generatePluginDir({
+    bridgePath,
+    socketPath: socketServer.getSocketPath(),
+  });
+  process.env.IARA_PLUGIN_DIR = pluginDir;
+
+  // Register hooks in Claude settings
+  try {
+    mergeHooks(bridgePath);
+  } catch (err) {
+    console.error("Failed to merge hooks:", err);
+  }
+
   createWindow();
 
   app.on("activate", () => {
@@ -157,4 +168,14 @@ app.on("before-quit", () => {
   devSupervisor.stopAll();
   void socketServer.stop();
   browserPanel.detach();
+
+  if (pluginDir) {
+    cleanupPluginDir(pluginDir);
+  }
+
+  try {
+    removeHooks();
+  } catch {
+    // Best effort
+  }
 });

@@ -46,6 +46,9 @@ export function registerLauncherHandlers(): void {
         IARA_TASK_ID: task.id,
         IARA_PROJECT_ID: project.id,
         IARA_PROJECT_DIR: projectDir,
+        ...(process.env.IARA_DESKTOP_SOCKET
+          ? { IARA_DESKTOP_SOCKET: process.env.IARA_DESKTOP_SOCKET }
+          : {}),
       },
     });
   });

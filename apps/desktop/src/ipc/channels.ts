@@ -45,6 +45,11 @@ export const Channels = {
   BROWSER_CLICK: "desktop:browser-click",
   BROWSER_FILL: "desktop:browser-fill",
 
+  // Env
+  ENV_READ: "desktop:env-read",
+  ENV_WRITE: "desktop:env-write",
+  ENV_MERGE: "desktop:env-merge",
+
   // Notifications
   SEND_NOTIFICATION: "desktop:send-notification",
   GET_NOTIFICATIONS: "desktop:get-notifications",
