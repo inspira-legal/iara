@@ -8,6 +8,13 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const desktopDir = resolve(__dirname, "..");
 const electronBin = resolve(desktopDir, "node_modules/.bin/electron");
 
+// Rebuild native modules for Electron before starting
+console.log("[dev-electron] Rebuilding native modules for Electron...");
+spawnSync("npx", ["@electron/rebuild", "-v", "40.6.0"], {
+  cwd: desktopDir,
+  stdio: "inherit",
+});
+
 const port = Number(process.env.ELECTRON_RENDERER_PORT ?? 5173);
 const devServerUrl = `http://localhost:${port}`;
 const requiredFiles = ["dist-electron/main.js", "dist-electron/preload.js"];
