@@ -24,6 +24,16 @@ export interface CreateTaskInput {
   branch?: string;
 }
 
+export interface LaunchClaudeInput {
+  taskId: string;
+  resumeSessionId?: string;
+}
+
+export interface LaunchResult {
+  pid: number | null;
+  sessionId: string;
+}
+
 export interface DesktopBridge {
   // App
   getAppInfo(): Promise<AppInfo>;
@@ -40,6 +50,9 @@ export interface DesktopBridge {
   createTask(projectId: string, input: CreateTaskInput): Promise<Task>;
   completeTask(id: string): Promise<void>;
   deleteTask(id: string): Promise<void>;
+
+  // Launcher
+  launchClaude(input: LaunchClaudeInput): Promise<LaunchResult>;
 
   // Git
   getGitStatus(cwd: string): Promise<GitStatusResult>;

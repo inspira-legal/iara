@@ -18,6 +18,9 @@ contextBridge.exposeInMainWorld("desktopBridge", {
   completeTask: (id) => ipcRenderer.invoke("desktop:complete-task", id),
   deleteTask: (id) => ipcRenderer.invoke("desktop:delete-task", id),
 
+  // Launcher
+  launchClaude: (input) => ipcRenderer.invoke("desktop:launch-claude", input),
+
   // Git
   getGitStatus: (cwd) => ipcRenderer.invoke("desktop:get-git-status", cwd),
 
