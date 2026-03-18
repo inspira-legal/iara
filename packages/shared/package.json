@@ -1,0 +1,32 @@
+{
+  "name": "@iara/shared",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./git": {
+      "types": "./src/git.ts",
+      "import": "./src/git.ts"
+    },
+    "./logging": {
+      "types": "./src/logging.ts",
+      "import": "./src/logging.ts"
+    },
+    "./fs": {
+      "types": "./src/fs.ts",
+      "import": "./src/fs.ts"
+    }
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@iara/contracts": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}
