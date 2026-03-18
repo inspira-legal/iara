@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { Plus } from "lucide-react";
 import { useProjectStore } from "~/stores/projects";
+import { useTaskStore } from "~/stores/tasks";
+import { useDevServerStore } from "~/stores/devservers";
 import { ProjectList } from "./ProjectList";
 import { TaskList } from "./TaskList";
 import { CreateProjectDialog } from "./CreateProjectDialog";
@@ -11,12 +13,27 @@ import { BrowserToggle } from "./BrowserToggle";
 export function Sidebar() {
   const { projects, selectedProjectId, loading, loadProjects, selectProject, deleteProject } =
     useProjectStore();
+  const { selectedTaskId } = useTaskStore();
+  const { discoverCommands } = useDevServerStore();
   const [showCreateProject, setShowCreateProject] = useState(false);
   const [showCreateTask, setShowCreateTask] = useState(false);
 
   useEffect(() => {
     void loadProjects();
   }, [loadProjects]);
+
+  // Discover dev commands when task changes
+  useEffect(() => {
+    if (selectedProjectId && selectedTaskId) {
+      // Discover in the project repos dir
+      const project = projects.find((p) => p.id === selectedProjectId);
+      if (project) {
+        for (const repo of project.repoSources) {
+          void discoverCommands(repo);
+        }
+      }
+    }
+  }, [selectedProjectId, selectedTaskId, projects, discoverCommands]);
 
   return (
     <>
