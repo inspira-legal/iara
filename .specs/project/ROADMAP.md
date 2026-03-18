@@ -1,6 +1,6 @@
 # Roadmap
 
-**Current Milestone:** M2 — Project, Task & Claude Launcher
+**Current Milestone:** M3 — Browser Panel & Dev Servers
 **Status:** Planning
 
 ---
@@ -129,14 +129,14 @@
 
 ### Features
 
-**Browser Panel** - DONE
+**Browser Panel** - PLANNED
 
 - Webview embutido (Electron BrowserView/webContentsView)
 - Agent-browser API (navigate, click, fill, screenshot, get_accessibility_tree)
 - Controlavel por Claude via plugin commands + socket
 - Toggle split vertical (main panel | browser)
 
-**Dev Server Supervisor** - DONE
+**Dev Server Supervisor** - PLANNED
 
 - Auto-discover dev commands (package.json, Makefile, etc)
 - Launch/stop/restart servers via child_process
@@ -146,7 +146,7 @@
 - Status na sidebar (porta, health, PID)
 - Env vars do projeto injetadas nos dev servers
 
-**Dev + Browser Integration** - DONE
+**Dev + Browser Integration** - PLANNED
 
 - Frontend server pronto → auto-abre browser panel
 - Heuristica: vite/next/remix/astro = frontend → browseable
@@ -162,20 +162,20 @@
 
 ### Features
 
-**Notifications** - DONE
+**Notifications** - PLANNED
 
 - Notificacoes por task (dev server crash, session events)
 - Badge na sidebar
 - System notifications nativas (Electron Notification API)
 
-**UX Polish** - DONE
+**UX Polish** - PLANNED
 
 - Keyboard shortcuts
 - Error handling visual
 - Loading states
 - Dark/light theme
 
-**Packaging** - DONE
+**Packaging** - PLANNED
 
 - DMG para macOS
 - AppImage para Linux
