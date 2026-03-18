@@ -2,8 +2,25 @@ import { contextBridge, ipcRenderer } from "electron";
 import type { DesktopBridge } from "@iara/contracts";
 
 contextBridge.exposeInMainWorld("desktopBridge", {
+  // App
   getAppInfo: () => ipcRenderer.invoke("desktop:get-app-info"),
-  getProjects: () => ipcRenderer.invoke("desktop:get-projects"),
+
+  // Projects
+  listProjects: () => ipcRenderer.invoke("desktop:list-projects"),
+  getProject: (id) => ipcRenderer.invoke("desktop:get-project", id),
   createProject: (input) => ipcRenderer.invoke("desktop:create-project", input),
+  deleteProject: (id) => ipcRenderer.invoke("desktop:delete-project", id),
+
+  // Tasks
+  listTasks: (projectId) => ipcRenderer.invoke("desktop:list-tasks", projectId),
+  getTask: (id) => ipcRenderer.invoke("desktop:get-task", id),
+  createTask: (projectId, input) => ipcRenderer.invoke("desktop:create-task", projectId, input),
+  completeTask: (id) => ipcRenderer.invoke("desktop:complete-task", id),
+  deleteTask: (id) => ipcRenderer.invoke("desktop:delete-task", id),
+
+  // Git
   getGitStatus: (cwd) => ipcRenderer.invoke("desktop:get-git-status", cwd),
+
+  // Dialogs
+  pickFolder: () => ipcRenderer.invoke("desktop:pick-folder"),
 } satisfies DesktopBridge);
