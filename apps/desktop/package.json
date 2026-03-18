@@ -11,12 +11,14 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run --passWithNoTests",
     "smoke-test": "node scripts/smoke-test.mjs",
+    "postinstall": "npx @electron/rebuild -v 40.6.0",
     "rebuild-electron": "npx @electron/rebuild -v 40.6.0"
   },
   "dependencies": {
-    "better-sqlite3": "^12.2.0",
+    "better-sqlite3": "^12.8.0",
     "drizzle-orm": "^0.45.0",
-    "electron": "40.6.0"
+    "electron": "40.6.0",
+    "node-pty": "^1.1.0"
   },
   "devDependencies": {
     "@electron/rebuild": "^3.7.1",

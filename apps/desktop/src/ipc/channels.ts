@@ -61,4 +61,10 @@ export const Channels = {
   // Dialogs
   PICK_FOLDER: "desktop:pick-folder",
   CONFIRM_DIALOG: "desktop:confirm-dialog",
+
+  // Terminal
+  TERMINAL_CREATE: "desktop:terminal-create",
+  TERMINAL_WRITE: "desktop:terminal-write",
+  TERMINAL_RESIZE: "desktop:terminal-resize",
+  TERMINAL_DESTROY: "desktop:terminal-destroy",
 } as const;

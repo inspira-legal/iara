@@ -4,17 +4,15 @@ import * as path from "node:path";
 import { eq } from "drizzle-orm";
 import type { CreateTaskInput, Task } from "@iara/contracts";
 import { gitWorktreeAdd, gitWorktreeRemove } from "@iara/shared/git";
-import { getDb, schema } from "../db.js";
+import { db, schema } from "../db.js";
 import { getProject, getProjectDir } from "./projects.js";
 
 export function listTasks(projectId: string): Task[] {
-  const db = getDb();
   const rows = db.select().from(schema.tasks).where(eq(schema.tasks.projectId, projectId)).all();
   return rows as Task[];
 }
 
 export function getTask(id: string): Task | null {
-  const db = getDb();
   const row = db.select().from(schema.tasks).where(eq(schema.tasks.id, id)).get();
   return (row as Task) ?? null;
 }
@@ -23,7 +21,6 @@ export async function createTask(projectId: string, input: CreateTaskInput): Pro
   const project = getProject(projectId);
   if (!project) throw new Error(`Project not found: ${projectId}`);
 
-  const db = getDb();
   const now = new Date().toISOString();
   const id = crypto.randomUUID();
   const branch = input.branch ?? `feat/${input.slug}`;
@@ -98,7 +95,6 @@ export async function completeTask(id: string): Promise<void> {
   const project = getProject(task.projectId);
   if (!project) throw new Error(`Project not found: ${task.projectId}`);
 
-  const db = getDb();
   const now = new Date().toISOString();
 
   db.update(schema.tasks)
@@ -120,7 +116,6 @@ export async function deleteTask(id: string): Promise<void> {
   // Remove worktrees first
   await cleanupWorktrees(project.slug, task.slug);
 
-  const db = getDb();
   db.delete(schema.tasks).where(eq(schema.tasks.id, id)).run();
 }
 

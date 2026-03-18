@@ -114,7 +114,7 @@ vi.mock("drizzle-orm", () => ({
 }));
 
 vi.mock("../db.js", () => ({
-  getDb: () => makeMockDb(),
+  db: makeMockDb(),
   schema: mockSchema,
 }));
 

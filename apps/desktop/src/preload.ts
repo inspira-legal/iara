@@ -60,4 +60,25 @@ contextBridge.exposeInMainWorld("desktopBridge", {
   // Dialogs
   pickFolder: () => ipcRenderer.invoke("desktop:pick-folder"),
   confirmDialog: (message) => ipcRenderer.invoke("desktop:confirm-dialog", message),
+
+  // Terminal
+  terminalCreate: (taskId, resumeSessionId?) =>
+    ipcRenderer.invoke("desktop:terminal-create", taskId, resumeSessionId),
+  terminalWrite: (terminalId, data) =>
+    ipcRenderer.invoke("desktop:terminal-write", terminalId, data),
+  terminalResize: (terminalId, cols, rows) =>
+    ipcRenderer.invoke("desktop:terminal-resize", terminalId, cols, rows),
+  terminalDestroy: (terminalId) => ipcRenderer.invoke("desktop:terminal-destroy", terminalId),
+  onTerminalData: (cb) => {
+    ipcRenderer.on("terminal:data", (_e, terminalId, data) => cb(terminalId, data));
+  },
+  offTerminalData: () => {
+    ipcRenderer.removeAllListeners("terminal:data");
+  },
+  onTerminalExit: (cb) => {
+    ipcRenderer.on("terminal:exit", (_e, terminalId, exitCode) => cb(terminalId, exitCode));
+  },
+  offTerminalExit: () => {
+    ipcRenderer.removeAllListeners("terminal:exit");
+  },
 } satisfies DesktopBridge);

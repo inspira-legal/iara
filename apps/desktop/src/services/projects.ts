@@ -4,24 +4,21 @@ import * as path from "node:path";
 import { eq } from "drizzle-orm";
 import type { CreateProjectInput, Project, UpdateProjectInput } from "@iara/contracts";
 import { gitClone, gitWorktreeAdd, gitWorktreeRemove } from "@iara/shared/git";
-import { getDb, schema } from "../db.js";
+import { db, schema } from "../db.js";
 import { getProjectsDir } from "./config.js";
 import { listTasks } from "./tasks.js";
 
 export function listProjects(): Project[] {
-  const db = getDb();
   const rows = db.select().from(schema.projects).all();
   return rows.map(deserializeProject);
 }
 
 export function getProject(id: string): Project | null {
-  const db = getDb();
   const row = db.select().from(schema.projects).where(eq(schema.projects.id, id)).get();
   return row ? deserializeProject(row) : null;
 }
 
 export async function createProject(input: CreateProjectInput): Promise<Project> {
-  const db = getDb();
   const now = new Date().toISOString();
   const id = crypto.randomUUID();
 
@@ -63,7 +60,6 @@ export async function updateProject(id: string, input: UpdateProjectInput): Prom
   const project = getProject(id);
   if (!project) throw new Error(`Project not found: ${id}`);
 
-  const db = getDb();
   const now = new Date().toISOString();
   const updates: Record<string, string> = { updatedAt: now };
 
@@ -135,7 +131,6 @@ export async function updateProject(id: string, input: UpdateProjectInput): Prom
 }
 
 export function deleteProject(id: string): void {
-  const db = getDb();
   const project = getProject(id);
 
   // Delete all tasks first (FK constraint)

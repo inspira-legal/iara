@@ -11,6 +11,8 @@ import { NotificationService } from "./services/notifications.js";
 import { SocketServer } from "./services/socket.js";
 import { mergeHooks, removeHooks } from "./services/hooks.js";
 import { generatePluginDir, cleanupPluginDir } from "./services/plugins.js";
+import { TerminalManager } from "./services/terminal.js";
+import { initTerminalHandlers } from "./ipc/terminal.js";
 
 syncShellEnvironment();
 
@@ -22,12 +24,14 @@ const browserPanel = new BrowserPanel();
 const devSupervisor = new DevServerSupervisor();
 const socketServer = new SocketServer();
 const notificationService = new NotificationService();
+const terminalManager = new TerminalManager();
 let pluginDir: string | null = null;
 
 // Initialize handler dependencies
 initBrowserHandlers(() => browserPanel);
 initDevServerHandlers(() => devSupervisor);
 initNotificationHandlers(() => notificationService);
+initTerminalHandlers(() => terminalManager);
 
 function createWindow(): BrowserWindow {
   const win = new BrowserWindow({
@@ -41,10 +45,29 @@ function createWindow(): BrowserWindow {
       sandbox: true,
     },
     title: isDevelopment ? "iara (Dev)" : "iara",
+    autoHideMenuBar: true,
   });
 
   browserPanel.attach(win);
+  terminalManager.setWindow(win);
   win.on("resize", () => browserPanel.updateBounds());
+
+  // Enable Ctrl+/Ctrl- zoom
+  win.webContents.on("before-input-event", (event, input) => {
+    if (input.type !== "keyDown") return;
+    if (!(input.control || input.meta)) return;
+    const wc = win.webContents;
+    if (input.key === "=" || input.key === "+") {
+      wc.setZoomLevel(wc.getZoomLevel() + 0.5);
+      event.preventDefault();
+    } else if (input.key === "-") {
+      wc.setZoomLevel(wc.getZoomLevel() - 0.5);
+      event.preventDefault();
+    } else if (input.key === "0") {
+      wc.setZoomLevel(0);
+      event.preventDefault();
+    }
+  });
 
   if (isDevelopment && process.env.VITE_DEV_SERVER_URL) {
     void win.loadURL(process.env.VITE_DEV_SERVER_URL);
@@ -193,17 +216,10 @@ app.on("window-all-closed", () => {
 });
 
 app.on("before-quit", () => {
-  devSupervisor.stopAll();
-  void socketServer.stop();
-  browserPanel.detach();
-
-  if (pluginDir) {
-    cleanupPluginDir(pluginDir);
-  }
-
-  try {
-    removeHooks();
-  } catch {
-    // Best effort
-  }
+  try { terminalManager.destroyAll(); } catch { /* shutting down */ }
+  try { devSupervisor.stopAll(); } catch { /* shutting down */ }
+  try { void socketServer.stop(); } catch { /* shutting down */ }
+  try { browserPanel.detach(); } catch { /* shutting down */ }
+  try { if (pluginDir) cleanupPluginDir(pluginDir); } catch { /* shutting down */ }
+  try { removeHooks(); } catch { /* shutting down */ }
 });

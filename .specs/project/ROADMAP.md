@@ -183,10 +183,44 @@
 
 ---
 
+## M5 — Terminal Embutido (v2)
+
+**Goal:** Claude Code roda dentro do app. Zero alternancia de janelas. Selecionar task = ver terminal com Claude.
+
+**Status:** Spec ready → `.specs/features/embedded-terminal/spec.md`
+
+### Features
+
+**Terminal PTY + xterm.js**
+
+- `node-pty` no main process para criar pseudo-terminal
+- `@xterm/xterm` + addon-fit + addon-webgl no renderer
+- Streaming bidirecional via IPC (stdin/stdout)
+- Resize responsivo (SIGWINCH)
+- Crossplatform: macOS, Linux, Windows
+- `@electron/rebuild` para modulo nativo
+
+**Lifecycle por task**
+
+- Selecionar task ativa → terminal aparece automaticamente
+- Manter PTY vivo ao navegar entre tasks (multiplos terminais simultaneos)
+- Reconectar ao voltar para task com PTY rodando (sem perder historico)
+- Cleanup ao completar/deletar task
+- Integrar com --resume do Claude ao reiniciar
+
+**UI integrada**
+
+- Terminal substitui botao "Launch Claude" — e o default
+- Header: info da task (nome, branch, status) + acoes (Complete, Delete, Restart)
+- Terminal ocupa o resto do espaco
+- Session list acessivel via dropdown/colapsavel
+- Launcher externo mantido como fallback
+
+---
+
 ## Future Considerations
 
-- Terminal embutido (xterm.js) para sessions inline
-- Split panes (multiplos paineis)
+- Split panes (multiplos terminais visiveis ao mesmo tempo)
 - Plugin system para extensibilidade de terceiros
 - Dashboard com metricas de sessoes
 - Git visualization (branch graph)

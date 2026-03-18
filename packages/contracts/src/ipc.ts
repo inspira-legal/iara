@@ -128,6 +128,19 @@ export interface DesktopBridge {
   // Git
   getGitStatus(cwd: string): Promise<GitStatusResult>;
 
+  // Terminal
+  terminalCreate(
+    taskId: string,
+    resumeSessionId?: string,
+  ): Promise<{ terminalId: string; sessionId: string }>;
+  terminalWrite(terminalId: string, data: string): Promise<void>;
+  terminalResize(terminalId: string, cols: number, rows: number): Promise<void>;
+  terminalDestroy(terminalId: string): Promise<void>;
+  onTerminalData(callback: (terminalId: string, data: string) => void): void;
+  offTerminalData(): void;
+  onTerminalExit(callback: (terminalId: string, exitCode: number) => void): void;
+  offTerminalExit(): void;
+
   // Dialogs
   pickFolder(): Promise<string | null>;
   confirmDialog(message: string): Promise<boolean>;

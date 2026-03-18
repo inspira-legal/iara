@@ -9,6 +9,7 @@ import { registerProjectHandlers } from "./projects.js";
 import { registerPromptHandlers } from "./prompts.js";
 import { registerSessionHandlers } from "./sessions.js";
 import { registerTaskHandlers } from "./tasks.js";
+import { registerTerminalHandlers } from "./terminal.js";
 
 export function registerIpcHandlers(): void {
   registerAppHandlers();
@@ -22,4 +23,5 @@ export function registerIpcHandlers(): void {
   registerBrowserHandlers();
   registerNotificationHandlers();
   registerGitHandlers();
+  registerTerminalHandlers();
 }

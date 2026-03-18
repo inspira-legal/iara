@@ -3,7 +3,6 @@ import { useProjectStore } from "~/stores/projects";
 import { useTaskStore } from "~/stores/tasks";
 import { TaskWorkspace } from "~/components/TaskWorkspace";
 import { ProjectView } from "~/components/ProjectView";
-import { ensureNativeApi } from "~/nativeApi";
 import { useToast } from "~/components/Toast";
 
 export const Route = createFileRoute("/")({
@@ -31,20 +30,6 @@ function HomePage() {
     return <ProjectView project={project} />;
   }
 
-  const handleLaunchClaude = async (resumeSessionId?: string | undefined) => {
-    try {
-      const api = ensureNativeApi();
-      const input = resumeSessionId ? { taskId: task.id, resumeSessionId } : { taskId: task.id };
-      const result = await api.launchClaude(input);
-      toast(`Claude launched (session: ${result.sessionId.slice(0, 8)}...)`, "success");
-    } catch (err) {
-      toast(
-        `Failed to launch Claude: ${err instanceof Error ? err.message : String(err)}`,
-        "error",
-      );
-    }
-  };
-
   const handleComplete = async () => {
     await completeTask(task.id);
     toast("Task completed", "success");
@@ -59,7 +44,6 @@ function HomePage() {
     <TaskWorkspace
       project={project}
       task={task}
-      onLaunchClaude={(sid) => void handleLaunchClaude(sid)}
       onCompleteTask={() => void handleComplete()}
       onDeleteTask={() => void handleDelete()}
     />
