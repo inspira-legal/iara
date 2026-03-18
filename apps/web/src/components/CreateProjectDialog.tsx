@@ -11,13 +11,16 @@ interface CreateProjectDialogProps {
 
 export function CreateProjectDialog({ open, onClose }: CreateProjectDialogProps) {
   const [name, setName] = useState("");
-  const [slug, setSlug] = useState("");
   const [repoPaths, setRepoPaths] = useState<string[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const { createProject } = useProjectStore();
   const { toast } = useToast();
 
   if (!open) return null;
+
+  const { projects } = useProjectStore();
+  const slug = toSlug(name);
+  const slugTaken = slug !== "" && projects.some((p) => p.slug === slug);
 
   const handleAddRepo = async () => {
     try {
@@ -29,21 +32,13 @@ export function CreateProjectDialog({ open, onClose }: CreateProjectDialogProps)
     }
   };
 
-  const handleNameChange = (value: string) => {
-    setName(value);
-    if (!slug || slug === toSlug(name)) {
-      setSlug(toSlug(value));
-    }
-  };
-
   const handleSubmit = async () => {
-    if (!name.trim() || !slug.trim()) return;
+    if (!name.trim() || !slug || slugTaken) return;
     setSubmitting(true);
     try {
-      await createProject({ name: name.trim(), slug: slug.trim(), repoSources: repoPaths });
+      await createProject({ name: name.trim(), slug, repoSources: repoPaths });
       toast("Project created", "success");
       setName("");
-      setSlug("");
       setRepoPaths([]);
       onClose();
     } catch (err) {
@@ -64,14 +59,23 @@ export function CreateProjectDialog({ open, onClose }: CreateProjectDialogProps)
         </div>
 
         <div className="space-y-4">
-          <Field
-            label="Name"
-            value={name}
-            onChange={handleNameChange}
-            placeholder="My SaaS"
-            autoFocus
-          />
-          <Field label="Slug" value={slug} onChange={setSlug} placeholder="my-saas" />
+          <div>
+            <label className="mb-1 block text-sm text-zinc-400">Name</label>
+            <input
+              type="text"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="My SaaS"
+              autoFocus
+              className="w-full rounded-md border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-zinc-100 placeholder-zinc-600 outline-none focus:border-blue-500"
+            />
+            {slug && (
+              <p className="mt-1 text-xs text-zinc-600">
+                Slug: <code className={slugTaken ? "text-red-400" : "text-zinc-500"}>{slug}</code>
+                {slugTaken && <span className="ml-1 text-red-400">already exists</span>}
+              </p>
+            )}
+          </div>
 
           <div>
             <label className="mb-1 block text-sm text-zinc-400">Repos</label>
@@ -102,41 +106,13 @@ export function CreateProjectDialog({ open, onClose }: CreateProjectDialogProps)
           <button
             type="button"
             onClick={() => void handleSubmit()}
-            disabled={!name.trim() || !slug.trim() || submitting}
+            disabled={!name.trim() || !slug || slugTaken || submitting}
             className="w-full rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-500 disabled:opacity-50"
           >
             {submitting ? "Creating..." : "Create Project"}
           </button>
         </div>
       </div>
-    </div>
-  );
-}
-
-function Field({
-  label,
-  value,
-  onChange,
-  placeholder,
-  autoFocus,
-}: {
-  label: string;
-  value: string;
-  onChange: (v: string) => void;
-  placeholder: string;
-  autoFocus?: boolean;
-}) {
-  return (
-    <div>
-      <label className="mb-1 block text-sm text-zinc-400">{label}</label>
-      <input
-        type="text"
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder={placeholder}
-        autoFocus={autoFocus}
-        className="w-full rounded-md border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-zinc-100 placeholder-zinc-600 outline-none focus:border-blue-500"
-      />
     </div>
   );
 }
