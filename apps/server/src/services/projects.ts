@@ -30,7 +30,7 @@ function ensureProjectFiles(projectPath: string, name: string): void {
   }
 }
 
-export function syncProjects(): void {
+export async function syncProjects(): Promise<void> {
   // 1. Scan projects dir — only folders with .repos/ containing at least one repo
   const projectsDir = getProjectsDir();
   fs.mkdirSync(projectsDir, { recursive: true });
@@ -40,14 +40,15 @@ export function syncProjects(): void {
   });
 
   // 2. Get all DB slugs
-  const dbRows = db.select().from(schema.projects).all();
+  const dbRows = await db.select().from(schema.projects).all();
   const dbSlugMap = new Map(dbRows.map((r) => [r.slug, r]));
 
   // 3. Folders on FS but not in DB -> insert with name = slug + regenerate missing files
   const now = new Date().toISOString();
   for (const slug of fsSlugs) {
     if (!dbSlugMap.has(slug)) {
-      db.insert(schema.projects)
+      await db
+        .insert(schema.projects)
         .values({
           id: crypto.randomUUID(),
           slug,
@@ -66,13 +67,13 @@ export function syncProjects(): void {
   const fsSlugSet = new Set(fsSlugs);
   for (const row of dbRows) {
     if (!fsSlugSet.has(row.slug)) {
-      db.delete(schema.tasks).where(eq(schema.tasks.projectId, row.id)).run();
-      db.delete(schema.projects).where(eq(schema.projects.id, row.id)).run();
+      await db.delete(schema.tasks).where(eq(schema.tasks.projectId, row.id)).run();
+      await db.delete(schema.projects).where(eq(schema.projects.id, row.id)).run();
     }
   }
 
   // 5. Sync repos for existing projects
-  const updatedRows = db.select().from(schema.projects).all();
+  const updatedRows = await db.select().from(schema.projects).all();
   for (const row of updatedRows) {
     const fsRepos = discoverRepos(row.slug);
     const dbRepos: string[] = JSON.parse(row.repoSources);
@@ -88,7 +89,8 @@ export function syncProjects(): void {
     if (newRepos.length > 0 || removedRepos.length > 0) {
       const kept = dbRepos.filter((source) => fsRepoSet.has(repoNameFromSource(source)));
       const updated = [...kept, ...newRepos];
-      db.update(schema.projects)
+      await db
+        .update(schema.projects)
         .set({ repoSources: JSON.stringify(updated), updatedAt: new Date().toISOString() })
         .where(eq(schema.projects.id, row.id))
         .run();
@@ -101,28 +103,19 @@ export async function withRetry<T>(operation: () => Promise<T>): Promise<T> {
     return await operation();
   } catch {
     // Sync and retry once
-    syncProjects();
+    await syncProjects();
     return await operation();
   }
 }
 
-export function withRetrySync<T>(operation: () => T): T {
-  try {
-    return operation();
-  } catch {
-    syncProjects();
-    return operation();
-  }
-}
-
-export function listProjects(): Project[] {
-  syncProjects();
-  const rows = db.select().from(schema.projects).all();
+export async function listProjects(): Promise<Project[]> {
+  await syncProjects();
+  const rows = await db.select().from(schema.projects).all();
   return rows.map(deserializeProject);
 }
 
-export function getProject(id: string): Project | null {
-  const row = db.select().from(schema.projects).where(eq(schema.projects.id, id)).get();
+export async function getProject(id: string): Promise<Project | null> {
+  const row = await db.select().from(schema.projects).where(eq(schema.projects.id, id)).get();
   return row ? deserializeProject(row) : null;
 }
 
@@ -139,7 +132,7 @@ export async function createProject(input: CreateProjectInput): Promise<Project>
     updatedAt: now,
   };
 
-  db.insert(schema.projects).values(row).run();
+  await db.insert(schema.projects).values(row).run();
 
   // Create project directory structure with retry on failure
   await withRetry(async () => {
@@ -167,7 +160,7 @@ export async function createProject(input: CreateProjectInput): Promise<Project>
 }
 
 export async function updateProject(id: string, input: UpdateProjectInput): Promise<void> {
-  const project = getProject(id);
+  const project = await getProject(id);
   if (!project) throw new Error(`Project not found: ${id}`);
 
   const now = new Date().toISOString();
@@ -191,7 +184,7 @@ export async function updateProject(id: string, input: UpdateProjectInput): Prom
         : [],
     );
 
-    const activeTasks = listTasks(id).filter((t) => t.status === "active");
+    const activeTasks = (await listTasks(id)).filter((t) => t.status === "active");
     const newRepoNames = new Set(input.repoSources.map(repoNameFromSource));
 
     // Clone new repos + create worktrees in active tasks
@@ -237,22 +230,20 @@ export async function updateProject(id: string, input: UpdateProjectInput): Prom
     }
   }
 
-  db.update(schema.projects).set(updates).where(eq(schema.projects.id, id)).run();
+  await db.update(schema.projects).set(updates).where(eq(schema.projects.id, id)).run();
 }
 
-export function deleteProject(id: string): void {
-  const project = getProject(id);
+export async function deleteProject(id: string): Promise<void> {
+  const project = await getProject(id);
 
   // Delete all tasks first (FK constraint)
-  db.delete(schema.tasks).where(eq(schema.tasks.projectId, id)).run();
-  db.delete(schema.projects).where(eq(schema.projects.id, id)).run();
+  await db.delete(schema.tasks).where(eq(schema.tasks.projectId, id)).run();
+  await db.delete(schema.projects).where(eq(schema.projects.id, id)).run();
 
-  // Clean up project directory with retry on failure
+  // Clean up project directory
   if (project) {
-    withRetrySync(() => {
-      const projectDir = getProjectDir(project.slug);
-      fs.rmSync(projectDir, { recursive: true, force: true });
-    });
+    const projectDir = getProjectDir(project.slug);
+    fs.rmSync(projectDir, { recursive: true, force: true });
   }
 }
 

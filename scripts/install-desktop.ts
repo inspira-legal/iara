@@ -45,9 +45,7 @@ const serverDeps = resolveCatalogDependencies(
 
 // Filter out workspace deps (already bundled by tsdown) and electron
 const filteredServerDeps = Object.fromEntries(
-  Object.entries(serverDeps).filter(
-    ([name]) => !name.startsWith("@iara/") && name !== "electron",
-  ),
+  Object.entries(serverDeps).filter(([name]) => !name.startsWith("@iara/") && name !== "electron"),
 );
 
 // ---------------------------------------------------------------------------
@@ -109,21 +107,15 @@ const stagePkg = {
       "node_modules/prebuild-install/**",
       "node_modules/file-uri-to-path/**",
     ],
-    extraResources: [
-      { from: "apps/web/dist", to: "web" },
-    ],
+    extraResources: [{ from: "apps/web/dist", to: "web" }],
     mac: {
-      target: [
-        { target: "dmg", arch: ["x64", "arm64"] },
-      ],
+      target: [{ target: "dmg", arch: ["x64", "arm64"] }],
       category: "public.app-category.developer-tools",
       icon: "resources/icon.icns",
       hardenedRuntime: true,
     },
     linux: {
-      target: [
-        { target: "AppImage", arch: ["x64", "arm64"] },
-      ],
+      target: [{ target: "AppImage", arch: ["x64", "arm64"] }],
       category: "Development",
       icon: "resources/icon.png",
     },
@@ -131,9 +123,7 @@ const stagePkg = {
       artifactName: "iara-${version}-${arch}.AppImage",
     },
     win: {
-      target: [
-        { target: "nsis", arch: ["x64", "arm64"] },
-      ],
+      target: [{ target: "nsis", arch: ["x64", "arm64"] }],
       icon: "resources/icon.ico",
     },
     nsis: {
@@ -202,7 +192,9 @@ console.log(`\nArtifacts in: ${releaseDir}`);
 function installLinux() {
   const archName = arch() === "arm64" ? "aarch64" : "x86_64";
   // Look for AppImage in release dir (may come from staging dist)
-  const appImages = readdirSync(releaseDir).filter((f) => f.endsWith(".AppImage") && f.includes(archName));
+  const appImages = readdirSync(releaseDir).filter(
+    (f) => f.endsWith(".AppImage") && f.includes(archName),
+  );
   if (appImages.length === 0) {
     console.error(`AppImage nao encontrado para ${archName} em ${releaseDir}`);
     process.exit(1);

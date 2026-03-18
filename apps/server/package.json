@@ -11,6 +11,7 @@
     "test": "vitest run --passWithNoTests"
   },
   "dependencies": {
+    "@libsql/client": "^0.17.0",
     "drizzle-orm": "^0.45.0",
     "node-pty": "^1.1.0",
     "ws": "^8.18.0"

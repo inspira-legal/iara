@@ -7,10 +7,10 @@ import { getTask } from "../services/tasks.js";
 
 export function registerLauncherHandlers(): void {
   registerMethod("launcher.launch", async (params) => {
-    const task = getTask(params.taskId);
+    const task = await getTask(params.taskId);
     if (!task) throw new Error(`Task not found: ${params.taskId}`);
 
-    const project = getProject(task.projectId);
+    const project = await getProject(task.projectId);
     if (!project) throw new Error(`Project not found: ${task.projectId}`);
 
     const projectDir = getProjectDir(project.slug);

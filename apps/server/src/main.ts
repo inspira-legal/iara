@@ -42,6 +42,10 @@ devSupervisor.on("healthy", (_name: string, port: number) => {
   }
 });
 
+// Initialize database before starting
+import { ensureDb } from "./db.js";
+await ensureDb();
+
 // Start
 const { httpServer, stop: stopWs } = createServer({ port, authToken, webDir });
 let pluginDir: string | null = null;

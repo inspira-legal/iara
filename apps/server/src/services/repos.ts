@@ -3,7 +3,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import type { AddRepoInput, CloneProgress, RepoInfo } from "@iara/contracts";
 import { gitCloneWithProgress, gitFetch, gitPull, gitWorktreeAdd } from "@iara/shared/git";
-import { discoverRepos, getProjectDir, withRetry } from "./projects.js";
+import { discoverRepos, getProjectDir } from "./projects.js";
 import { listTasks } from "./tasks.js";
 
 export async function getRepoInfo(projectSlug: string): Promise<RepoInfo[]> {
@@ -88,7 +88,7 @@ export async function addRepo(
   }
 
   // Create worktrees for active tasks
-  const activeTasks = listTasks(projectId).filter((t) => t.status === "active");
+  const activeTasks = (await listTasks(projectId)).filter((t) => t.status === "active");
   for (const task of activeTasks) {
     const taskDir = path.join(projectDir, task.slug);
     const wtDir = path.join(taskDir, input.name);

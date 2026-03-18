@@ -38,7 +38,12 @@ async function gitExec(
     });
     return stdout.trim();
   } catch (error: unknown) {
-    const err = error as { code?: string; stderr?: string; status?: number | null; killed?: boolean };
+    const err = error as {
+      code?: string;
+      stderr?: string;
+      status?: number | null;
+      killed?: boolean;
+    };
     if (err.code === "ENOENT") {
       throw new GitNotInstalledError();
     }
