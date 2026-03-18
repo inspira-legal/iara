@@ -37,8 +37,8 @@ export async function createTask(projectId: string, input: CreateTaskInput): Pro
     updatedAt: now,
   };
 
-  // Pull repos to ensure worktrees start from latest
-  await pullRepos(project.slug);
+  // Best-effort pull — don't block task creation on network issues
+  await pullRepos(project.slug).catch(() => {});
 
   // Create worktrees BEFORE inserting into DB — rollback is just fs cleanup
   const projectDir = getProjectDir(project.slug);

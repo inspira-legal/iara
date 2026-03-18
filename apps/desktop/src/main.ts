@@ -352,9 +352,18 @@ app.on("before-quit", () => {
       restartTimer = null;
     }
     if (serverChild) {
-      serverChild.removeAllListeners();
-      serverChild.kill("SIGTERM");
+      const child = serverChild;
       serverChild = null;
+      child.removeAllListeners();
+      child.kill("SIGTERM");
+      // Force kill if still alive after 2s
+      setTimeout(() => {
+        try {
+          child.kill("SIGKILL");
+        } catch {
+          /* already dead */
+        }
+      }, 2000);
     }
   } catch {
     /* shutting down */

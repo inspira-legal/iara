@@ -26,7 +26,8 @@ export const useProjectStore = create<ProjectState & ProjectActions>((set) => ({
     try {
       const projects = await transport.request("projects.list", {});
       set({ projects, loading: false });
-    } catch {
+    } catch (err) {
+      console.error("[projects] Failed to load projects:", err);
       set({ loading: false });
     }
   },

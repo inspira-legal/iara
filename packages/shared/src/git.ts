@@ -26,14 +26,24 @@ export interface GitStatus {
   dirtyFiles: string[];
 }
 
-async function gitExec(args: string[], cwd: string): Promise<string> {
+async function gitExec(
+  args: string[],
+  cwd: string,
+  options?: { timeout?: number },
+): Promise<string> {
   try {
-    const { stdout } = await execFileAsync("git", args, { cwd });
+    const { stdout } = await execFileAsync("git", args, {
+      cwd,
+      timeout: options?.timeout,
+    });
     return stdout.trim();
   } catch (error: unknown) {
-    const err = error as { code?: string; stderr?: string; status?: number | null };
+    const err = error as { code?: string; stderr?: string; status?: number | null; killed?: boolean };
     if (err.code === "ENOENT") {
       throw new GitNotInstalledError();
+    }
+    if (err.killed) {
+      throw new GitOperationError(args.join(" "), "timed out", null);
     }
     throw new GitOperationError(args.join(" "), String(err.stderr ?? ""), err.status ?? null);
   }
@@ -120,24 +130,26 @@ export async function gitBranchCreate(cwd: string, branch: string): Promise<void
   await gitExec(["checkout", "-b", branch], cwd);
 }
 
-/** Pull the current branch from origin. No-op if no upstream is configured. */
+/** Pull the current branch from origin. No-op if no upstream is configured. 15s timeout. */
 export async function gitPull(cwd: string): Promise<void> {
   try {
-    await gitExec(["pull", "--ff-only"], cwd);
+    await gitExec(["pull", "--ff-only"], cwd, { timeout: 15_000 });
   } catch (err) {
-    // No upstream or network error — silently skip
-    if (err instanceof GitOperationError && err.stderr.includes("no tracking information")) {
-      return;
+    // No upstream, network error, or timeout — silently skip
+    if (err instanceof GitOperationError) {
+      if (err.stderr.includes("no tracking information") || err.stderr.includes("timed out")) {
+        return;
+      }
     }
     throw err;
   }
 }
 
-/** Fetch from origin without merging. No-op on network errors. */
+/** Fetch from origin without merging. No-op on network errors. 15s timeout. */
 export async function gitFetch(cwd: string): Promise<void> {
   try {
-    await gitExec(["fetch", "--quiet"], cwd);
+    await gitExec(["fetch", "--quiet"], cwd, { timeout: 15_000 });
   } catch {
-    // Network error — silently skip
+    // Network error or timeout — silently skip
   }
 }

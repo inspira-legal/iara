@@ -6,6 +6,6 @@ export default defineConfig({
   outDir: "dist",
   sourcemap: true,
   clean: true,
-  external: ["better-sqlite3", "node-pty"],
+  external: ["node-pty"],
   noExternal: (id) => id.startsWith("@iara/"),
 });

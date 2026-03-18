@@ -1,10 +1,10 @@
 import * as path from "node:path";
 import * as fs from "node:fs";
-import Database from "better-sqlite3";
 import { drizzle } from "drizzle-orm/better-sqlite3";
 import { migrate } from "drizzle-orm/better-sqlite3/migrator";
 import * as schema from "./db/schema.js";
 import { stateDir } from "./env.js";
+import { NodeSqliteDatabase } from "./node-sqlite-adapter.js";
 
 let _db: ReturnType<typeof drizzle<typeof schema>> | null = null;
 
@@ -12,11 +12,12 @@ function initDb() {
   fs.mkdirSync(stateDir, { recursive: true });
 
   const dbPath = path.join(stateDir, "iara.db");
-  const sqlite = new Database(dbPath);
+  const sqlite = new NodeSqliteDatabase(dbPath);
   sqlite.pragma("journal_mode = WAL");
   sqlite.pragma("foreign_keys = ON");
 
-  _db = drizzle(sqlite, { schema });
+  // Cast: our adapter implements the subset Drizzle actually uses
+  _db = drizzle(sqlite as any, { schema });
 
   const migrationsDir = path.join(import.meta.dirname, "..", "drizzle");
   try {

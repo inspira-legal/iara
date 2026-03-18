@@ -104,7 +104,6 @@ const stagePkg = {
       "apps/server/drizzle/**/*",
     ],
     asarUnpack: [
-      "node_modules/better-sqlite3/**",
       "node_modules/node-pty/**",
       "node_modules/bindings/**",
       "node_modules/prebuild-install/**",
