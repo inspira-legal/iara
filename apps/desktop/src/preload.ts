@@ -9,6 +9,7 @@ contextBridge.exposeInMainWorld("desktopBridge", {
   listProjects: () => ipcRenderer.invoke("desktop:list-projects"),
   getProject: (id) => ipcRenderer.invoke("desktop:get-project", id),
   createProject: (input) => ipcRenderer.invoke("desktop:create-project", input),
+  updateProject: (id, input) => ipcRenderer.invoke("desktop:update-project", id, input),
   deleteProject: (id) => ipcRenderer.invoke("desktop:delete-project", id),
 
   // Tasks

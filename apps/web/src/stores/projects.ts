@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import type { CreateProjectInput, Project } from "@iara/contracts";
+import type { CreateProjectInput, Project, UpdateProjectInput } from "@iara/contracts";
 import { ensureNativeApi } from "~/nativeApi";
 
 interface ProjectState {
@@ -12,6 +12,7 @@ interface ProjectActions {
   loadProjects(): Promise<void>;
   selectProject(id: string | null): void;
   createProject(input: CreateProjectInput): Promise<Project>;
+  updateProject(id: string, input: UpdateProjectInput): Promise<void>;
   deleteProject(id: string): Promise<void>;
 }
 
@@ -43,6 +44,14 @@ export const useProjectStore = create<ProjectState & ProjectActions>((set) => ({
       selectedProjectId: project.id,
     }));
     return project;
+  },
+
+  updateProject: async (id, input) => {
+    const api = ensureNativeApi();
+    await api.updateProject(id, input);
+    // Reload to get fresh state (repos may have been cloned)
+    const projects = await api.listProjects();
+    set({ projects });
   },
 
   deleteProject: async (id) => {

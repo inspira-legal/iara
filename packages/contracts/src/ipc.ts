@@ -17,6 +17,11 @@ export interface CreateProjectInput {
   repoSources: string[];
 }
 
+export interface UpdateProjectInput {
+  name?: string;
+  repoSources?: string[];
+}
+
 export interface CreateTaskInput {
   slug: string;
   name: string;
@@ -76,6 +81,7 @@ export interface DesktopBridge {
   listProjects(): Promise<Project[]>;
   getProject(id: string): Promise<Project | null>;
   createProject(input: CreateProjectInput): Promise<Project>;
+  updateProject(id: string, input: UpdateProjectInput): Promise<void>;
   deleteProject(id: string): Promise<void>;
 
   // Tasks

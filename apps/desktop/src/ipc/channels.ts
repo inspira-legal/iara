@@ -6,6 +6,7 @@ export const Channels = {
   LIST_PROJECTS: "desktop:list-projects",
   GET_PROJECT: "desktop:get-project",
   CREATE_PROJECT: "desktop:create-project",
+  UPDATE_PROJECT: "desktop:update-project",
   DELETE_PROJECT: "desktop:delete-project",
 
   // Tasks

@@ -10,5 +10,6 @@ export type {
   LaunchClaudeInput,
   LaunchResult,
   SessionInfo,
+  UpdateProjectInput,
 } from "./ipc.js";
 export type { Project, Task } from "./models.js";

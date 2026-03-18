@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useProjectStore } from "~/stores/projects";
 import { useTaskStore } from "~/stores/tasks";
 import { TaskWorkspace } from "~/components/TaskWorkspace";
+import { ProjectView } from "~/components/ProjectView";
 import { ensureNativeApi } from "~/nativeApi";
 import { useToast } from "~/components/Toast";
 
@@ -18,12 +19,16 @@ function HomePage() {
   const project = projects.find((p) => p.id === selectedProjectId);
   const task = tasks.find((t) => t.id === selectedTaskId);
 
-  if (!project || !task) {
+  if (!project) {
     return (
       <div className="flex h-full items-center justify-center text-zinc-500">
-        <p>{project ? "Select a task to get started" : "Select a project to get started"}</p>
+        <p>Select a project to get started</p>
       </div>
     );
+  }
+
+  if (!task) {
+    return <ProjectView project={project} />;
   }
 
   const handleLaunchClaude = async (resumeSessionId?: string | undefined) => {

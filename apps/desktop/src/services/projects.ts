@@ -2,7 +2,7 @@ import * as crypto from "node:crypto";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { eq } from "drizzle-orm";
-import type { CreateProjectInput, Project } from "@iara/contracts";
+import type { CreateProjectInput, Project, UpdateProjectInput } from "@iara/contracts";
 import { gitClone } from "@iara/shared/git";
 import { getDb, schema } from "../db.js";
 import { getProjectsDir } from "./config.js";
@@ -56,6 +56,52 @@ export async function createProject(input: CreateProjectInput): Promise<Project>
   }
 
   return deserializeProject(row);
+}
+
+export async function updateProject(id: string, input: UpdateProjectInput): Promise<void> {
+  const project = getProject(id);
+  if (!project) throw new Error(`Project not found: ${id}`);
+
+  const db = getDb();
+  const now = new Date().toISOString();
+  const updates: Record<string, string> = { updatedAt: now };
+
+  if (input.name !== undefined) {
+    updates.name = input.name;
+  }
+
+  if (input.repoSources !== undefined) {
+    updates.repoSources = JSON.stringify(input.repoSources);
+
+    // Clone any new repos
+    const projectDir = getProjectDir(project.slug);
+    const reposDir = path.join(projectDir, ".repos");
+    fs.mkdirSync(reposDir, { recursive: true });
+
+    const existingRepoNames = new Set(
+      fs.existsSync(reposDir)
+        ? fs.readdirSync(reposDir).filter((n) => fs.statSync(path.join(reposDir, n)).isDirectory())
+        : [],
+    );
+
+    for (const source of input.repoSources) {
+      const repoName = repoNameFromSource(source);
+      if (!existingRepoNames.has(repoName)) {
+        const dest = path.join(reposDir, repoName);
+        await gitClone(source, dest);
+      }
+    }
+
+    // Remove repos that are no longer in the list
+    const newRepoNames = new Set(input.repoSources.map(repoNameFromSource));
+    for (const existing of existingRepoNames) {
+      if (!newRepoNames.has(existing)) {
+        fs.rmSync(path.join(reposDir, existing), { recursive: true, force: true });
+      }
+    }
+  }
+
+  db.update(schema.projects).set(updates).where(eq(schema.projects.id, id)).run();
 }
 
 export function deleteProject(id: string): void {

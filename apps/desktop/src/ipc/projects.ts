@@ -1,5 +1,5 @@
 import { BrowserWindow, dialog, ipcMain } from "electron";
-import type { CreateProjectInput } from "@iara/contracts";
+import type { CreateProjectInput, UpdateProjectInput } from "@iara/contracts";
 import * as projectService from "../services/projects.js";
 import { Channels } from "./channels.js";
 
@@ -14,6 +14,10 @@ export function registerProjectHandlers(): void {
 
   ipcMain.handle(Channels.CREATE_PROJECT, (_event, input: CreateProjectInput) => {
     return projectService.createProject(input);
+  });
+
+  ipcMain.handle(Channels.UPDATE_PROJECT, (_event, id: string, input: UpdateProjectInput) => {
+    return projectService.updateProject(id, input);
   });
 
   ipcMain.handle(Channels.DELETE_PROJECT, (_event, id: string) => {
