@@ -40,7 +40,11 @@ async function gitExec(args: string[], cwd: string): Promise<string> {
 }
 
 export async function gitClone(url: string, dest: string): Promise<void> {
-  await gitExec(["clone", url, dest], ".");
+  const path = await import("node:path");
+  const fs = await import("node:fs");
+  const parentDir = path.dirname(dest);
+  fs.mkdirSync(parentDir, { recursive: true });
+  await gitExec(["clone", url, dest], parentDir);
 }
 
 export async function gitWorktreeAdd(
@@ -48,7 +52,17 @@ export async function gitWorktreeAdd(
   worktreeDir: string,
   branch: string,
 ): Promise<void> {
-  await gitExec(["worktree", "add", worktreeDir, "-b", branch], repoDir);
+  try {
+    // Try creating a new branch
+    await gitExec(["worktree", "add", worktreeDir, "-b", branch], repoDir);
+  } catch (err) {
+    // If branch already exists, attach to it instead
+    if (err instanceof GitOperationError && err.stderr.includes("already exists")) {
+      await gitExec(["worktree", "add", worktreeDir, branch], repoDir);
+    } else {
+      throw err;
+    }
+  }
 }
 
 export async function gitWorktreeRemove(repoDir: string, worktreeDir: string): Promise<void> {
