@@ -60,17 +60,28 @@ export function TerminalView({ taskId }: TerminalViewProps) {
       }
     });
 
+    let lastCols = term.cols;
+    let lastRows = term.rows;
+    let resizeTimer: ReturnType<typeof setTimeout> | null = null;
+
     const resizeObserver = new ResizeObserver(() => {
-      fitAddon.fit();
-      if (terminalIdRef.current) {
-        transport
-          .request("terminal.resize", {
-            terminalId: terminalIdRef.current,
-            cols: term.cols,
-            rows: term.rows,
-          })
-          .catch(() => {});
-      }
+      if (resizeTimer) clearTimeout(resizeTimer);
+      resizeTimer = setTimeout(() => {
+        resizeTimer = null;
+        fitAddon.fit();
+        if (term.cols === lastCols && term.rows === lastRows) return;
+        lastCols = term.cols;
+        lastRows = term.rows;
+        if (terminalIdRef.current) {
+          transport
+            .request("terminal.resize", {
+              terminalId: terminalIdRef.current,
+              cols: term.cols,
+              rows: term.rows,
+            })
+            .catch(() => {});
+        }
+      }, 50);
     });
     resizeObserver.observe(container);
 
@@ -78,6 +89,7 @@ export function TerminalView({ taskId }: TerminalViewProps) {
 
     return () => {
       onData.dispose();
+      if (resizeTimer) clearTimeout(resizeTimer);
       resizeObserver.disconnect();
       // Don't dispose the terminal — just detach from DOM so it survives navigation
       if (term.element?.parentNode === container) {
