@@ -7,7 +7,7 @@ import { ConfirmDialog } from "./ConfirmDialog";
 interface ProjectListProps {
   projects: Project[];
   selectedId: string | null;
-  onSelect: (id: string) => void;
+  onSelect: (id: string | null) => void;
   onDelete: (id: string) => void;
 }
 
