@@ -42,8 +42,7 @@ const THEME = {
   brightWhite: "#ffffff",
 };
 
-
-// Track Ctrl/Meta state for link decoration toggling
+// Ghostty-style: underline + pointer only when Ctrl/Cmd is held
 let modHeld = false;
 const activeDecorations = new Set<{ underline: boolean; pointerCursor: boolean }>();
 
@@ -51,11 +50,10 @@ function setModHeld(held: boolean): void {
   if (held === modHeld) return;
   modHeld = held;
   for (const d of activeDecorations) {
-    d.underline = modHeld;
-    d.pointerCursor = modHeld;
+    d.underline = held;
+    d.pointerCursor = held;
   }
 }
-
 
 export function getOrCreateTerminal(terminalId: string): CachedTerminal {
   const existing = cache.get(terminalId);
@@ -89,21 +87,52 @@ export function getOrCreateTerminal(terminalId: string): CachedTerminal {
   );
 
   // File links: detect file:// URLs and absolute paths
+  // Kitty-style: underline + pointer always on hover, Ctrl+Click to open
   const linkDisposable = term.registerLinkProvider({
     provideLinks(lineNumber, callback) {
-      const line = term.buffer.active.getLine(lineNumber - 1);
-      if (!line) return callback(undefined);
-      const text = line.translateToString();
-      const links = findFileLinks(text);
+      const buf = term.buffer.active;
 
+      // Walk backwards to find the start of the logical line (unwrap)
+      let startRow = lineNumber - 1;
+      while (startRow > 0 && buf.getLine(startRow)?.isWrapped) {
+        startRow--;
+      }
+
+      // Concatenate all wrapped rows into one logical line, tracking row boundaries
+      const rowWidths: number[] = [];
+      let fullText = "";
+      for (let r = startRow; ; r++) {
+        const row = buf.getLine(r);
+        if (!row) break;
+        if (r > startRow && !row.isWrapped) break;
+        const rowText = row.translateToString();
+        rowWidths.push(rowText.length);
+        fullText += rowText;
+      }
+
+      const links = findFileLinks(fullText);
       if (links.length === 0) return callback(undefined);
+
+      // Convert flat offset to (row, col) in the buffer
+      function offsetToPos(offset: number): { x: number; y: number } {
+        let remaining = offset;
+        for (let i = 0; i < rowWidths.length; i++) {
+          if (remaining < rowWidths[i]!) {
+            return { x: remaining + 1, y: startRow + 1 + i };
+          }
+          remaining -= rowWidths[i]!;
+        }
+        const lastRow = startRow + rowWidths.length;
+        return { x: 1, y: lastRow };
+      }
+
       callback(
         links.map((l) => {
           const decorations = { underline: modHeld, pointerCursor: modHeld };
           return {
             range: {
-              start: { x: l.startIndex + 1, y: lineNumber },
-              end: { x: l.startIndex + l.length + 1, y: lineNumber },
+              start: offsetToPos(l.startIndex),
+              end: offsetToPos(l.startIndex + l.length),
             },
             text: l.text,
             decorations,

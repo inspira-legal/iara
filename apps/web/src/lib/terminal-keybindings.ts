@@ -13,7 +13,7 @@ function matchesKeybinding(event: KeyboardEvent): boolean {
   if (event.shiftKey) {
     return event.code === "KeyC" || event.code === "KeyV" || event.code === "KeyA";
   }
-  return event.key === "Enter";
+  return event.key === "Enter" || event.key === "Backspace";
 }
 
 export function setupTerminalKeybindings(
@@ -24,7 +24,7 @@ export function setupTerminalKeybindings(
   let prevMod = false;
 
   term.attachCustomKeyEventHandler((event) => {
-    // Track Ctrl/Meta state for link decorations (xterm captures these, window doesn't see them)
+    // Track Ctrl/Meta for link decorations (xterm captures keys, window doesn't see them)
     const mod = event.ctrlKey || event.metaKey;
     if (mod !== prevMod) {
       prevMod = mod;
@@ -58,6 +58,12 @@ export function setupTerminalKeybindings(
     // Ctrl+Shift+A = Select all
     if (isCtrl && event.shiftKey && event.code === "KeyA") {
       term.selectAll();
+      return false;
+    }
+
+    // Ctrl+Backspace = Delete word backward
+    if (isCtrl && !event.shiftKey && event.key === "Backspace") {
+      write("\x1b\x7f");
       return false;
     }
 

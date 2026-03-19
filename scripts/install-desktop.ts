@@ -22,8 +22,6 @@ const root = resolve(import.meta.dirname, "..");
 const releaseDir = join(root, "release");
 const catalog = (rootPkg as any).workspaces.catalog as Record<string, unknown>;
 
-
-
 function run(cmd: string, cwd = root) {
   console.log(`> ${cmd}`);
   execSync(cmd, { cwd, stdio: "inherit" });

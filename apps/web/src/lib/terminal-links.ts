@@ -29,9 +29,7 @@ export function findFileLinks(text: string): FileLink[] {
     const end = start + match[0].length;
 
     // Skip if this range overlaps with an existing link
-    const overlaps = links.some(
-      (l) => start < l.startIndex + l.length && end > l.startIndex,
-    );
+    const overlaps = links.some((l) => start < l.startIndex + l.length && end > l.startIndex);
     if (overlaps) continue;
 
     // Skip if preceded by a URL scheme (e.g., http://example.com/page.html)
