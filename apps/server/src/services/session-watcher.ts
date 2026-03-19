@@ -25,7 +25,7 @@ export class SessionWatcher {
   }
 
   /**
-   * Rebuild watches for all tasks across all projects.
+   * Rebuild watches for all tasks and project roots across all projects.
    * Call on startup and when tasks/projects change.
    */
   refresh(): void {
@@ -34,6 +34,14 @@ export class SessionWatcher {
 
     for (const project of allProjects) {
       const projectDir = getProjectDir(project.slug);
+
+      // Watch project root sessions (root:<projectId>)
+      const rootHash = computeProjectHash(projectDir);
+      if (!newHashes.has(rootHash)) {
+        newHashes.set(rootHash, new Set());
+      }
+      newHashes.get(rootHash)!.add(`root:${project.id}`);
+
       const tasks = listTasks(project.id);
 
       for (const task of tasks) {

@@ -197,48 +197,36 @@ function createWindow(): BrowserWindow {
     });
   }
 
-  // Keyboard handling: prevent Chromium built-in shortcuts from stealing terminal keys,
-  // and handle zoom shortcuts.
-  let redispatching = false;
+  // Keyboard shortcuts handled at the Electron level (before Chromium processes them).
+  // Zoom is consumed here. DevTools shortcuts (Ctrl+Shift+I/J) are blocked so they
+  // don't steal focus from the terminal. Ctrl+Shift+C is NOT blocked — it must reach
+  // the renderer so xterm.js can copy the selection.
+  const ZOOM_STEP = 0.5;
+  const zoomKeys: Record<string, (wc: Electron.WebContents) => void> = {
+    "=": (wc) => wc.setZoomLevel(wc.getZoomLevel() + ZOOM_STEP),
+    "+": (wc) => wc.setZoomLevel(wc.getZoomLevel() + ZOOM_STEP),
+    "-": (wc) => wc.setZoomLevel(wc.getZoomLevel() - ZOOM_STEP),
+    "0": (wc) => wc.setZoomLevel(0),
+  };
+  const blockedDevToolsKeys = new Set(["I", "J"]);
+
   win.webContents.on("before-input-event", (event, input) => {
     if (input.type !== "keyDown") return;
     if (!(input.control || input.meta)) return;
 
-    // Guard: let re-dispatched events pass through to the renderer
-    if (redispatching) return;
-
-    // Zoom: Ctrl+=/Ctrl+-/Ctrl+0
-    const wc = win.webContents;
+    // Ctrl+key (no shift) → zoom
     if (!input.shift) {
-      if (input.key === "=" || input.key === "+") {
-        wc.setZoomLevel(wc.getZoomLevel() + 0.5);
+      const action = zoomKeys[input.key];
+      if (action) {
+        action(win.webContents);
         event.preventDefault();
-        return;
       }
-      if (input.key === "-") {
-        wc.setZoomLevel(wc.getZoomLevel() - 0.5);
-        event.preventDefault();
-        return;
-      }
-      if (input.key === "0") {
-        wc.setZoomLevel(0);
-        event.preventDefault();
-        return;
-      }
+      return;
     }
 
-    // Block Chromium DevTools shortcuts — they steal Ctrl+Shift+C/I/J from the terminal.
-    // DevTools is still accessible via menu (dev) or F12.
-    if (input.shift && (input.key === "C" || input.key === "I" || input.key === "J")) {
+    // Ctrl+Shift+I/J → block DevTools (accessible via menu in dev, blocked in prod)
+    if (blockedDevToolsKeys.has(input.key)) {
       event.preventDefault();
-      // Re-dispatch so the renderer (xterm.js) receives the event
-      redispatching = true;
-      wc.sendInputEvent({
-        type: "keyDown",
-        keyCode: input.key,
-        modifiers: ["control", "shift"],
-      });
-      redispatching = false;
     }
   });
 

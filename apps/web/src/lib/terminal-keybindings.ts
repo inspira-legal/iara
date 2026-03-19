@@ -5,19 +5,78 @@ export interface KeybindingHandlers {
   onModChange: ((held: boolean) => void) | null;
 }
 
-/** Returns true if the event matches a keybinding we handle. */
-function matchesKeybinding(event: KeyboardEvent): boolean {
-  // Shift+Enter (no ctrl) = newline
-  if (event.shiftKey && !event.ctrlKey && !event.metaKey && event.key === "Enter") return true;
+// ---------------------------------------------------------------------------
+// Keybinding definitions
+// ---------------------------------------------------------------------------
 
-  const isCtrl = event.ctrlKey || event.metaKey;
-  if (!isCtrl) return false;
+type Action = (term: Terminal, write: (data: string) => void, handlers: KeybindingHandlers) => void;
 
-  if (event.shiftKey) {
-    return event.code === "KeyC" || event.code === "KeyV" || event.code === "KeyA";
-  }
-  return event.key === "Backspace";
+interface Keybinding {
+  ctrl: boolean;
+  shift: boolean;
+  key: string; // lowercase key value
+  action: Action;
 }
+
+const KEYBINDINGS: Keybinding[] = [
+  {
+    ctrl: true,
+    shift: true,
+    key: "c",
+    action: (term, _write, handlers) => {
+      const selection = term.getSelection();
+      if (selection) {
+        void navigator.clipboard.writeText(selection);
+        handlers.onCopy?.();
+      }
+    },
+  },
+  {
+    ctrl: true,
+    shift: true,
+    key: "v",
+    action: (term) => {
+      void navigator.clipboard.readText().then((text) => {
+        if (text) term.paste(text);
+      });
+    },
+  },
+  {
+    ctrl: true,
+    shift: true,
+    key: "a",
+    action: (term) => term.selectAll(),
+  },
+  {
+    ctrl: true,
+    shift: false,
+    key: "backspace",
+    action: (_term, write) => write("\x1b\x7f"),
+  },
+  {
+    ctrl: false,
+    shift: true,
+    key: "enter",
+    action: (_term, write) => write("\n"),
+  },
+];
+
+// ---------------------------------------------------------------------------
+// Matching
+// ---------------------------------------------------------------------------
+
+function findBinding(event: KeyboardEvent): Keybinding | undefined {
+  const isCtrl = event.ctrlKey || event.metaKey;
+  const key = event.key.toLowerCase();
+
+  return KEYBINDINGS.find(
+    (b) => b.ctrl === isCtrl && b.shift === event.shiftKey && b.key === key,
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Setup
+// ---------------------------------------------------------------------------
 
 export function setupTerminalKeybindings(
   term: Terminal,
@@ -34,49 +93,14 @@ export function setupTerminalKeybindings(
       handlers.onModChange?.(mod);
     }
 
+    const binding = findBinding(event);
+    if (!binding) return true; // let xterm handle it
+
     // Block both keydown and keyup for our keybindings (xterm.js issue #2293)
-    if (!matchesKeybinding(event)) return true;
     if (event.type !== "keydown") return false;
 
-    const isCtrl = event.ctrlKey || event.metaKey;
-
-    // Ctrl+Shift+C = Copy selection
-    if (isCtrl && event.shiftKey && event.code === "KeyC") {
-      const selection = term.getSelection();
-      if (selection) {
-        void navigator.clipboard.writeText(selection);
-        handlers.onCopy?.();
-      }
-      return false;
-    }
-
-    // Ctrl+Shift+V = Paste
-    if (isCtrl && event.shiftKey && event.code === "KeyV") {
-      void navigator.clipboard.readText().then((text) => {
-        if (text) term.paste(text);
-      });
-      return false;
-    }
-
-    // Ctrl+Shift+A = Select all
-    if (isCtrl && event.shiftKey && event.code === "KeyA") {
-      term.selectAll();
-      return false;
-    }
-
-    // Ctrl+Backspace = Delete word backward
-    if (isCtrl && !event.shiftKey && event.key === "Backspace") {
-      write("\x1b\x7f");
-      return false;
-    }
-
-    // Shift+Enter = Newline literal
-    if (!isCtrl && event.shiftKey && event.key === "Enter") {
-      write("\n");
-      return false;
-    }
-
-    return true;
+    binding.action(term, write, handlers);
+    return false;
   });
 
   return handlers;

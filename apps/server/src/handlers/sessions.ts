@@ -36,9 +36,8 @@ export function registerSessionHandlers(): void {
     const reposDir = path.join(projectDir, "default");
     const repoDirs = getRepoDirs(reposDir);
 
-    if (repoDirs.length === 0) {
-      repoDirs.push(projectDir);
-    }
+    // Always include project root — root sessions use projectDir as cwd
+    repoDirs.push(projectDir);
 
     return listSessions(repoDirs);
   });
