@@ -1,7 +1,6 @@
 import { create } from "zustand";
 import type { CreateProjectInput, Project, UpdateProjectInput } from "@iara/contracts";
 import { transport } from "../lib/ws-transport.js";
-import { useTaskStore } from "./tasks.js";
 
 interface ProjectState {
   projects: Project[];
@@ -26,7 +25,15 @@ export const useProjectStore = create<ProjectState & ProjectActions>((set) => ({
     set({ loading: true });
     try {
       const projects = await transport.request("projects.list", {});
-      set({ projects, loading: false });
+      set((state) => ({
+        projects,
+        loading: false,
+        // Auto-select first project if none selected
+        selectedProjectId:
+          state.selectedProjectId && projects.some((p: Project) => p.id === state.selectedProjectId)
+            ? state.selectedProjectId
+            : (projects[0]?.id ?? null),
+      }));
     } catch (err) {
       console.error("[projects] Failed to load projects:", err);
       set({ loading: false });
@@ -35,15 +42,8 @@ export const useProjectStore = create<ProjectState & ProjectActions>((set) => ({
 
   selectProject: (id) => {
     const { selectedProjectId } = useProjectStore.getState();
-    if (id === selectedProjectId) {
-      // Toggle off: deselect project and clear tasks
-      set({ selectedProjectId: null });
-      useTaskStore.getState().clearTasks();
-    } else {
-      // Select new project: clear previous tasks
-      useTaskStore.getState().clearTasks();
-      set({ selectedProjectId: id });
-    }
+    if (id === selectedProjectId) return;
+    set({ selectedProjectId: id });
   },
 
   createProject: async (input) => {

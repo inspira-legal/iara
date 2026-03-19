@@ -21,7 +21,7 @@ function HomePage() {
   const project = projects.find((p) => p.id === selectedProjectId);
   const task = tasks.find((t) => t.id === selectedTaskId);
 
-  if (!project) {
+  if (!project && !task) {
     return (
       <div className="flex h-full items-center justify-center text-zinc-500">
         <p>Select a project to get started</p>
@@ -29,8 +29,16 @@ function HomePage() {
     );
   }
 
-  if (!task) {
+  if (!task && project) {
     return <ProjectView project={project} />;
+  }
+
+  if (!project) {
+    return (
+      <div className="flex h-full items-center justify-center text-zinc-500">
+        <p>Select a project to get started</p>
+      </div>
+    );
   }
 
   const handleComplete = async () => {

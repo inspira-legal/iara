@@ -11,6 +11,7 @@ const MAX_VISIBLE_TASKS = 6;
 interface ProjectNodeProps {
   project: Project;
   isExpanded: boolean;
+  isSelected: boolean;
   onToggle: () => void;
   selectedTaskId: string | null;
   onSelectTask: (id: string) => void;
@@ -22,6 +23,7 @@ interface ProjectNodeProps {
 export function ProjectNode({
   project,
   isExpanded,
+  isSelected,
   onToggle,
   selectedTaskId,
   onSelectTask,
@@ -85,7 +87,9 @@ export function ProjectNode({
       <div className="flex flex-col">
         {/* Project header */}
         <div
-          className="group flex items-center gap-1 rounded-md px-2 py-1.5 hover:bg-zinc-800/50"
+          className={`group flex items-center gap-1 rounded-md px-2 py-1.5 transition-colors ${
+            isSelected ? "bg-zinc-800 text-zinc-100" : "hover:bg-zinc-800/50"
+          }`}
           onContextMenu={handleContextMenu}
         >
           <button

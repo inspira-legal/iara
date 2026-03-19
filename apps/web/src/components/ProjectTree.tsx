@@ -14,6 +14,7 @@ import type { Project } from "@iara/contracts";
 import { ProjectNode } from "./ProjectNode";
 import { useSidebarStore } from "~/stores/sidebar";
 import { useTaskStore } from "~/stores/tasks";
+import { useProjectStore } from "~/stores/projects";
 
 interface ProjectTreeProps {
   projects: Project[];
@@ -41,6 +42,7 @@ export function ProjectTree({
     setProjectOrder,
   } = useSidebarStore();
   const { selectedTaskId, selectTask, getTasksForProject } = useTaskStore();
+  const { selectProject, selectedProjectId } = useProjectStore();
   const containerRef = useRef<HTMLDivElement>(null);
 
   // Sort projects by persisted order, unordered ones go to the end
@@ -104,8 +106,11 @@ export function ProjectTree({
           e.preventDefault();
           const nextIdx = Math.min(currentIdx + 1, flatItems.length - 1);
           const item = flatItems[nextIdx];
-          if (item?.type === "task") selectTask(item.id);
-          else if (item?.type === "project") {
+          if (item?.type === "task") {
+            selectProject(item.projectId);
+            selectTask(item.id);
+          } else if (item?.type === "project") {
+            selectProject(item.id);
             selectTask(null);
             expandProject(item.id);
           }
@@ -115,8 +120,13 @@ export function ProjectTree({
           e.preventDefault();
           const prevIdx = Math.max(currentIdx - 1, 0);
           const item = flatItems[prevIdx];
-          if (item?.type === "task") selectTask(item.id);
-          else if (item?.type === "project") selectTask(null);
+          if (item?.type === "task") {
+            selectProject(item.projectId);
+            selectTask(item.id);
+          } else if (item?.type === "project") {
+            selectProject(item.id);
+            selectTask(null);
+          }
           break;
         }
         case "ArrowRight": {
@@ -145,7 +155,15 @@ export function ProjectTree({
         }
       }
     },
-    [getCurrentIndex, flatItems, selectTask, expandProject, collapseProject, toggleProject],
+    [
+      getCurrentIndex,
+      flatItems,
+      selectTask,
+      selectProject,
+      expandProject,
+      collapseProject,
+      toggleProject,
+    ],
   );
 
   if (projects.length === 0) {
@@ -178,9 +196,26 @@ export function ProjectTree({
               key={project.id}
               project={project}
               isExpanded={expandedProjectIds.has(project.id)}
-              onToggle={() => toggleProject(project.id)}
+              isSelected={selectedProjectId === project.id && !selectedTaskId}
+              onToggle={() => {
+                const isSelectedAndExpanded =
+                  selectedProjectId === project.id &&
+                  !selectedTaskId &&
+                  expandedProjectIds.has(project.id);
+
+                if (isSelectedAndExpanded) {
+                  collapseProject(project.id);
+                } else {
+                  selectProject(project.id);
+                  selectTask(null);
+                  expandProject(project.id);
+                }
+              }}
               selectedTaskId={selectedTaskId}
-              onSelectTask={(id) => selectTask(id)}
+              onSelectTask={(id) => {
+                selectProject(project.id);
+                selectTask(id);
+              }}
               onCreateTask={() => onCreateTask(project.id)}
               onDeleteProject={() => onDeleteProject(project.id)}
               onRenameProject={(newName) => onRenameProject(project.id, newName)}
@@ -198,6 +233,7 @@ function SortableProjectNode({
 }: {
   project: Project;
   isExpanded: boolean;
+  isSelected: boolean;
   onToggle: () => void;
   selectedTaskId: string | null;
   onSelectTask: (id: string) => void;
