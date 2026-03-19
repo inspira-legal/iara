@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import type { CreateTaskInput, Task } from "@iara/contracts";
 import { transport } from "../lib/ws-transport.js";
+import { useTerminalStore } from "./terminal.js";
 
 interface TaskState {
   tasks: Task[];
@@ -14,7 +15,7 @@ interface TaskActions {
   loadTasks(projectId: string): Promise<void>;
   selectTask(id: string | null): void;
   createTask(projectId: string, input: CreateTaskInput): Promise<Task>;
-  completeTask(id: string): Promise<void>;
+
   deleteTask(id: string): Promise<void>;
   clearTasks(): void;
   clearTasksForProject(projectId: string): void;
@@ -61,25 +62,10 @@ export const useTaskStore = create<TaskState & TaskActions>((set, get) => ({
     return task;
   },
 
-  completeTask: async (id) => {
-    await transport.request("tasks.complete", { id });
-    set((state) => {
-      const updater = (t: Task) =>
-        t.id === id ? { ...t, status: "completed" as const } : t;
-      const nextCache = new Map(state.tasksByProject);
-      for (const [pid, tasks] of nextCache) {
-        if (tasks.some((t) => t.id === id)) {
-          nextCache.set(pid, tasks.map(updater));
-        }
-      }
-      return {
-        tasks: state.tasks.map(updater),
-        tasksByProject: nextCache,
-      };
-    });
-  },
-
   deleteTask: async (id) => {
+    // Destroy any active terminal for this task
+    await useTerminalStore.getState().destroy(id);
+
     // Optimistic update: remove from UI immediately
     const prev = useTaskStore.getState();
     const nextCache = new Map(prev.tasksByProject);
@@ -99,7 +85,11 @@ export const useTaskStore = create<TaskState & TaskActions>((set, get) => ({
     } catch (err) {
       // Rollback on failure
       console.error("[tasks] Failed to delete task:", err);
-      set({ tasks: prev.tasks, selectedTaskId: prev.selectedTaskId, tasksByProject: prev.tasksByProject });
+      set({
+        tasks: prev.tasks,
+        selectedTaskId: prev.selectedTaskId,
+        tasksByProject: prev.tasksByProject,
+      });
     }
   },
 
@@ -116,9 +106,8 @@ export const useTaskStore = create<TaskState & TaskActions>((set, get) => ({
       return {
         tasks: nextTasks,
         tasksByProject: nextCache,
-        selectedTaskId: state.selectedTaskId && taskIds.has(state.selectedTaskId)
-          ? null
-          : state.selectedTaskId,
+        selectedTaskId:
+          state.selectedTaskId && taskIds.has(state.selectedTaskId) ? null : state.selectedTaskId,
       };
     });
   },

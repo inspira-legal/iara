@@ -31,8 +31,7 @@ export function ProjectNode({
   onDeleteProject,
   onRenameProject,
 }: ProjectNodeProps) {
-  const { loadTasks, getTasksForProject, completeTask, deleteTask, loading, error } =
-    useTaskStore();
+  const { loadTasks, getTasksForProject, deleteTask, loading, error } = useTaskStore();
 
   const tasks = getTasksForProject(project.id);
   const [showAll, setShowAll] = useState(false);
@@ -180,7 +179,6 @@ export function ProjectNode({
                     task={task}
                     isSelected={selectedTaskId === task.id}
                     onSelect={() => onSelectTask(task.id)}
-                    onComplete={() => void completeTask(task.id)}
                     onDelete={() => setDeleteTarget(task)}
                     onRename={async (newName) => {
                       // TODO: wire up task rename when API supports it

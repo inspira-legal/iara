@@ -25,6 +25,7 @@ O store mantém dois estados paralelos: `tasks[]` (lista ativa) e `tasksByProjec
 **Onde:** `stores/projects.ts:61-66`
 
 Ao deletar um projeto:
+
 - **Não limpa tasks:** `tasksByProject` e `tasks[]` mantêm tasks do projeto deletado
 - **Não limpa `selectedTaskId`:** se a task selecionada pertencia ao projeto deletado, `selectedTaskId` fica apontando para uma task órfã
 - **Não limpa sidebar:** `expandedProjectIds` e `projectOrder` mantêm referências ao projeto deletado
@@ -85,11 +86,11 @@ O estado do terminal (terminalId, sessionId, status) é `useState` local. Se o u
 
 ## Priorização
 
-| # | Severidade | Esforço |
-|---|-----------|---------|
-| P1 | Alta — quebra visual da sidebar | Baixo |
-| P2 | Alta — estado órfão causa bugs | Médio |
-| P4 | Média — dev commands não funcionam | Baixo |
-| P3 | Baixa — UX menor | Baixo |
-| P7 | Média — sessões não atualizam | Médio |
-| P8 | Média — terminal se perde ao navegar | Médio |
+| #   | Severidade                           | Esforço |
+| --- | ------------------------------------ | ------- |
+| P1  | Alta — quebra visual da sidebar      | Baixo   |
+| P2  | Alta — estado órfão causa bugs       | Médio   |
+| P4  | Média — dev commands não funcionam   | Baixo   |
+| P3  | Baixa — UX menor                     | Baixo   |
+| P7  | Média — sessões não atualizam        | Médio   |
+| P8  | Média — terminal se perde ao navegar | Médio   |

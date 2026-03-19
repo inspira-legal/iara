@@ -38,7 +38,7 @@ export type WsMethods = {
   "tasks.list": { params: { projectId: string }; result: Task[] };
   "tasks.get": { params: { id: string }; result: Task | null };
   "tasks.create": { params: { projectId: string } & CreateTaskInput; result: Task };
-  "tasks.complete": { params: { id: string }; result: void };
+
   "tasks.delete": { params: { id: string }; result: void };
 
   // Launcher

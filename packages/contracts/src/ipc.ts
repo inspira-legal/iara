@@ -99,7 +99,7 @@ export interface DesktopBridge {
   listTasks(projectId: string): Promise<Task[]>;
   getTask(id: string): Promise<Task | null>;
   createTask(projectId: string, input: CreateTaskInput): Promise<Task>;
-  completeTask(id: string): Promise<void>;
+
   deleteTask(id: string): Promise<void>;
 
   // Launcher

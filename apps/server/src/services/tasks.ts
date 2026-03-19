@@ -86,25 +86,7 @@ export async function createTask(projectId: string, input: CreateTaskInput): Pro
   // Only insert into DB after worktrees are successfully created
   db.insert(schema.tasks).values(task).run();
 
-  return { ...task, status: "active", description: task.description ?? "" };
-}
-
-export async function completeTask(id: string): Promise<void> {
-  const task = getTask(id);
-  if (!task) throw new Error(`Task not found: ${id}`);
-
-  const project = getProject(task.projectId);
-  if (!project) throw new Error(`Project not found: ${task.projectId}`);
-
-  const now = new Date().toISOString();
-
-  db.update(schema.tasks)
-    .set({ status: "completed", updatedAt: now })
-    .where(eq(schema.tasks.id, id))
-    .run();
-
-  // Remove worktrees
-  await cleanupWorktrees(project.slug, task.slug);
+  return { ...task, description: task.description ?? "" };
 }
 
 export async function deleteTask(id: string): Promise<void> {

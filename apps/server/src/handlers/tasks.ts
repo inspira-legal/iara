@@ -1,5 +1,5 @@
 import { registerMethod } from "../router.js";
-import { listTasks, getTask, createTask, completeTask, deleteTask } from "../services/tasks.js";
+import { listTasks, getTask, createTask, deleteTask } from "../services/tasks.js";
 
 export function registerTaskHandlers(): void {
   registerMethod("tasks.list", async (params) => {
@@ -13,10 +13,6 @@ export function registerTaskHandlers(): void {
   registerMethod("tasks.create", async (params) => {
     const { projectId, ...input } = params;
     return createTask(projectId, input);
-  });
-
-  registerMethod("tasks.complete", async (params) => {
-    await completeTask(params.id);
   });
 
   registerMethod("tasks.delete", async (params) => {

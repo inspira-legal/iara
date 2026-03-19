@@ -22,7 +22,7 @@ export interface Task {
   name: string;
   description: string;
   branch: string;
-  status: "active" | "completed";
+
   createdAt: string;
   updatedAt: string;
 }

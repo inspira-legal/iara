@@ -1,8 +1,6 @@
 import { useEffect, useState } from "react";
 import {
   GitBranch,
-  CheckCircle,
-  Trash2,
   ChevronLeft,
   CheckCircle2,
   AlertCircle,
@@ -21,11 +19,9 @@ const FETCH_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
 interface TaskWorkspaceProps {
   project: Project;
   task: Task;
-  onCompleteTask: () => void;
-  onDeleteTask: () => void;
 }
 
-export function TaskWorkspace({ project, task, onCompleteTask, onDeleteTask }: TaskWorkspaceProps) {
+export function TaskWorkspace({ project, task }: TaskWorkspaceProps) {
   const terminalEntry = useTerminalStore((s) => s.getEntry(task.id));
   const resetToSessions = useTerminalStore((s) => s.resetToSessions);
   const createTerminal = useTerminalStore((s) => s.create);
@@ -88,7 +84,7 @@ export function TaskWorkspace({ project, task, onCompleteTask, onDeleteTask }: T
   return (
     <div className="flex h-full flex-col">
       {/* Header */}
-      <div className="flex items-center justify-between border-b border-zinc-800 px-4 py-2">
+      <div className="flex items-center border-b border-zinc-800 px-4 py-2">
         <div className="flex items-center gap-3">
           {hasTerminal && (
             <button
@@ -108,32 +104,15 @@ export function TaskWorkspace({ project, task, onCompleteTask, onDeleteTask }: T
             <GitBranch size={12} />
             <code className="rounded bg-zinc-800 px-1 py-0.5">{task.branch}</code>
           </div>
-          <div className="text-xs text-zinc-500">
-            <span className={task.status === "active" ? "text-blue-400" : "text-green-400"}>
-              {task.status}
-            </span>
-          </div>
-        </div>
-        <div className="flex items-center gap-1">
-          {task.status === "active" && (
-            <HeaderButton icon={CheckCircle} label="Complete" onClick={onCompleteTask} />
-          )}
-          <HeaderButton icon={Trash2} label="Delete" onClick={onDeleteTask} destructive />
         </div>
       </div>
 
       {/* Content */}
       {hasTerminal ? (
-        task.status === "active" ? (
-          <TerminalView
-            taskId={task.id}
-            {...(pendingResumeSessionId ? { resumeSessionId: pendingResumeSessionId } : {})}
-          />
-        ) : (
-          <div className="flex flex-1 items-center justify-center text-sm text-zinc-500">
-            Task completed
-          </div>
-        )
+        <TerminalView
+          taskId={task.id}
+          {...(pendingResumeSessionId ? { resumeSessionId: pendingResumeSessionId } : {})}
+        />
       ) : (
         <TaskDetailView
           task={task}
@@ -254,38 +233,6 @@ function RepoCard({ repo }: { repo: RepoInfo }) {
         </span>
       )}
     </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Shared UI
-// ---------------------------------------------------------------------------
-
-function HeaderButton({
-  icon: Icon,
-  label,
-  onClick,
-  destructive,
-}: {
-  icon: React.ComponentType<{ size?: number }>;
-  label: string;
-  onClick: () => void;
-  destructive?: boolean;
-}) {
-  const classes = destructive
-    ? "text-zinc-500 hover:text-red-400 hover:bg-red-950"
-    : "text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800";
-
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`flex items-center gap-1 rounded px-2 py-1 text-xs transition-colors ${classes}`}
-      title={label}
-    >
-      <Icon size={12} />
-      {label}
-    </button>
   );
 }
 

@@ -131,6 +131,9 @@ export const useTerminalStore = create<TerminalState & TerminalActions>((set, ge
 }));
 
 // Global subscription for terminal exit events
-transport.subscribe("terminal:exit", ({ terminalId, exitCode }: { terminalId: string; exitCode: number }) => {
-  useTerminalStore.getState().handleExit(terminalId, exitCode);
-});
+transport.subscribe(
+  "terminal:exit",
+  ({ terminalId, exitCode }: { terminalId: string; exitCode: number }) => {
+    useTerminalStore.getState().handleExit(terminalId, exitCode);
+  },
+);

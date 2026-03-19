@@ -1,5 +1,5 @@
 import { useState, useCallback } from "react";
-import { CheckCircle2, GitBranch, Circle, Pencil, CheckSquare, Copy, Trash2 } from "lucide-react";
+import { GitBranch, Circle, Pencil, Copy, Trash2 } from "lucide-react";
 import type { Task } from "@iara/contracts";
 import { SidebarContextMenu, type ContextMenuItem } from "./SidebarContextMenu";
 import { formatRelativeTime, formatAbsoluteTime } from "~/lib/format-relative-time";
@@ -8,7 +8,7 @@ interface TaskNodeProps {
   task: Task;
   isSelected: boolean;
   onSelect: () => void;
-  onComplete: () => void;
+
   onDelete: () => void;
   onRename: (newName: string) => Promise<void> | void;
 }
@@ -17,15 +17,13 @@ export function TaskNode({
   task,
   isSelected,
   onSelect,
-  onComplete,
+
   onDelete,
   onRename,
 }: TaskNodeProps) {
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(task.name);
-
-  const isCompleted = task.status === "completed";
 
   const handleContextMenu = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
@@ -58,15 +56,7 @@ export function TaskNode({
         setEditing(true);
       },
     },
-    ...(!isCompleted
-      ? [
-          {
-            label: "Complete",
-            icon: CheckSquare,
-            onClick: onComplete,
-          },
-        ]
-      : []),
+
     {
       label: "Copy Branch",
       icon: Copy,
@@ -95,12 +85,8 @@ export function TaskNode({
         }`}
       >
         {/* Status icon */}
-        <div className="mt-0.5 shrink-0" title={isCompleted ? "Completed" : "Active"}>
-          {isCompleted ? (
-            <CheckCircle2 size={14} className="text-emerald-400" />
-          ) : (
-            <Circle size={14} className="fill-current text-blue-400" />
-          )}
+        <div className="mt-0.5 shrink-0" title="Active">
+          <Circle size={14} className="fill-current text-blue-400" />
         </div>
 
         {/* Content */}

@@ -18,7 +18,7 @@ export const tasks = sqliteTable("tasks", {
   name: text("name").notNull(),
   description: text("description").notNull().default(""),
   branch: text("branch").notNull(),
-  status: text("status").notNull().default("active"),
+
   createdAt: text("created_at").notNull(),
   updatedAt: text("updated_at").notNull(),
 });
