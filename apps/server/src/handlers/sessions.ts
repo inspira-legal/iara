@@ -5,6 +5,14 @@ import { getProject, getProjectDir } from "../services/projects.js";
 import { listSessions } from "../services/sessions.js";
 import { getTask } from "../services/tasks.js";
 
+function getRepoDirs(reposDir: string): string[] {
+  if (!fs.existsSync(reposDir)) return [];
+  return fs
+    .readdirSync(reposDir)
+    .filter((name) => fs.statSync(path.join(reposDir, name)).isDirectory())
+    .map((name) => path.join(reposDir, name));
+}
+
 export function registerSessionHandlers(): void {
   registerMethod("sessions.list", async (params) => {
     const task = getTask(params.taskId);
@@ -33,6 +41,21 @@ export function registerSessionHandlers(): void {
 
     if (repoDirs.length === 0) {
       repoDirs.push(taskDir);
+    }
+
+    return listSessions(repoDirs);
+  });
+
+  registerMethod("sessions.listByProject", async (params) => {
+    const project = getProject(params.projectId);
+    if (!project) throw new Error(`Project not found: ${params.projectId}`);
+
+    const projectDir = getProjectDir(project.slug);
+    const reposDir = path.join(projectDir, ".repos");
+    const repoDirs = getRepoDirs(reposDir);
+
+    if (repoDirs.length === 0) {
+      repoDirs.push(projectDir);
     }
 
     return listSessions(repoDirs);

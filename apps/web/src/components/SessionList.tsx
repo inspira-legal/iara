@@ -3,67 +3,84 @@ import { Clock, MessageSquare, Play, Plus } from "lucide-react";
 import type { SessionInfo } from "@iara/contracts";
 import { transport } from "~/lib/ws-transport.js";
 
-interface SessionListProps {
-  taskId: string;
-  onLaunch: (resumeSessionId?: string | undefined) => void;
-}
+type SessionListProps = {
+  onLaunch?: (resumeSessionId?: string | undefined) => void;
+} & ({ taskId: string; projectId?: never } | { projectId: string; taskId?: never });
 
-export function SessionList({ taskId, onLaunch }: SessionListProps) {
+export function SessionList({ taskId, projectId, onLaunch }: SessionListProps) {
   const [sessions, setSessions] = useState<SessionInfo[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     setLoading(true);
-    transport
-      .request("sessions.list", { taskId })
+
+    const promise = taskId
+      ? transport.request("sessions.list", { taskId })
+      : transport.request("sessions.listByProject", { projectId: projectId! });
+
+    promise
       .then(setSessions)
       .catch(() => setSessions([]))
       .finally(() => setLoading(false));
-  }, [taskId]);
+  }, [taskId, projectId]);
 
   return (
     <div>
       <div className="mb-2 flex items-center justify-between">
         <h3 className="text-sm font-medium text-zinc-300">Sessions</h3>
-        <button
-          type="button"
-          onClick={() => onLaunch()}
-          className="flex items-center gap-1 rounded-md px-2 py-1 text-xs text-blue-400 hover:bg-zinc-800"
-        >
-          <Plus size={12} />
-          New
-        </button>
+        {onLaunch && (
+          <button
+            type="button"
+            onClick={() => onLaunch()}
+            className="flex items-center gap-1 rounded-md px-2 py-1 text-xs text-blue-400 hover:bg-zinc-800"
+          >
+            <Plus size={12} />
+            New
+          </button>
+        )}
       </div>
 
       {loading ? (
         <p className="py-2 text-xs text-zinc-600">Loading sessions...</p>
       ) : sessions.length === 0 ? (
-        <p className="py-2 text-xs text-zinc-600">No sessions yet. Launch Claude to start one.</p>
+        <p className="py-2 text-xs text-zinc-600">No sessions yet.</p>
       ) : (
         <ul className="space-y-1">
           {sessions.map((session) => (
             <li key={session.id}>
-              <button
-                type="button"
-                onClick={() => onLaunch(session.id)}
-                className="flex w-full items-center gap-3 rounded-md px-2 py-1.5 text-left text-xs hover:bg-zinc-800"
-              >
-                <Play size={12} className="shrink-0 text-zinc-500" />
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2 text-zinc-300">
-                    <Clock size={10} />
-                    <span>{formatDate(session.lastMessageAt)}</span>
-                  </div>
-                  <div className="flex items-center gap-2 text-zinc-600">
-                    <MessageSquare size={10} />
-                    <span>{session.messageCount} messages</span>
-                  </div>
+              {onLaunch ? (
+                <button
+                  type="button"
+                  onClick={() => onLaunch(session.id)}
+                  className="flex w-full items-center gap-3 rounded-md px-2 py-1.5 text-left text-xs hover:bg-zinc-800"
+                >
+                  <Play size={12} className="shrink-0 text-zinc-500" />
+                  <SessionMeta session={session} />
+                </button>
+              ) : (
+                <div className="flex w-full items-center gap-3 rounded-md px-2 py-1.5 text-left text-xs">
+                  <SessionMeta session={session} />
                 </div>
-              </button>
+              )}
             </li>
           ))}
         </ul>
       )}
+    </div>
+  );
+}
+
+function SessionMeta({ session }: { session: SessionInfo }) {
+  return (
+    <div className="min-w-0 flex-1">
+      <div className="flex items-center gap-2 text-zinc-300">
+        <Clock size={10} />
+        <span>{formatDate(session.lastMessageAt)}</span>
+      </div>
+      <div className="flex items-center gap-2 text-zinc-600">
+        <MessageSquare size={10} />
+        <span>{session.messageCount} messages</span>
+      </div>
     </div>
   );
 }

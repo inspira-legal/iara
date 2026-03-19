@@ -64,11 +64,16 @@ export function buildSystemPrompt(ctx: TaskContext): string {
   // # WORKTREES
   const env = buildEnvironmentSection(ctx);
   if (env) {
-    sections.push(`# WORKTREES\n${env}\n\nYour working directory is NOT a git repository. All code and git operations must happen inside the worktree directories listed above.`);
+    sections.push(
+      `# WORKTREES\n${env}\n\nYour working directory is NOT a git repository. All code and git operations must happen inside the worktree directories listed above.`,
+    );
   }
 
   // PROJECT.md and TASK.md — wrapped in tags, only if non-empty
-  for (const [file, tag] of [["PROJECT.md", "project"], ["TASK.md", "task"]] as const) {
+  for (const [file, tag] of [
+    ["PROJECT.md", "project"],
+    ["TASK.md", "task"],
+  ] as const) {
     const filePath = path.join(ctx.taskDir, file);
     if (fs.existsSync(filePath)) {
       const content = fs.readFileSync(filePath, "utf-8").trim();
@@ -114,7 +119,9 @@ export function launchClaude(config: LaunchConfig): LaunchResult {
   const sessionId = config.resumeSessionId ?? config.sessionId ?? crypto.randomUUID();
   const systemPrompt =
     config.appendSystemPrompt ??
-    (config.taskContext ? buildSystemPrompt(config.taskContext) : buildSystemPromptFromDir(config.taskDir));
+    (config.taskContext
+      ? buildSystemPrompt(config.taskContext)
+      : buildSystemPromptFromDir(config.taskDir));
   const args = buildClaudeArgs({ ...config, sessionId, appendSystemPrompt: systemPrompt });
 
   const env: Record<string, string> = {

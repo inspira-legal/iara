@@ -46,6 +46,7 @@ export type WsMethods = {
 
   // Sessions
   "sessions.list": { params: { taskId: string }; result: SessionInfo[] };
+  "sessions.listByProject": { params: { projectId: string }; result: SessionInfo[] };
 
   // Prompts
   "prompts.read": { params: { filePath: string }; result: string };

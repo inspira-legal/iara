@@ -8,20 +8,21 @@ import { RotateCw } from "lucide-react";
 
 interface TerminalViewProps {
   taskId: string;
+  resumeSessionId?: string;
 }
 
-export function TerminalView({ taskId }: TerminalViewProps) {
+export function TerminalView({ taskId, resumeSessionId }: TerminalViewProps) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const { terminalId, status, exitCode, create, restart } = useTerminal(taskId);
+  const { terminalId, status, exitCode, create, restart, destroy } = useTerminal(taskId);
   const terminalIdRef = useRef<string | null>(null);
 
   terminalIdRef.current = terminalId;
 
   useEffect(() => {
     if (status === "idle") {
-      void create();
+      void create(resumeSessionId);
     }
-  }, [status, create]);
+  }, [status, create, resumeSessionId]);
 
   // Attach/detach the cached xterm instance to the DOM
   useEffect(() => {
