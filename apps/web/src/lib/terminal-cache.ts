@@ -6,6 +6,7 @@ import { WebLinksAddon } from "@xterm/addon-web-links";
 import { WebFontsAddon } from "@xterm/addon-web-fonts";
 import { transport } from "./ws-transport.js";
 import { setupTerminalKeybindings, type KeybindingHandlers } from "./terminal-keybindings.js";
+import { findFileLinks, parseFilePath } from "./terminal-links.js";
 
 interface CachedTerminal {
   term: Terminal;
@@ -41,18 +42,38 @@ const THEME = {
   brightWhite: "#ffffff",
 };
 
-// Hoisted regexes — compiled once, reset per call via lastIndex
-const FILE_URL_RE = /file:\/\/[^\s"')\]>]+/g;
-const ABS_PATH_RE = /(?<!\w)(\/[\w.@\-/]+\.\w+(?::\d+(?::\d+)?)?)/g;
 
-function parseFilePath(text: string): { filePath: string; line?: number; col?: number } {
-  const cleaned = text.replace(/^file:\/\//, "");
-  const parts = cleaned.split(":");
-  const result: { filePath: string; line?: number; col?: number } = { filePath: parts[0]! };
-  if (parts[1]) result.line = Number(parts[1]);
-  if (parts[2]) result.col = Number(parts[2]);
-  return result;
+// Track Ctrl/Meta state globally for link decoration toggling
+let modHeld = false;
+const activeDecorations = new Set<{ underline: boolean; pointerCursor: boolean }>();
+
+function updateDecorations(): void {
+  for (const d of activeDecorations) {
+    d.underline = modHeld;
+    d.pointerCursor = modHeld;
+  }
 }
+
+window.addEventListener("keydown", (e) => {
+  if ((e.ctrlKey || e.metaKey) && !modHeld) {
+    modHeld = true;
+    updateDecorations();
+  }
+});
+window.addEventListener("keyup", (e) => {
+  if (!e.ctrlKey && !e.metaKey && modHeld) {
+    modHeld = false;
+    updateDecorations();
+  }
+});
+// Also clear when window loses focus
+window.addEventListener("blur", () => {
+  if (modHeld) {
+    modHeld = false;
+    updateDecorations();
+  }
+});
+
 
 export function getOrCreateTerminal(terminalId: string): CachedTerminal {
   const existing = cache.get(terminalId);
@@ -91,38 +112,37 @@ export function getOrCreateTerminal(terminalId: string): CachedTerminal {
       const line = term.buffer.active.getLine(lineNumber - 1);
       if (!line) return callback(undefined);
       const text = line.translateToString();
-
-      // Reset lastIndex for global regexes
-      FILE_URL_RE.lastIndex = 0;
-      ABS_PATH_RE.lastIndex = 0;
-
-      const links: { startIndex: number; length: number; text: string }[] = [];
-      let match;
-
-      while ((match = FILE_URL_RE.exec(text)) !== null) {
-        links.push({ startIndex: match.index, length: match[0].length, text: match[0] });
-      }
-      while ((match = ABS_PATH_RE.exec(text)) !== null) {
-        links.push({ startIndex: match.index, length: match[0].length, text: match[0] });
-      }
+      const links = findFileLinks(text);
 
       if (links.length === 0) return callback(undefined);
       callback(
-        links.map((l) => ({
-          range: {
-            start: { x: l.startIndex + 1, y: lineNumber },
-            end: { x: l.startIndex + l.length + 1, y: lineNumber },
-          },
-          text: l.text,
-          decorations: { underline: true, pointerCursor: true },
-          activate: (e: MouseEvent) => {
-            if (!e.ctrlKey && !e.metaKey) return;
-            const params = parseFilePath(l.text);
-            transport.request("files.open", params).catch((err) => {
-              console.error("[files.open] Failed:", err);
-            });
-          },
-        })),
+        links.map((l) => {
+          const decorations = { underline: modHeld, pointerCursor: modHeld };
+          return {
+            range: {
+              start: { x: l.startIndex + 1, y: lineNumber },
+              end: { x: l.startIndex + l.length + 1, y: lineNumber },
+            },
+            text: l.text,
+            decorations,
+            hover: () => {
+              activeDecorations.add(decorations);
+              decorations.underline = modHeld;
+              decorations.pointerCursor = modHeld;
+            },
+            leave: () => {
+              activeDecorations.delete(decorations);
+              decorations.underline = false;
+              decorations.pointerCursor = false;
+            },
+            activate: (e: MouseEvent) => {
+              if (!e.ctrlKey && !e.metaKey) return;
+              transport.request("files.open", parseFilePath(l.text)).catch((err) => {
+                console.error("[files.open] Failed:", err);
+              });
+            },
+          };
+        }),
       );
     },
   });
