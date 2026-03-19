@@ -63,7 +63,10 @@ function spawnServer(): void {
   if (!isDevelopment) {
     env.IARA_WEB_DIR = path.join(process.resourcesPath, "web");
     const appRoot = app.getAppPath();
-    const unpackedModules = path.join(appRoot.replace("app.asar", "app.asar.unpacked"), "node_modules");
+    const unpackedModules = path.join(
+      appRoot.replace("app.asar", "app.asar.unpacked"),
+      "node_modules",
+    );
     const asarModules = path.join(appRoot, "node_modules");
     env.NODE_PATH = [unpackedModules, asarModules].join(path.delimiter);
   }
@@ -172,8 +175,18 @@ function createWindow(): BrowserWindow {
   browserPanel.attach(win);
   win.on("resize", () => browserPanel.updateBounds());
 
-  // Remove default menu in production
-  if (!isDevelopment) {
+  // Remove default menu to prevent Electron accelerators (Ctrl+C, Ctrl+V, Ctrl+A, etc.)
+  // from intercepting terminal control keys. DevTools is still accessible via F12 / Ctrl+Shift+I.
+  if (isDevelopment) {
+    Menu.setApplicationMenu(
+      Menu.buildFromTemplate([
+        {
+          label: "View",
+          submenu: [{ role: "toggleDevTools" }, { role: "reload" }, { role: "forceReload" }],
+        },
+      ]),
+    );
+  } else {
     Menu.setApplicationMenu(null);
   }
 
