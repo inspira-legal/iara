@@ -1,4 +1,3 @@
-import * as crypto from "node:crypto";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as os from "node:os";
@@ -15,20 +14,29 @@ export function listSessions(repoDirs: string[]): SessionInfo[] {
   const claudeDir = getClaudeProjectsDir();
   if (!claudeDir || !fs.existsSync(claudeDir)) return [];
 
-  const hash = computeProjectHash(repoDirs);
-  const projectSessionDir = path.join(claudeDir, hash);
-
-  if (!fs.existsSync(projectSessionDir)) return [];
-
-  const files = fs.readdirSync(projectSessionDir).filter((f) => f.endsWith(".jsonl"));
-
+  const seen = new Set<string>();
   const sessions: SessionInfo[] = [];
-  for (const file of files) {
-    const filePath = path.join(projectSessionDir, file);
-    const id = path.basename(file, ".jsonl");
-    const meta = getSessionMetadata(filePath);
-    if (meta) {
-      sessions.push({ id, filePath, ...meta });
+
+  for (const dir of repoDirs) {
+    const hash = computeProjectHash(dir);
+    const projectSessionDir = path.join(claudeDir, hash);
+
+    if (!fs.existsSync(projectSessionDir)) continue;
+
+    const files = fs
+      .readdirSync(projectSessionDir)
+      .filter((f) => f.endsWith(".jsonl"));
+
+    for (const file of files) {
+      const id = path.basename(file, ".jsonl");
+      if (seen.has(id)) continue;
+      seen.add(id);
+
+      const filePath = path.join(projectSessionDir, file);
+      const meta = getSessionMetadata(filePath);
+      if (meta) {
+        sessions.push({ id, filePath, ...meta });
+      }
     }
   }
 
@@ -56,7 +64,7 @@ export function getSessionMetadata(
           if (!createdAt) createdAt = entry.timestamp;
           lastMessageAt = entry.timestamp;
         }
-        if (entry.type === "human" || entry.type === "assistant") {
+        if (entry.type === "user" || entry.type === "assistant") {
           messageCount++;
         }
       } catch {
@@ -71,11 +79,10 @@ export function getSessionMetadata(
   }
 }
 
-export function computeProjectHash(dirs: string[]): string {
-  // Claude Code uses a hash of the sorted, normalized directory paths
-  const normalized = dirs.map((d) => path.resolve(d)).toSorted();
-  const input = normalized.join("\n");
-  return crypto.createHash("sha256").update(input).digest("hex").slice(0, 16);
+export function computeProjectHash(dir: string): string {
+  // Claude Code uses the cwd path with "/" replaced by "-"
+  const resolved = path.resolve(dir);
+  return resolved.replaceAll("/", "-");
 }
 
 function getClaudeProjectsDir(): string | null {
