@@ -2,12 +2,14 @@ import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { WebglAddon } from "@xterm/addon-webgl";
 import { transport } from "./ws-transport.js";
+import { setupTerminalKeybindings, type KeybindingHandlers } from "./terminal-keybindings.js";
 
 interface CachedTerminal {
   term: Terminal;
   fitAddon: FitAddon;
   unsub: () => void;
   terminalId: string;
+  keybindingHandlers: KeybindingHandlers;
 }
 
 const cache = new Map<string, CachedTerminal>();
@@ -49,6 +51,7 @@ export function getOrCreateTerminal(terminalId: string): CachedTerminal {
     customGlyphs: true,
     rescaleOverlappingGlyphs: true,
     drawBoldTextInBrightColors: false,
+    rightClickSelectsWord: true,
     theme: THEME,
   });
 
@@ -61,7 +64,12 @@ export function getOrCreateTerminal(terminalId: string): CachedTerminal {
     }
   });
 
-  const cached: CachedTerminal = { term, fitAddon, unsub, terminalId };
+  const write = (data: string) => {
+    transport.request("terminal.write", { terminalId, data }).catch(() => {});
+  };
+  const keybindingHandlers = setupTerminalKeybindings(term, write);
+
+  const cached: CachedTerminal = { term, fitAddon, unsub, terminalId, keybindingHandlers };
   cache.set(terminalId, cached);
   return cached;
 }
