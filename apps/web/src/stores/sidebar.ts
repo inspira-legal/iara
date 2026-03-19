@@ -15,6 +15,7 @@ interface SidebarActions {
   setProjectOrder(ids: string[]): void;
   toggleDevServerPanel(): void;
   hydrateFromStorage(): void;
+  removeProject(id: string): void;
 }
 
 function loadFromStorage(): Partial<SidebarState> {
@@ -108,5 +109,16 @@ export const useSidebarStore = create<SidebarState & SidebarActions>((set) => ({
   hydrateFromStorage: () => {
     const stored = loadFromStorage();
     set(stored);
+  },
+
+  removeProject: (id) => {
+    set((state) => {
+      const nextExpanded = new Set(state.expandedProjectIds);
+      nextExpanded.delete(id);
+      const nextOrder = state.projectOrder.filter((pid) => pid !== id);
+      const newState = { ...state, expandedProjectIds: nextExpanded, projectOrder: nextOrder };
+      saveToStorage(newState);
+      return { expandedProjectIds: nextExpanded, projectOrder: nextOrder };
+    });
   },
 }));

@@ -3,7 +3,7 @@ import { WebglAddon } from "@xterm/addon-webgl";
 import "@xterm/xterm/css/xterm.css";
 import { transport } from "~/lib/ws-transport.js";
 import { getOrCreateTerminal, destroyTerminal } from "~/lib/terminal-cache.js";
-import { useTerminal } from "~/hooks/useTerminal";
+import { useTerminalStore } from "~/stores/terminal";
 import { useToast } from "~/components/Toast";
 import { RotateCw } from "lucide-react";
 
@@ -14,7 +14,10 @@ interface TerminalViewProps {
 
 export function TerminalView({ taskId, resumeSessionId }: TerminalViewProps) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const { terminalId, status, exitCode, create, restart, destroy } = useTerminal(taskId);
+  const entry = useTerminalStore((s) => s.getEntry(taskId));
+  const createTerminal = useTerminalStore((s) => s.create);
+  const restartTerminal = useTerminalStore((s) => s.restart);
+  const { terminalId, status, exitCode } = entry;
   const terminalIdRef = useRef<string | null>(null);
   const { toast } = useToast();
 
@@ -22,9 +25,9 @@ export function TerminalView({ taskId, resumeSessionId }: TerminalViewProps) {
 
   useEffect(() => {
     if (status === "idle") {
-      void create(resumeSessionId);
+      void createTerminal(taskId, resumeSessionId);
     }
-  }, [status, create, resumeSessionId]);
+  }, [status, createTerminal, taskId, resumeSessionId]);
 
   // Attach/detach the cached xterm instance to the DOM
   useEffect(() => {
@@ -112,8 +115,8 @@ export function TerminalView({ taskId, resumeSessionId }: TerminalViewProps) {
   }, [status, terminalId]);
 
   const handleRestart = useCallback(() => {
-    void restart();
-  }, [restart]);
+    void restartTerminal(taskId);
+  }, [restartTerminal, taskId]);
 
   return (
     <div className="relative flex flex-1 flex-col overflow-hidden">

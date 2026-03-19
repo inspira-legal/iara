@@ -2,6 +2,7 @@ import { useState } from "react";
 import { X, Plus, ArrowLeft, Loader2, GitBranch, FolderOpen, FileText } from "lucide-react";
 import type { AddRepoInput } from "@iara/contracts";
 import { useProjectStore } from "~/stores/projects";
+import { useSidebarStore } from "~/stores/sidebar";
 import { transport } from "~/lib/ws-transport.js";
 import { cn } from "~/lib/utils";
 import { useToast } from "./Toast";
@@ -40,6 +41,7 @@ export function CreateProjectDialog({ open, onClose }: CreateProjectDialogProps)
   const [submitting, setSubmitting] = useState(false);
   const [progress, setProgress] = useState("");
   const { projects, createProject, loadProjects } = useProjectStore();
+  const { expandProject } = useSidebarStore();
   const { toast } = useToast();
 
   if (!open) return null;
@@ -116,6 +118,7 @@ export function CreateProjectDialog({ open, onClose }: CreateProjectDialogProps)
 
       // Reload projects to reflect added repos
       await loadProjects();
+      expandProject(project.id);
 
       toast("Project created", "success");
       resetForm();

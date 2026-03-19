@@ -1,14 +1,25 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as os from "node:os";
+import { z } from "zod";
 
 export interface SessionInfo {
   id: string;
   filePath: string;
+  title: string | null;
   createdAt: string;
   lastMessageAt: string;
   messageCount: number;
 }
+
+const jsonlEntrySchema = z
+  .object({
+    type: z.string().optional(),
+    timestamp: z.string().optional(),
+    aiTitle: z.string().optional(),
+    lastPrompt: z.string().optional(),
+  })
+  .passthrough();
 
 export function listSessions(repoDirs: string[]): SessionInfo[] {
   const claudeDir = getClaudeProjectsDir();
@@ -23,9 +34,7 @@ export function listSessions(repoDirs: string[]): SessionInfo[] {
 
     if (!fs.existsSync(projectSessionDir)) continue;
 
-    const files = fs
-      .readdirSync(projectSessionDir)
-      .filter((f) => f.endsWith(".jsonl"));
+    const files = fs.readdirSync(projectSessionDir).filter((f) => f.endsWith(".jsonl"));
 
     for (const file of files) {
       const id = path.basename(file, ".jsonl");
@@ -47,19 +56,29 @@ export function listSessions(repoDirs: string[]): SessionInfo[] {
 
 export function getSessionMetadata(
   filePath: string,
-): { createdAt: string; lastMessageAt: string; messageCount: number } | null {
+): { title: string | null; createdAt: string; lastMessageAt: string; messageCount: number } | null {
   try {
     const content = fs.readFileSync(filePath, "utf-8");
     const lines = content.trim().split("\n").filter(Boolean);
     if (lines.length === 0) return null;
 
+    let title: string | null = null;
     let createdAt = "";
     let lastMessageAt = "";
     let messageCount = 0;
 
     for (const line of lines) {
       try {
-        const entry = JSON.parse(line) as { timestamp?: string; type?: string };
+        const parsed = jsonlEntrySchema.safeParse(JSON.parse(line));
+        if (!parsed.success) continue;
+        const entry = parsed.data;
+
+        if (entry.type === "ai-title" && entry.aiTitle) {
+          title = entry.aiTitle;
+        }
+        if (entry.type === "last-prompt" && entry.lastPrompt && !title) {
+          title = entry.lastPrompt;
+        }
         if (entry.timestamp) {
           if (!createdAt) createdAt = entry.timestamp;
           lastMessageAt = entry.timestamp;
@@ -73,7 +92,7 @@ export function getSessionMetadata(
     }
 
     if (!createdAt) return null;
-    return { createdAt, lastMessageAt, messageCount };
+    return { title, createdAt, lastMessageAt, messageCount };
   } catch {
     return null;
   }
@@ -82,7 +101,7 @@ export function getSessionMetadata(
 export function computeProjectHash(dir: string): string {
   // Claude Code uses the cwd path with "/" replaced by "-"
   const resolved = path.resolve(dir);
-  return resolved.replaceAll("/", "-");
+  return resolved.replaceAll("/", "-").replaceAll(".", "-");
 }
 
 function getClaudeProjectsDir(): string | null {

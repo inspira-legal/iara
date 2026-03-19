@@ -212,7 +212,7 @@ export function ProjectTree({
               }}
               selectedTaskId={selectedTaskId}
               onSelectTask={(id) => {
-                selectProject(null);
+                selectProject(project.id);
                 selectTask(id);
               }}
               onCreateTask={() => onCreateTask(project.id)}

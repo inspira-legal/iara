@@ -1,6 +1,8 @@
 import { create } from "zustand";
 import type { CreateProjectInput, Project, UpdateProjectInput } from "@iara/contracts";
 import { transport } from "../lib/ws-transport.js";
+import { useTaskStore } from "./tasks.js";
+import { useSidebarStore } from "./sidebar.js";
 
 interface ProjectState {
   projects: Project[];
@@ -60,6 +62,9 @@ export const useProjectStore = create<ProjectState & ProjectActions>((set) => ({
 
   deleteProject: async (id) => {
     await transport.request("projects.delete", { id });
+    // Clean up related state in other stores
+    useTaskStore.getState().clearTasksForProject(id);
+    useSidebarStore.getState().removeProject(id);
     set((state) => ({
       projects: state.projects.filter((p) => p.id !== id),
       selectedProjectId: state.selectedProjectId === id ? null : state.selectedProjectId,

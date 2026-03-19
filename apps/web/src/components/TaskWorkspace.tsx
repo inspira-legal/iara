@@ -12,12 +12,11 @@ import {
 } from "lucide-react";
 import type { Task, Project, RepoInfo } from "@iara/contracts";
 import { transport } from "~/lib/ws-transport.js";
+import { useTerminalStore } from "~/stores/terminal";
 import { TerminalView } from "./TerminalView";
 import { SessionList } from "./SessionList";
 
 const FETCH_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
-
-type View = { kind: "sessions" } | { kind: "terminal"; resumeSessionId?: string };
 
 interface TaskWorkspaceProps {
   project: Project;
@@ -27,9 +26,18 @@ interface TaskWorkspaceProps {
 }
 
 export function TaskWorkspace({ project, task, onCompleteTask, onDeleteTask }: TaskWorkspaceProps) {
-  const [view, setView] = useState<View>({ kind: "sessions" });
+  const terminalEntry = useTerminalStore((s) => s.getEntry(task.id));
+  const resetToSessions = useTerminalStore((s) => s.resetToSessions);
+  const createTerminal = useTerminalStore((s) => s.create);
   const [repoInfo, setRepoInfo] = useState<RepoInfo[]>([]);
   const [repoLoading, setRepoLoading] = useState(true);
+
+  // Determine view based on terminal store state
+  // If there's an active/connecting terminal entry, show terminal
+  const hasTerminal = terminalEntry.status !== "idle";
+
+  // Track resumeSessionId for when user launches from session list
+  const [pendingResumeSessionId, setPendingResumeSessionId] = useState<string | undefined>();
 
   // Auto-fetch repos every 5 minutes while a task is active
   useEffect(() => {
@@ -68,15 +76,13 @@ export function TaskWorkspace({ project, task, onCompleteTask, onDeleteTask }: T
   }, [project.id]);
 
   const handleLaunchSession = (resumeSessionId?: string) => {
-    if (resumeSessionId) {
-      setView({ kind: "terminal", resumeSessionId });
-    } else {
-      setView({ kind: "terminal" });
-    }
+    setPendingResumeSessionId(resumeSessionId);
+    void createTerminal(task.id, resumeSessionId);
   };
 
   const handleBack = () => {
-    setView({ kind: "sessions" });
+    resetToSessions(task.id);
+    setPendingResumeSessionId(undefined);
   };
 
   return (
@@ -84,7 +90,7 @@ export function TaskWorkspace({ project, task, onCompleteTask, onDeleteTask }: T
       {/* Header */}
       <div className="flex items-center justify-between border-b border-zinc-800 px-4 py-2">
         <div className="flex items-center gap-3">
-          {view.kind === "terminal" && (
+          {hasTerminal && (
             <button
               type="button"
               onClick={handleBack}
@@ -117,22 +123,24 @@ export function TaskWorkspace({ project, task, onCompleteTask, onDeleteTask }: T
       </div>
 
       {/* Content */}
-      {view.kind === "sessions" ? (
+      {hasTerminal ? (
+        task.status === "active" ? (
+          <TerminalView
+            taskId={task.id}
+            {...(pendingResumeSessionId ? { resumeSessionId: pendingResumeSessionId } : {})}
+          />
+        ) : (
+          <div className="flex flex-1 items-center justify-center text-sm text-zinc-500">
+            Task completed
+          </div>
+        )
+      ) : (
         <TaskDetailView
           task={task}
           repoInfo={repoInfo}
           repoLoading={repoLoading}
           onLaunchSession={handleLaunchSession}
         />
-      ) : task.status === "active" ? (
-        <TerminalView
-          taskId={task.id}
-          {...(view.resumeSessionId ? { resumeSessionId: view.resumeSessionId } : {})}
-        />
-      ) : (
-        <div className="flex flex-1 items-center justify-center text-sm text-zinc-500">
-          Task completed
-        </div>
       )}
     </div>
   );
@@ -189,7 +197,7 @@ function TaskDetailView({
 }
 
 // ---------------------------------------------------------------------------
-// Repo components (adapted from ProjectView)
+// Repo components
 // ---------------------------------------------------------------------------
 
 function RepoSkeleton() {

@@ -49,6 +49,7 @@ export interface LaunchResult {
 export interface SessionInfo {
   id: string;
   filePath: string;
+  title: string | null;
   createdAt: string;
   lastMessageAt: string;
   messageCount: number;

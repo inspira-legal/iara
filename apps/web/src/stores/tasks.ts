@@ -17,6 +17,7 @@ interface TaskActions {
   completeTask(id: string): Promise<void>;
   deleteTask(id: string): Promise<void>;
   clearTasks(): void;
+  clearTasksForProject(projectId: string): void;
   getTasksForProject(projectId: string): Task[];
   findTask(id: string): Task | undefined;
 }
@@ -47,38 +48,79 @@ export const useTaskStore = create<TaskState & TaskActions>((set, get) => ({
 
   createTask: async (projectId, input) => {
     const task = await transport.request("tasks.create", { projectId, ...input });
-    set((state) => ({
-      tasks: [...state.tasks, task],
-      selectedTaskId: task.id,
-    }));
+    set((state) => {
+      const nextCache = new Map(state.tasksByProject);
+      const cached = nextCache.get(projectId) ?? [];
+      nextCache.set(projectId, [...cached, task]);
+      return {
+        tasks: [...state.tasks, task],
+        selectedTaskId: task.id,
+        tasksByProject: nextCache,
+      };
+    });
     return task;
   },
 
   completeTask: async (id) => {
     await transport.request("tasks.complete", { id });
-    set((state) => ({
-      tasks: state.tasks.map((t) => (t.id === id ? { ...t, status: "completed" as const } : t)),
-    }));
+    set((state) => {
+      const updater = (t: Task) =>
+        t.id === id ? { ...t, status: "completed" as const } : t;
+      const nextCache = new Map(state.tasksByProject);
+      for (const [pid, tasks] of nextCache) {
+        if (tasks.some((t) => t.id === id)) {
+          nextCache.set(pid, tasks.map(updater));
+        }
+      }
+      return {
+        tasks: state.tasks.map(updater),
+        tasksByProject: nextCache,
+      };
+    });
   },
 
   deleteTask: async (id) => {
     // Optimistic update: remove from UI immediately
     const prev = useTaskStore.getState();
+    const nextCache = new Map(prev.tasksByProject);
+    for (const [pid, tasks] of nextCache) {
+      const filtered = tasks.filter((t) => t.id !== id);
+      if (filtered.length !== tasks.length) {
+        nextCache.set(pid, filtered);
+      }
+    }
     set({
       tasks: prev.tasks.filter((t) => t.id !== id),
       selectedTaskId: prev.selectedTaskId === id ? null : prev.selectedTaskId,
+      tasksByProject: nextCache,
     });
     try {
       await transport.request("tasks.delete", { id });
     } catch (err) {
       // Rollback on failure
       console.error("[tasks] Failed to delete task:", err);
-      set({ tasks: prev.tasks, selectedTaskId: prev.selectedTaskId });
+      set({ tasks: prev.tasks, selectedTaskId: prev.selectedTaskId, tasksByProject: prev.tasksByProject });
     }
   },
 
   clearTasks: () => {
-    set({ tasks: [], selectedTaskId: null, error: null });
+    set({ tasks: [], selectedTaskId: null, error: null, tasksByProject: new Map() });
+  },
+
+  clearTasksForProject: (projectId) => {
+    set((state) => {
+      const nextCache = new Map(state.tasksByProject);
+      nextCache.delete(projectId);
+      const nextTasks = state.tasks.filter((t) => t.projectId !== projectId);
+      const taskIds = new Set(state.tasksByProject.get(projectId)?.map((t) => t.id) ?? []);
+      return {
+        tasks: nextTasks,
+        tasksByProject: nextCache,
+        selectedTaskId: state.selectedTaskId && taskIds.has(state.selectedTaskId)
+          ? null
+          : state.selectedTaskId,
+      };
+    });
   },
 
   getTasksForProject: (projectId) => {

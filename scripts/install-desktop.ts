@@ -1,4 +1,4 @@
-import { execSync, spawnSync } from "node:child_process";
+import { execSync, spawn, spawnSync } from "node:child_process";
 import {
   copyFileSync,
   cpSync,
@@ -220,7 +220,7 @@ function installLinux() {
     (f) => f.endsWith(".AppImage") && f.includes(archName),
   );
   if (appImages.length === 0) {
-    console.error(`AppImage nao encontrado para ${archName} em ${releaseDir}`);
+    console.error(`AppImage not found for ${archName} in ${releaseDir}`);
     process.exit(1);
   }
 
@@ -248,33 +248,35 @@ StartupWMClass=iara
     execSync(`update-desktop-database ${appsDir}`, { stdio: "ignore" });
   } catch {}
 
-  console.log(`\nInstalado: ${dest}`);
+  console.log(`\nInstalled: ${dest}`);
+  console.log("Launching iara...");
+  spawn(dest, ["--no-sandbox"], { stdio: "ignore", detached: true }).unref();
 }
 
 function installMac() {
   const dmgs = readdirSync(releaseDir).filter((f: string) => f.endsWith(".dmg"));
   if (dmgs.length === 0) {
-    console.error("DMG nao encontrado em release/");
+    console.error("DMG not found in release/");
     process.exit(1);
   }
   const dmg = join(releaseDir, dmgs[0]);
-  console.log(`Abrindo ${dmg} — arraste iara para Applications.`);
+  console.log(`Opening ${dmg} — drag iara to Applications.`);
   execSync(`open "${dmg}"`);
 }
 
 function installWindows() {
   const exes = readdirSync(releaseDir).filter((f: string) => f.endsWith("-setup.exe"));
   if (exes.length === 0) {
-    console.error("Installer nao encontrado em release/");
+    console.error("Installer not found in release/");
     process.exit(1);
   }
   const exe = join(releaseDir, exes[0]);
-  console.log(`Executando instalador: ${exe}`);
-  execSync(`start "" "${exe}"`);
+  console.log(`Running installer: ${exe}`);
+  spawn("cmd", ["/c", "start", "", exe], { stdio: "ignore", detached: true }).unref();
 }
 
 const os = platform();
 if (os === "linux") installLinux();
 else if (os === "darwin") installMac();
 else if (os === "win32") installWindows();
-else console.error(`Plataforma nao suportada: ${os}`);
+else console.error(`Unsupported platform: ${os}`);

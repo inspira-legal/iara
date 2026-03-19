@@ -1,28 +1,30 @@
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { Clock, MessageSquare, Play, Plus } from "lucide-react";
 import type { SessionInfo } from "@iara/contracts";
-import { transport } from "~/lib/ws-transport.js";
+import { useSessionStore } from "~/stores/sessions";
 
 type SessionListProps = {
   onLaunch?: (resumeSessionId?: string | undefined) => void;
 } & ({ taskId: string; projectId?: never } | { projectId: string; taskId?: never });
 
 export function SessionList({ taskId, projectId, onLaunch }: SessionListProps) {
-  const [sessions, setSessions] = useState<SessionInfo[]>([]);
-  const [loading, setLoading] = useState(true);
+  const loadForTask = useSessionStore((s) => s.loadForTask);
+  const loadForProject = useSessionStore((s) => s.loadForProject);
+  const isLoading = useSessionStore((s) => s.isLoading);
+  const getForTask = useSessionStore((s) => s.getForTask);
+  const getForProject = useSessionStore((s) => s.getForProject);
+
+  const key = taskId ? `task:${taskId}` : `project:${projectId}`;
+  const loading = isLoading(key);
+  const sessions = taskId ? getForTask(taskId) : getForProject(projectId!);
 
   useEffect(() => {
-    setLoading(true);
-
-    const promise = taskId
-      ? transport.request("sessions.list", { taskId })
-      : transport.request("sessions.listByProject", { projectId: projectId! });
-
-    promise
-      .then(setSessions)
-      .catch(() => setSessions([]))
-      .finally(() => setLoading(false));
-  }, [taskId, projectId]);
+    if (taskId) {
+      void loadForTask(taskId);
+    } else {
+      void loadForProject(projectId!);
+    }
+  }, [taskId, projectId, loadForTask, loadForProject]);
 
   return (
     <div>
@@ -40,13 +42,13 @@ export function SessionList({ taskId, projectId, onLaunch }: SessionListProps) {
         )}
       </div>
 
-      {loading ? (
+      {loading && sessions.length === 0 ? (
         <p className="py-2 text-xs text-zinc-600">Loading sessions...</p>
       ) : sessions.length === 0 ? (
         <p className="py-2 text-xs text-zinc-600">No sessions yet.</p>
       ) : (
         <ul className="space-y-1">
-          {sessions.map((session) => (
+          {sessions.map((session, index) => (
             <li key={session.id}>
               {onLaunch ? (
                 <button
@@ -55,11 +57,11 @@ export function SessionList({ taskId, projectId, onLaunch }: SessionListProps) {
                   className="flex w-full items-center gap-3 rounded-md px-2 py-1.5 text-left text-xs hover:bg-zinc-800"
                 >
                   <Play size={12} className="shrink-0 text-zinc-500" />
-                  <SessionMeta session={session} />
+                  <SessionMeta session={session} index={sessions.length - index} />
                 </button>
               ) : (
                 <div className="flex w-full items-center gap-3 rounded-md px-2 py-1.5 text-left text-xs">
-                  <SessionMeta session={session} />
+                  <SessionMeta session={session} index={sessions.length - index} />
                 </div>
               )}
             </li>
@@ -70,16 +72,16 @@ export function SessionList({ taskId, projectId, onLaunch }: SessionListProps) {
   );
 }
 
-function SessionMeta({ session }: { session: SessionInfo }) {
+function SessionMeta({ session, index }: { session: SessionInfo; index: number }) {
+  const title = session.title || `Sessão #${index}`;
   return (
     <div className="min-w-0 flex-1">
-      <div className="flex items-center gap-2 text-zinc-300">
+      <div className="truncate text-zinc-300">{title}</div>
+      <div className="flex items-center gap-2 text-zinc-500">
         <Clock size={10} />
         <span>{formatDate(session.lastMessageAt)}</span>
-      </div>
-      <div className="flex items-center gap-2 text-zinc-600">
-        <MessageSquare size={10} />
-        <span>{session.messageCount} messages</span>
+        <MessageSquare size={10} className="ml-1" />
+        <span>{session.messageCount} msgs</span>
       </div>
     </div>
   );
