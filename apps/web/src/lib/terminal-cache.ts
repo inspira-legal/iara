@@ -43,36 +43,18 @@ const THEME = {
 };
 
 
-// Track Ctrl/Meta state globally for link decoration toggling
+// Track Ctrl/Meta state for link decoration toggling
 let modHeld = false;
 const activeDecorations = new Set<{ underline: boolean; pointerCursor: boolean }>();
 
-function updateDecorations(): void {
+function setModHeld(held: boolean): void {
+  if (held === modHeld) return;
+  modHeld = held;
   for (const d of activeDecorations) {
     d.underline = modHeld;
     d.pointerCursor = modHeld;
   }
 }
-
-window.addEventListener("keydown", (e) => {
-  if ((e.ctrlKey || e.metaKey) && !modHeld) {
-    modHeld = true;
-    updateDecorations();
-  }
-});
-window.addEventListener("keyup", (e) => {
-  if (!e.ctrlKey && !e.metaKey && modHeld) {
-    modHeld = false;
-    updateDecorations();
-  }
-});
-// Also clear when window loses focus
-window.addEventListener("blur", () => {
-  if (modHeld) {
-    modHeld = false;
-    updateDecorations();
-  }
-});
 
 
 export function getOrCreateTerminal(terminalId: string): CachedTerminal {
@@ -162,6 +144,7 @@ export function getOrCreateTerminal(terminalId: string): CachedTerminal {
     transport.request("terminal.write", { terminalId, data }).catch(() => {});
   };
   const keybindingHandlers = setupTerminalKeybindings(term, write);
+  keybindingHandlers.onModChange = setModHeld;
 
   const cached: CachedTerminal = {
     term,

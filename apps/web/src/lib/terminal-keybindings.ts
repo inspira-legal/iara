@@ -2,6 +2,7 @@ import type { Terminal } from "@xterm/xterm";
 
 export interface KeybindingHandlers {
   onCopy: (() => void) | null;
+  onModChange: ((held: boolean) => void) | null;
 }
 
 /** Returns true if the event matches a keybinding we handle. */
@@ -19,9 +20,17 @@ export function setupTerminalKeybindings(
   term: Terminal,
   write: (data: string) => void,
 ): KeybindingHandlers {
-  const handlers: KeybindingHandlers = { onCopy: null };
+  const handlers: KeybindingHandlers = { onCopy: null, onModChange: null };
+  let prevMod = false;
 
   term.attachCustomKeyEventHandler((event) => {
+    // Track Ctrl/Meta state for link decorations (xterm captures these, window doesn't see them)
+    const mod = event.ctrlKey || event.metaKey;
+    if (mod !== prevMod) {
+      prevMod = mod;
+      handlers.onModChange?.(mod);
+    }
+
     // Block both keydown and keyup for our keybindings (xterm.js issue #2293)
     if (!matchesKeybinding(event)) return true;
     if (event.type !== "keydown") return false;
