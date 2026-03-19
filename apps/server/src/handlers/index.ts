@@ -12,6 +12,7 @@ import { registerProjectHandlers } from "./projects.js";
 import { registerPromptHandlers } from "./prompts.js";
 import { registerSessionHandlers } from "./sessions.js";
 import { registerTaskHandlers } from "./tasks.js";
+import { registerFileHandlers } from "./files.js";
 import { registerTerminalHandlers } from "./terminal.js";
 
 export interface HandlerDeps {
@@ -32,5 +33,6 @@ export function registerAllHandlers(deps: HandlerDeps): void {
   registerEnvHandlers();
   registerGitHandlers();
   registerNotificationHandlers(deps.notificationService);
+  registerFileHandlers();
   registerTerminalHandlers(deps.terminalManager);
 }

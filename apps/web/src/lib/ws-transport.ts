@@ -219,8 +219,20 @@ class WsTransport {
 
     this.reconnectTimer = setTimeout(() => {
       this.reconnectTimer = null;
-      this.connect();
+      // Re-resolve WS URL on reconnect — server may have restarted on a new port
+      this.refreshUrl().then(() => this.connect()).catch(() => this.connect());
     }, delay);
+  }
+
+  private async refreshUrl(): Promise<void> {
+    const bridge = window.desktopBridge as
+      | (Record<string, unknown> & { getWsUrl?: () => Promise<string> | string })
+      | undefined;
+
+    const bridgeUrl = bridge?.getWsUrl ? await bridge.getWsUrl() : undefined;
+    if (typeof bridgeUrl === "string" && bridgeUrl.length > 0) {
+      this.wsUrl = bridgeUrl;
+    }
   }
 }
 

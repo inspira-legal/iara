@@ -64,6 +64,9 @@ export type WsMethods = {
   "env.write": { params: { projectDir: string; content: string }; result: void };
   "env.merge": { params: { projectDir: string; vars: Record<string, string> }; result: void };
 
+  // Files
+  "files.open": { params: { filePath: string; line?: number; col?: number }; result: void };
+
   // Git
   "git.status": { params: { cwd: string }; result: GitStatusResult };
 

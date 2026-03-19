@@ -44,7 +44,7 @@ export function getOrCreateTerminal(terminalId: string): CachedTerminal {
   if (existing) return existing;
 
   const term = new Terminal({
-    fontFamily: "'JetBrains Mono', 'Fira Code', 'Cascadia Code', 'Menlo', monospace",
+    fontFamily: "'JetBrains Mono', monospace",
     fontSize: 14,
     lineHeight: 1.0,
     letterSpacing: 0,
@@ -64,7 +64,63 @@ export function getOrCreateTerminal(terminalId: string): CachedTerminal {
   term.loadAddon(new ClipboardAddon());
 
   // Web links: clickable URLs in terminal output
-  term.loadAddon(new WebLinksAddon());
+  term.loadAddon(
+    new WebLinksAddon((event, uri) => {
+      if (event.ctrlKey || event.metaKey) {
+        window.open(uri, "_blank", "noopener");
+      }
+    }),
+  );
+
+  // File links: detect file:// URLs and absolute paths like /home/...
+  term.registerLinkProvider({
+    provideLinks(lineNumber, callback) {
+      const line = term.buffer.active.getLine(lineNumber - 1);
+      if (!line) return callback(undefined);
+      const text = line.translateToString();
+      const links: { startIndex: number; length: number; text: string }[] = [];
+
+      // file:// URLs
+      const fileUrlRegex = /file:\/\/[^\s"')\]>]+/g;
+      let match;
+      while ((match = fileUrlRegex.exec(text)) !== null) {
+        links.push({ startIndex: match.index, length: match[0].length, text: match[0] });
+      }
+
+      // Absolute paths: /path/to/file.ext(:line(:col))
+      const absPathRegex = /(?<!\w)(\/[\w.@\-/]+\.\w+(?::\d+(?::\d+)?)?)/g;
+      while ((match = absPathRegex.exec(text)) !== null) {
+        links.push({ startIndex: match.index, length: match[0].length, text: match[0] });
+      }
+
+      if (links.length === 0) return callback(undefined);
+      callback(
+        links.map((l) => {
+          return {
+            range: {
+              start: { x: l.startIndex + 1, y: lineNumber },
+              end: { x: l.startIndex + l.length + 1, y: lineNumber },
+            },
+            text: l.text,
+            decorations: { underline: true, pointerCursor: true },
+            activate: (e: MouseEvent) => {
+              if (!e.ctrlKey && !e.metaKey) return;
+              const parsed = l.text.replace(/^file:\/\//, "");
+              const parts = parsed.split(":");
+              const params: { filePath: string; line?: number; col?: number } = {
+                filePath: parts[0]!,
+              };
+              if (parts[1]) params.line = Number(parts[1]);
+              if (parts[2]) params.col = Number(parts[2]);
+              transport.request("files.open", params).catch((err) => {
+                console.error("[files.open] Failed:", err);
+              });
+            },
+          };
+        }),
+      );
+    },
+  });
 
   // Web fonts: ensure JetBrains Mono loads properly before rendering
   const webFontsAddon = new WebFontsAddon();

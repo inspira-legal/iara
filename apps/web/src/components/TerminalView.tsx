@@ -1,6 +1,8 @@
 import { useRef, useEffect, useCallback } from "react";
 import { WebglAddon } from "@xterm/addon-webgl";
 import "@xterm/xterm/css/xterm.css";
+import "@fontsource/jetbrains-mono/400.css";
+import "@fontsource/jetbrains-mono/700.css";
 import { transport } from "~/lib/ws-transport.js";
 import { getOrCreateTerminal, destroyTerminal } from "~/lib/terminal-cache.js";
 import { useTerminalStore } from "~/stores/terminal";
