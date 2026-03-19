@@ -13,27 +13,21 @@ export const Route = createFileRoute("/")({
 
 function HomePage() {
   const { projects, selectedProjectId } = useProjectStore();
-  const { tasks, selectedTaskId } = useTaskStore();
+  const { selectedTaskId, findTask } = useTaskStore();
   const { completeTask, deleteTask } = useTaskStore();
   const { toast } = useToast();
   const [showDeleteTask, setShowDeleteTask] = useState(false);
 
-  const project = projects.find((p) => p.id === selectedProjectId);
-  const task = tasks.find((t) => t.id === selectedTaskId);
+  const task = selectedTaskId ? findTask(selectedTaskId) : undefined;
+  const project = task
+    ? projects.find((p) => p.id === task.projectId)
+    : projects.find((p) => p.id === selectedProjectId);
 
-  if (!project && !task) {
-    return (
-      <div className="flex h-full items-center justify-center text-zinc-500">
-        <p>Select a project to get started</p>
-      </div>
-    );
-  }
-
-  if (!task && project) {
+  if (task && project) {
+    // fall through to TaskWorkspace below
+  } else if (project) {
     return <ProjectView project={project} />;
-  }
-
-  if (!project) {
+  } else {
     return (
       <div className="flex h-full items-center justify-center text-zinc-500">
         <p>Select a project to get started</p>

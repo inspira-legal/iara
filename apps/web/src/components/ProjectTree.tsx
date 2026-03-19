@@ -198,12 +198,11 @@ export function ProjectTree({
               isExpanded={expandedProjectIds.has(project.id)}
               isSelected={selectedProjectId === project.id && !selectedTaskId}
               onToggle={() => {
-                const isSelectedAndExpanded =
+                if (
                   selectedProjectId === project.id &&
                   !selectedTaskId &&
-                  expandedProjectIds.has(project.id);
-
-                if (isSelectedAndExpanded) {
+                  expandedProjectIds.has(project.id)
+                ) {
                   collapseProject(project.id);
                 } else {
                   selectProject(project.id);
@@ -213,7 +212,7 @@ export function ProjectTree({
               }}
               selectedTaskId={selectedTaskId}
               onSelectTask={(id) => {
-                selectProject(project.id);
+                selectProject(null);
                 selectTask(id);
               }}
               onCreateTask={() => onCreateTask(project.id)}

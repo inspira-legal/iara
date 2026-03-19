@@ -40,11 +40,7 @@ export const useProjectStore = create<ProjectState & ProjectActions>((set) => ({
     }
   },
 
-  selectProject: (id) => {
-    const { selectedProjectId } = useProjectStore.getState();
-    if (id === selectedProjectId) return;
-    set({ selectedProjectId: id });
-  },
+  selectProject: (id) => set({ selectedProjectId: id }),
 
   createProject: async (input) => {
     const project = await transport.request("projects.create", input);

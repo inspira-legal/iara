@@ -18,6 +18,7 @@ interface TaskActions {
   deleteTask(id: string): Promise<void>;
   clearTasks(): void;
   getTasksForProject(projectId: string): Task[];
+  findTask(id: string): Task | undefined;
 }
 
 export const useTaskStore = create<TaskState & TaskActions>((set, get) => ({
@@ -42,10 +43,7 @@ export const useTaskStore = create<TaskState & TaskActions>((set, get) => ({
     }
   },
 
-  selectTask: (id) => {
-    const { selectedTaskId } = useTaskStore.getState();
-    set({ selectedTaskId: id === selectedTaskId ? null : id });
-  },
+  selectTask: (id) => set({ selectedTaskId: id }),
 
   createTask: async (projectId, input) => {
     const task = await transport.request("tasks.create", { projectId, ...input });
@@ -85,5 +83,13 @@ export const useTaskStore = create<TaskState & TaskActions>((set, get) => ({
 
   getTasksForProject: (projectId) => {
     return get().tasksByProject.get(projectId) ?? [];
+  },
+
+  findTask: (id) => {
+    for (const tasks of get().tasksByProject.values()) {
+      const task = tasks.find((t) => t.id === id);
+      if (task) return task;
+    }
+    return undefined;
   },
 }));
