@@ -3,6 +3,7 @@ import { GitBranch, Pencil, Copy, Trash2 } from "lucide-react";
 import type { Task } from "@iara/contracts";
 import { SidebarContextMenu, type ContextMenuItem } from "./SidebarContextMenu";
 import { formatRelativeTime, formatAbsoluteTime } from "~/lib/format-relative-time";
+import { writeClipboard } from "~/lib/clipboard";
 
 interface TaskNodeProps {
   task: Task;
@@ -44,7 +45,7 @@ export function TaskNode({
   }, [draft, task.name, onRename]);
 
   const handleCopyBranch = useCallback(() => {
-    void navigator.clipboard.writeText(task.branch);
+    writeClipboard(task.branch);
   }, [task.branch]);
 
   const contextMenuItems: ContextMenuItem[] = [

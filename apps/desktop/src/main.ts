@@ -3,7 +3,16 @@ import * as net from "node:net";
 import * as os from "node:os";
 import * as path from "node:path";
 import { spawn, type ChildProcess } from "node:child_process";
-import { app, BrowserWindow, dialog, ipcMain, Menu, Notification, protocol } from "electron";
+import {
+  app,
+  BrowserWindow,
+  clipboard,
+  dialog,
+  ipcMain,
+  Menu,
+  Notification,
+  protocol,
+} from "electron";
 import WebSocket from "ws";
 import { syncShellEnvironment } from "./services/shell-env.js";
 import { BrowserPanel } from "./services/browser-panel.js";
@@ -20,6 +29,7 @@ let authToken = "";
 let restartAttempt = 0;
 let restartTimer: ReturnType<typeof setTimeout> | null = null;
 let ws: WebSocket | null = null;
+let quitting = false;
 
 const browserPanel = new BrowserPanel();
 
@@ -110,7 +120,7 @@ function spawnServer(): void {
 }
 
 function scheduleRestart(): void {
-  if (restartTimer) return;
+  if (quitting || restartTimer) return;
   const delay = Math.min(500 * 2 ** restartAttempt, 8000);
   restartAttempt++;
   console.error(`Restarting server in ${delay}ms (attempt ${restartAttempt})`);
@@ -295,6 +305,14 @@ function registerLocalIpcHandlers(): void {
     return `ws://127.0.0.1:${serverPort}/?token=${authToken}`;
   });
 
+  // Clipboard (navigator.clipboard fails on custom protocol schemes)
+  ipcMain.handle("desktop:clipboard-write", (_event, text: string) => {
+    clipboard.writeText(text);
+  });
+  ipcMain.handle("desktop:clipboard-read", () => {
+    return clipboard.readText();
+  });
+
   // Dialogs
   ipcMain.handle("desktop:pick-folder", async () => {
     const result = await dialog.showOpenDialog({ properties: ["openDirectory"] });
@@ -371,36 +389,15 @@ app.on("window-all-closed", () => {
   }
 });
 
-app.on("before-quit", () => {
+app.on("before-quit", (e) => {
+  if (quitting) return;
+  quitting = true;
+
   // Close WS
   try {
     if (ws) {
       ws.close();
       ws = null;
-    }
-  } catch {
-    /* shutting down */
-  }
-
-  // Kill server child process
-  try {
-    if (restartTimer) {
-      clearTimeout(restartTimer);
-      restartTimer = null;
-    }
-    if (serverChild) {
-      const child = serverChild;
-      serverChild = null;
-      child.removeAllListeners();
-      child.kill("SIGTERM");
-      // Force kill if still alive after 2s
-      setTimeout(() => {
-        try {
-          child.kill("SIGKILL");
-        } catch {
-          /* already dead */
-        }
-      }, 2000);
     }
   } catch {
     /* shutting down */
@@ -412,4 +409,34 @@ app.on("before-quit", () => {
   } catch {
     /* shutting down */
   }
+
+  // Kill server child process
+  if (restartTimer) {
+    clearTimeout(restartTimer);
+    restartTimer = null;
+  }
+
+  if (!serverChild) return;
+
+  e.preventDefault();
+
+  const child = serverChild;
+  serverChild = null;
+  child.removeAllListeners();
+  child.kill("SIGTERM");
+
+  // Force kill the entire process tree if still alive after 2s
+  setTimeout(() => {
+    try {
+      if (child.pid) process.kill(-child.pid, "SIGKILL");
+    } catch {
+      /* already dead */
+    }
+    try {
+      child.kill("SIGKILL");
+    } catch {
+      /* already dead */
+    }
+    app.quit();
+  }, 2000);
 });

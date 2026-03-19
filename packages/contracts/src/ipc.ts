@@ -151,6 +151,10 @@ export interface DesktopBridge {
   onTerminalExit(callback: (terminalId: string, exitCode: number) => void): void;
   offTerminalExit(): void;
 
+  // Clipboard
+  clipboardWrite(text: string): Promise<void>;
+  clipboardRead(): Promise<string>;
+
   // Dialogs
   pickFolder(): Promise<string | null>;
   confirmDialog(message: string): Promise<boolean>;

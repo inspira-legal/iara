@@ -4,6 +4,10 @@ contextBridge.exposeInMainWorld("desktopBridge", {
   // WS URL to connect renderer to the server
   getWsUrl: () => ipcRenderer.invoke("desktop:get-ws-url"),
 
+  // Clipboard (navigator.clipboard fails on custom protocol schemes)
+  clipboardWrite: (text: string) => ipcRenderer.invoke("desktop:clipboard-write", text),
+  clipboardRead: () => ipcRenderer.invoke("desktop:clipboard-read") as Promise<string>,
+
   // Dialogs
   pickFolder: () => ipcRenderer.invoke("desktop:pick-folder"),
   confirmDialog: (message: string) => ipcRenderer.invoke("desktop:confirm-dialog", message),

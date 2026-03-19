@@ -131,9 +131,7 @@ export function TerminalView({ taskId, resumeSessionId }: TerminalViewProps) {
       {status === "exited" && (
         <div className="absolute inset-0 flex items-center justify-center bg-zinc-950/80">
           <div className="flex flex-col items-center gap-3 text-zinc-400">
-            <p className="text-sm">
-              Claude exited{exitCode != null ? ` (code ${exitCode})` : ""}
-            </p>
+            <p className="text-sm">Claude exited{exitCode != null ? ` (code ${exitCode})` : ""}</p>
             <button
               type="button"
               onClick={handleRestart}

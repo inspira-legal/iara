@@ -54,7 +54,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
 
 function ToastMessage({ toast, onDismiss }: { toast: ToastItem; onDismiss: (id: string) => void }) {
   useEffect(() => {
-    const timer = setTimeout(() => onDismiss(toast.id), 4000);
+    const timer = setTimeout(() => onDismiss(toast.id), toast.type === "error" ? 4000 : 1500);
     return () => clearTimeout(timer);
   }, [toast.id, onDismiss]);
 

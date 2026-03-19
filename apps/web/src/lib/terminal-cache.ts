@@ -5,15 +5,8 @@ import { ClipboardAddon } from "@xterm/addon-clipboard";
 import { WebLinksAddon } from "@xterm/addon-web-links";
 import { WebFontsAddon } from "@xterm/addon-web-fonts";
 import { transport } from "./ws-transport.js";
-import {
-  setupTerminalKeybindings,
-  type KeybindingHandlers,
-} from "./terminal-keybindings.js";
-import {
-  findFileLinks,
-  isRelativePath,
-  parseFilePath,
-} from "./terminal-links.js";
+import { setupTerminalKeybindings, type KeybindingHandlers } from "./terminal-keybindings.js";
+import { findFileLinks, isRelativePath, parseFilePath } from "./terminal-links.js";
 
 interface CachedTerminal {
   term: Terminal;
@@ -159,11 +152,9 @@ export function getOrCreateTerminal(terminalId: string): CachedTerminal {
             activate: (e: MouseEvent) => {
               if (!e.ctrlKey && !e.metaKey) return;
               const open = (cwd?: string | null) => {
-                transport
-                  .request("files.open", parseFilePath(l.text, cwd))
-                  .catch((err) => {
-                    console.error("[files.open] Failed:", err);
-                  });
+                transport.request("files.open", parseFilePath(l.text, cwd)).catch((err) => {
+                  console.error("[files.open] Failed:", err);
+                });
               };
               if (isRelativePath(l.text)) {
                 transport
@@ -183,18 +174,39 @@ export function getOrCreateTerminal(terminalId: string): CachedTerminal {
   // Web fonts: ensure JetBrains Mono loads before rendering
   const webFontsAddon = new WebFontsAddon();
   term.loadAddon(webFontsAddon);
-  void webFontsAddon
-    .loadFonts(["JetBrains Mono NF"])
-    .then(() => fitAddon.fit());
+  void webFontsAddon.loadFonts(["JetBrains Mono NF"]).then(() => fitAddon.fit());
 
-  const unsub = transport.subscribe(
-    "terminal:data",
-    ({ terminalId: tid, data }) => {
-      if (tid === terminalId) {
+  // Track whether user has scrolled up so we can preserve their position
+  // when new data arrives from the PTY.
+  let userScrolledUp = false;
+  let restoringScroll = false;
+
+  term.onScroll(() => {
+    // Ignore scroll events triggered by our own scrollToLine restoration
+    if (restoringScroll) return;
+    const buf = term.buffer.active;
+    userScrolledUp = buf.viewportY < buf.baseY;
+  });
+
+  const unsub = transport.subscribe("terminal:data", ({ terminalId: tid, data }) => {
+    if (tid === terminalId) {
+      if (userScrolledUp) {
+        const buf = term.buffer.active;
+        const savedViewportY = buf.viewportY;
+        const savedBaseY = buf.baseY;
+        term.write(data, () => {
+          const delta = buf.baseY - savedBaseY;
+          if (delta > 0 && buf.viewportY !== savedViewportY) {
+            restoringScroll = true;
+            term.scrollToLine(savedViewportY + delta);
+            restoringScroll = false;
+          }
+        });
+      } else {
         term.write(data);
       }
-    },
-  );
+    }
+  });
 
   const write = (data: string) => {
     transport.request("terminal.write", { terminalId, data }).catch(() => {});
@@ -224,8 +236,6 @@ export function destroyTerminal(terminalId: string): void {
   }
 }
 
-export function getCachedTerminal(
-  terminalId: string,
-): CachedTerminal | undefined {
+export function getCachedTerminal(terminalId: string): CachedTerminal | undefined {
   return cache.get(terminalId);
 }

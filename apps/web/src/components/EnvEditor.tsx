@@ -15,7 +15,7 @@ export function EnvEditor({ projectId, context, repos, hasActiveTerminal }: EnvE
   const [data, setData] = useState<EnvRepoEntries[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeRepo, setActiveRepo] = useState<string>(repos[0] ?? "");
-  const [showMerged, setShowMerged] = useState(false);
+  const [showMerged, setShowMerged] = useState(true);
   const [envDirty, setEnvDirty] = useState(false);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -137,10 +137,10 @@ export function EnvEditor({ projectId, context, repos, hasActiveTerminal }: EnvE
           type="button"
           onClick={() => setShowMerged((v) => !v)}
           className="flex items-center gap-1 rounded px-2 py-1 text-xs text-zinc-500 hover:bg-zinc-800 hover:text-zinc-300"
-          title={showMerged ? "Show editor" : "Show merged preview"}
+          title={showMerged ? "Edit variables" : "Show merged preview"}
         >
           {showMerged ? <EyeOff size={12} /> : <Eye size={12} />}
-          {showMerged ? "Editor" : "Merged"}
+          {showMerged ? "Editar" : "Merged"}
         </button>
       </div>
 

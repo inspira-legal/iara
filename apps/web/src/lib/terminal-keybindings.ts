@@ -1,4 +1,5 @@
 import type { Terminal } from "@xterm/xterm";
+import { writeClipboard, readClipboard } from "./clipboard.js";
 
 export interface KeybindingHandlers {
   onCopy: (() => void) | null;
@@ -26,7 +27,7 @@ const KEYBINDINGS: Keybinding[] = [
     action: (term, _write, handlers) => {
       const selection = term.getSelection();
       if (selection) {
-        void navigator.clipboard.writeText(selection);
+        writeClipboard(selection);
         handlers.onCopy?.();
       }
     },
@@ -36,7 +37,7 @@ const KEYBINDINGS: Keybinding[] = [
     shift: true,
     key: "v",
     action: (term) => {
-      void navigator.clipboard.readText().then((text) => {
+      void readClipboard().then((text) => {
         if (text) term.paste(text);
       });
     },

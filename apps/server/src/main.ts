@@ -4,7 +4,7 @@ import { createServer, pushAll } from "./ws.js";
 import { registerAllHandlers } from "./handlers/index.js";
 import { DevServerSupervisor } from "./services/devservers.js";
 import { NotificationService } from "./services/notifications.js";
-import { TerminalManager } from "./services/terminal.js";
+import { TerminalManager, TERMINAL_KILL_GRACE_MS } from "./services/terminal.js";
 import { SocketServer, registerSocketHandlers } from "./socket.js";
 import { syncShellEnvironment } from "./services/shell-env.js";
 import { mergeHooks, removeHooks } from "./services/hooks.js";
@@ -105,7 +105,8 @@ function shutdown() {
     removeHooks();
   } catch {}
   stopWs();
-  process.exit(0);
+  // Wait for the SIGKILL grace period in destroyAll() before exiting.
+  setTimeout(() => process.exit(0), TERMINAL_KILL_GRACE_MS + 100);
 }
 
 process.on("SIGTERM", shutdown);

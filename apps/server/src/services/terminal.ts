@@ -42,8 +42,12 @@ interface ManagedTerminal {
   pty: pty.IPty;
 }
 
+/** Grace period before force-killing terminal process groups. */
+export const TERMINAL_KILL_GRACE_MS = 500;
+
 export class TerminalManager {
   private terminals = new Map<string, ManagedTerminal>();
+  private killTimer: ReturnType<typeof setTimeout> | null = null;
   private pushFn: <E extends keyof WsPushEvents>(event: E, params: WsPushEvents[E]) => void;
 
   constructor(pushFn: <E extends keyof WsPushEvents>(event: E, params: WsPushEvents[E]) => void) {
@@ -154,8 +158,18 @@ export class TerminalManager {
   destroy(terminalId: string): void {
     const terminal = this.terminals.get(terminalId);
     if (terminal) {
-      terminal.pty.kill();
+      // Remove from map first so the onExit handler (which also deletes)
+      // becomes a no-op and doesn't push a stale "terminal:exit" event.
       this.terminals.delete(terminalId);
+
+      // Kill the entire process group so subprocesses (subagents, bash, etc.)
+      // also receive the signal. Negative PID = process group.
+      try {
+        process.kill(-terminal.pty.pid, "SIGTERM");
+      } catch {
+        /* already dead or no process group — fall back to pty.kill() */
+        terminal.pty.kill();
+      }
     }
   }
 
@@ -167,8 +181,30 @@ export class TerminalManager {
   }
 
   destroyAll(): void {
-    for (const [id] of this.terminals) {
+    // Collect PIDs and IDs before destroying to avoid mutating the Map
+    // during iteration (destroy() deletes from the map).
+    const entries = [...this.terminals.entries()];
+    const pids = entries.map(([, t]) => t.pty.pid);
+
+    for (const [id] of entries) {
       this.destroy(id);
+    }
+
+    // Cancel any previous force-kill timer to avoid duplicate SIGKILL rounds.
+    if (this.killTimer) clearTimeout(this.killTimer);
+
+    // Force-kill any surviving process groups after a short grace period.
+    if (pids.length > 0) {
+      this.killTimer = setTimeout(() => {
+        this.killTimer = null;
+        for (const pid of pids) {
+          try {
+            process.kill(-pid, "SIGKILL");
+          } catch {
+            /* already dead */
+          }
+        }
+      }, TERMINAL_KILL_GRACE_MS);
     }
   }
 
