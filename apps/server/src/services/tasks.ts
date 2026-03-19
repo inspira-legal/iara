@@ -48,10 +48,7 @@ export async function createTask(projectId: string, input: CreateTaskInput): Pro
     fs.mkdirSync(taskDir, { recursive: true });
 
     // Create TASK.md
-    fs.writeFileSync(
-      path.join(taskDir, "TASK.md"),
-      `${input.description?.trim() ?? ""}\n`,
-    );
+    fs.writeFileSync(path.join(taskDir, "TASK.md"), `${input.description?.trim() ?? ""}\n`);
 
     // Symlink PROJECT.md
     const projectMdSrc = path.join(projectDir, "PROJECT.md");

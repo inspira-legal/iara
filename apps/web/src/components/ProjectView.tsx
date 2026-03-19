@@ -15,6 +15,7 @@ import { transport } from "~/lib/ws-transport.js";
 import { EditableName } from "./EditableName";
 import { AddRepoDialog } from "./AddRepoDialog";
 import { ConfirmDialog } from "./ConfirmDialog";
+import { SessionList } from "./SessionList";
 
 interface ProjectViewProps {
   project: Project;
@@ -158,6 +159,11 @@ export function ProjectView({ project }: ProjectViewProps) {
           <Plus size={14} />
           Add Repo
         </button>
+      </div>
+
+      {/* Sessions */}
+      <div className="mt-6">
+        <SessionList projectId={project.id} />
       </div>
 
       <div className="mt-8 text-xs text-zinc-600">

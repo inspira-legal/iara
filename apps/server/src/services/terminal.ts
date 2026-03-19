@@ -8,11 +8,11 @@ import {
   type TaskContext,
 } from "./launcher.js";
 
-/** Keep only IARA_ vars from the server process env. */
+/** Pass through all env vars except IARA_ and ELECTRON_ prefixed ones. */
 function cleanEnv(env: NodeJS.ProcessEnv): Record<string, string> {
   const picked: Record<string, string> = {};
   for (const [key, value] of Object.entries(env)) {
-    if (value !== undefined && key.startsWith("IARA_")) {
+    if (value !== undefined && !key.startsWith("IARA_") && !key.startsWith("ELECTRON_")) {
       picked[key] = value;
     }
   }
