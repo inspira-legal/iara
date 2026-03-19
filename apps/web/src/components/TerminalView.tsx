@@ -4,6 +4,7 @@ import "@xterm/xterm/css/xterm.css";
 import { transport } from "~/lib/ws-transport.js";
 import { getOrCreateTerminal, destroyTerminal } from "~/lib/terminal-cache.js";
 import { useTerminal } from "~/hooks/useTerminal";
+import { useToast } from "~/components/Toast";
 import { RotateCw } from "lucide-react";
 
 interface TerminalViewProps {
@@ -14,6 +15,7 @@ export function TerminalView({ taskId }: TerminalViewProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const { terminalId, status, exitCode, create, restart } = useTerminal(taskId);
   const terminalIdRef = useRef<string | null>(null);
+  const { toast } = useToast();
 
   terminalIdRef.current = terminalId;
 
@@ -29,7 +31,9 @@ export function TerminalView({ taskId }: TerminalViewProps) {
 
     const container = containerRef.current;
     const cached = getOrCreateTerminal(terminalId);
-    const { term, fitAddon } = cached;
+    const { term, fitAddon, keybindingHandlers } = cached;
+
+    keybindingHandlers.onCopy = () => toast("Texto copiado", "success");
 
     // If the terminal hasn't been opened yet, open it
     if (!term.element) {
@@ -77,6 +81,7 @@ export function TerminalView({ taskId }: TerminalViewProps) {
     term.focus();
 
     return () => {
+      keybindingHandlers.onCopy = null;
       onData.dispose();
       resizeObserver.disconnect();
       // Don't dispose the terminal — just detach from DOM so it survives navigation
@@ -84,7 +89,7 @@ export function TerminalView({ taskId }: TerminalViewProps) {
         container.removeChild(term.element);
       }
     };
-  }, [terminalId]);
+  }, [terminalId, toast]);
 
   // Cleanup on terminal exit
   useEffect(() => {

@@ -1,0 +1,65 @@
+import type { Terminal } from "@xterm/xterm";
+
+export interface KeybindingHandlers {
+  onCopy: (() => void) | null;
+}
+
+/** Returns true if the event matches a keybinding we handle. */
+function matchesKeybinding(event: KeyboardEvent): boolean {
+  const isCtrl = event.ctrlKey || event.metaKey;
+  if (!isCtrl) return false;
+
+  if (event.shiftKey) {
+    return event.code === "KeyC" || event.code === "KeyV" || event.code === "KeyA";
+  }
+  return event.key === "Enter";
+}
+
+export function setupTerminalKeybindings(
+  term: Terminal,
+  write: (data: string) => void,
+): KeybindingHandlers {
+  const handlers: KeybindingHandlers = { onCopy: null };
+
+  term.attachCustomKeyEventHandler((event) => {
+    // Block both keydown and keyup for our keybindings (xterm.js issue #2293)
+    if (!matchesKeybinding(event)) return true;
+    if (event.type !== "keydown") return false;
+
+    const isCtrl = event.ctrlKey || event.metaKey;
+
+    // Ctrl+Shift+C = Copy selection
+    if (isCtrl && event.shiftKey && event.code === "KeyC") {
+      const selection = term.getSelection();
+      if (selection) {
+        void navigator.clipboard.writeText(selection);
+        handlers.onCopy?.();
+      }
+      return false;
+    }
+
+    // Ctrl+Shift+V = Paste
+    if (isCtrl && event.shiftKey && event.code === "KeyV") {
+      void navigator.clipboard.readText().then((text) => {
+        if (text) term.paste(text);
+      });
+      return false;
+    }
+
+    // Ctrl+Shift+A = Select all
+    if (isCtrl && event.shiftKey && event.code === "KeyA") {
+      term.selectAll();
+      return false;
+    }
+
+    // Ctrl+Enter = Newline literal
+    if (isCtrl && !event.shiftKey && event.key === "Enter") {
+      write("\n");
+      return false;
+    }
+
+    return true;
+  });
+
+  return handlers;
+}
