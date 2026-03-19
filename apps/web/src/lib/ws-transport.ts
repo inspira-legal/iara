@@ -31,18 +31,7 @@ class WsTransport {
     if (this.initPromise) return this.initPromise;
 
     this.initPromise = (async () => {
-      // getWsUrl is async (IPC) in Electron
-      const bridge = window.desktopBridge as
-        | (Record<string, unknown> & { getWsUrl?: () => Promise<string> | string })
-        | undefined;
-
-      const bridgeUrl = bridge?.getWsUrl ? await bridge.getWsUrl() : undefined;
-
-      this.wsUrl =
-        (typeof bridgeUrl === "string" && bridgeUrl.length > 0 ? bridgeUrl : undefined) ??
-        (import.meta.env.VITE_WS_URL as string | undefined) ??
-        `ws://${location.host}`;
-
+      this.wsUrl = await this.resolveWsUrl();
       this.connect();
     })();
 
@@ -220,19 +209,26 @@ class WsTransport {
     this.reconnectTimer = setTimeout(() => {
       this.reconnectTimer = null;
       // Re-resolve WS URL on reconnect — server may have restarted on a new port
-      this.refreshUrl().then(() => this.connect()).catch(() => this.connect());
+      this.resolveWsUrl()
+        .then((url) => {
+          this.wsUrl = url;
+          this.connect();
+        })
+        .catch(() => this.connect());
     }, delay);
   }
 
-  private async refreshUrl(): Promise<void> {
+  private async resolveWsUrl(): Promise<string> {
     const bridge = window.desktopBridge as
       | (Record<string, unknown> & { getWsUrl?: () => Promise<string> | string })
       | undefined;
 
     const bridgeUrl = bridge?.getWsUrl ? await bridge.getWsUrl() : undefined;
-    if (typeof bridgeUrl === "string" && bridgeUrl.length > 0) {
-      this.wsUrl = bridgeUrl;
-    }
+    return (
+      (typeof bridgeUrl === "string" && bridgeUrl.length > 0 ? bridgeUrl : undefined) ??
+      (import.meta.env.VITE_WS_URL as string | undefined) ??
+      `ws://${location.host}`
+    );
   }
 }
 

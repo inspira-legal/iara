@@ -1,3 +1,4 @@
+import type { IDisposable } from "@xterm/xterm";
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { ClipboardAddon } from "@xterm/addon-clipboard";
@@ -10,6 +11,7 @@ interface CachedTerminal {
   term: Terminal;
   fitAddon: FitAddon;
   unsub: () => void;
+  linkDisposable: IDisposable;
   terminalId: string;
   keybindingHandlers: KeybindingHandlers;
 }
@@ -39,6 +41,19 @@ const THEME = {
   brightWhite: "#ffffff",
 };
 
+// Hoisted regexes — compiled once, reset per call via lastIndex
+const FILE_URL_RE = /file:\/\/[^\s"')\]>]+/g;
+const ABS_PATH_RE = /(?<!\w)(\/[\w.@\-/]+\.\w+(?::\d+(?::\d+)?)?)/g;
+
+function parseFilePath(text: string): { filePath: string; line?: number; col?: number } {
+  const cleaned = text.replace(/^file:\/\//, "");
+  const parts = cleaned.split(":");
+  const result: { filePath: string; line?: number; col?: number } = { filePath: parts[0]! };
+  if (parts[1]) result.line = Number(parts[1]);
+  if (parts[2]) result.col = Number(parts[2]);
+  return result;
+}
+
 export function getOrCreateTerminal(terminalId: string): CachedTerminal {
   const existing = cache.get(terminalId);
   if (existing) return existing;
@@ -59,11 +74,9 @@ export function getOrCreateTerminal(terminalId: string): CachedTerminal {
 
   const fitAddon = new FitAddon();
   term.loadAddon(fitAddon);
-
-  // Clipboard addon: handles OSC 52 clipboard sequences from CLI apps
   term.loadAddon(new ClipboardAddon());
 
-  // Web links: clickable URLs in terminal output
+  // Web links: Ctrl+Click to open URLs
   term.loadAddon(
     new WebLinksAddon((event, uri) => {
       if (event.ctrlKey || event.metaKey) {
@@ -72,62 +85,52 @@ export function getOrCreateTerminal(terminalId: string): CachedTerminal {
     }),
   );
 
-  // File links: detect file:// URLs and absolute paths like /home/...
-  term.registerLinkProvider({
+  // File links: detect file:// URLs and absolute paths
+  const linkDisposable = term.registerLinkProvider({
     provideLinks(lineNumber, callback) {
       const line = term.buffer.active.getLine(lineNumber - 1);
       if (!line) return callback(undefined);
       const text = line.translateToString();
-      const links: { startIndex: number; length: number; text: string }[] = [];
 
-      // file:// URLs
-      const fileUrlRegex = /file:\/\/[^\s"')\]>]+/g;
+      // Reset lastIndex for global regexes
+      FILE_URL_RE.lastIndex = 0;
+      ABS_PATH_RE.lastIndex = 0;
+
+      const links: { startIndex: number; length: number; text: string }[] = [];
       let match;
-      while ((match = fileUrlRegex.exec(text)) !== null) {
+
+      while ((match = FILE_URL_RE.exec(text)) !== null) {
         links.push({ startIndex: match.index, length: match[0].length, text: match[0] });
       }
-
-      // Absolute paths: /path/to/file.ext(:line(:col))
-      const absPathRegex = /(?<!\w)(\/[\w.@\-/]+\.\w+(?::\d+(?::\d+)?)?)/g;
-      while ((match = absPathRegex.exec(text)) !== null) {
+      while ((match = ABS_PATH_RE.exec(text)) !== null) {
         links.push({ startIndex: match.index, length: match[0].length, text: match[0] });
       }
 
       if (links.length === 0) return callback(undefined);
       callback(
-        links.map((l) => {
-          return {
-            range: {
-              start: { x: l.startIndex + 1, y: lineNumber },
-              end: { x: l.startIndex + l.length + 1, y: lineNumber },
-            },
-            text: l.text,
-            decorations: { underline: true, pointerCursor: true },
-            activate: (e: MouseEvent) => {
-              if (!e.ctrlKey && !e.metaKey) return;
-              const parsed = l.text.replace(/^file:\/\//, "");
-              const parts = parsed.split(":");
-              const params: { filePath: string; line?: number; col?: number } = {
-                filePath: parts[0]!,
-              };
-              if (parts[1]) params.line = Number(parts[1]);
-              if (parts[2]) params.col = Number(parts[2]);
-              transport.request("files.open", params).catch((err) => {
-                console.error("[files.open] Failed:", err);
-              });
-            },
-          };
-        }),
+        links.map((l) => ({
+          range: {
+            start: { x: l.startIndex + 1, y: lineNumber },
+            end: { x: l.startIndex + l.length + 1, y: lineNumber },
+          },
+          text: l.text,
+          decorations: { underline: true, pointerCursor: true },
+          activate: (e: MouseEvent) => {
+            if (!e.ctrlKey && !e.metaKey) return;
+            const params = parseFilePath(l.text);
+            transport.request("files.open", params).catch((err) => {
+              console.error("[files.open] Failed:", err);
+            });
+          },
+        })),
       );
     },
   });
 
-  // Web fonts: ensure JetBrains Mono loads properly before rendering
+  // Web fonts: ensure JetBrains Mono loads before rendering
   const webFontsAddon = new WebFontsAddon();
   term.loadAddon(webFontsAddon);
-  void webFontsAddon.loadFonts(["JetBrains Mono"]).then(() => {
-    fitAddon.fit();
-  });
+  void webFontsAddon.loadFonts(["JetBrains Mono"]).then(() => fitAddon.fit());
 
   const unsub = transport.subscribe("terminal:data", ({ terminalId: tid, data }) => {
     if (tid === terminalId) {
@@ -140,7 +143,14 @@ export function getOrCreateTerminal(terminalId: string): CachedTerminal {
   };
   const keybindingHandlers = setupTerminalKeybindings(term, write);
 
-  const cached: CachedTerminal = { term, fitAddon, unsub, terminalId, keybindingHandlers };
+  const cached: CachedTerminal = {
+    term,
+    fitAddon,
+    unsub,
+    linkDisposable,
+    terminalId,
+    keybindingHandlers,
+  };
   cache.set(terminalId, cached);
   return cached;
 }
@@ -149,6 +159,7 @@ export function destroyTerminal(terminalId: string): void {
   const cached = cache.get(terminalId);
   if (cached) {
     cached.unsub();
+    cached.linkDisposable.dispose();
     cached.term.dispose();
     cache.delete(terminalId);
   }
