@@ -2,6 +2,17 @@ import type { WsPushEvents } from "@iara/contracts";
 import * as pty from "node-pty";
 import { buildClaudeArgs, buildSystemPrompt, type LaunchConfig } from "./launcher.js";
 
+/** Keep only IARA_ vars from the server process env. */
+function cleanEnv(env: NodeJS.ProcessEnv): Record<string, string> {
+  const picked: Record<string, string> = {};
+  for (const [key, value] of Object.entries(env)) {
+    if (value !== undefined && key.startsWith("IARA_")) {
+      picked[key] = value;
+    }
+  }
+  return picked;
+}
+
 export interface TerminalCreateConfig {
   taskId: string;
   taskDir: string;
@@ -50,7 +61,11 @@ export class TerminalManager {
     const args = buildClaudeArgs(launchConfig);
 
     const env: Record<string, string> = {
-      ...process.env,
+      HOME: process.env.HOME ?? "",
+      USER: process.env.USER ?? "",
+      SHELL: process.env.SHELL ?? "/bin/bash",
+      PATH: process.env.PATH ?? "/usr/local/bin:/usr/bin:/bin",
+      ...cleanEnv(process.env),
       ...config.env,
       IARA_SESSION_ID: sessionId,
       LANG: process.env.LANG ?? "en_US.UTF-8",
@@ -62,7 +77,7 @@ export class TerminalManager {
     const shellArgs =
       process.platform === "win32"
         ? ["/c", "claude", ...args]
-        : ["-c", `claude ${args.map((a) => `'${a.replace(/'/g, "'\\''")}'`).join(" ")}`];
+        : ["-lc", `claude ${args.map((a) => `'${a.replace(/'/g, "'\\''")}'`).join(" ")}`];
 
     const ptyProcess = pty.spawn(shell, shellArgs, {
       name: "xterm-256color",

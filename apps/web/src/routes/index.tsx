@@ -46,6 +46,7 @@ function HomePage() {
   return (
     <>
       <TaskWorkspace
+        key={task.id}
         project={project}
         task={task}
         onCompleteTask={() => void handleComplete()}
