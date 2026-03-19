@@ -64,7 +64,7 @@ export function buildSystemPrompt(ctx: TaskContext): string {
   // # WORKTREES
   const env = buildEnvironmentSection(ctx);
   if (env) {
-    sections.push(`# WORKTREES\n${env}`);
+    sections.push(`# WORKTREES\n${env}\n\nYour working directory is NOT a git repository. All code and git operations must happen inside the worktree directories listed above.`);
   }
 
   // PROJECT.md and TASK.md — wrapped in tags, only if non-empty

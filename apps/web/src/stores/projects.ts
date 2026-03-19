@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import type { CreateProjectInput, Project, UpdateProjectInput } from "@iara/contracts";
 import { transport } from "../lib/ws-transport.js";
+import { useTaskStore } from "./tasks.js";
 
 interface ProjectState {
   projects: Project[];
@@ -33,7 +34,16 @@ export const useProjectStore = create<ProjectState & ProjectActions>((set) => ({
   },
 
   selectProject: (id) => {
-    set({ selectedProjectId: id });
+    const { selectedProjectId } = useProjectStore.getState();
+    if (id === selectedProjectId) {
+      // Toggle off: deselect project and clear tasks
+      set({ selectedProjectId: null });
+      useTaskStore.getState().clearTasks();
+    } else {
+      // Select new project: clear previous tasks
+      useTaskStore.getState().clearTasks();
+      set({ selectedProjectId: id });
+    }
   },
 
   createProject: async (input) => {

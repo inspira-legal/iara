@@ -43,7 +43,8 @@ export const useTaskStore = create<TaskState & TaskActions>((set, get) => ({
   },
 
   selectTask: (id) => {
-    set({ selectedTaskId: id });
+    const { selectedTaskId } = useTaskStore.getState();
+    set({ selectedTaskId: id === selectedTaskId ? null : id });
   },
 
   createTask: async (projectId, input) => {
@@ -63,11 +64,19 @@ export const useTaskStore = create<TaskState & TaskActions>((set, get) => ({
   },
 
   deleteTask: async (id) => {
-    await transport.request("tasks.delete", { id });
-    set((state) => ({
-      tasks: state.tasks.filter((t) => t.id !== id),
-      selectedTaskId: state.selectedTaskId === id ? null : state.selectedTaskId,
-    }));
+    // Optimistic update: remove from UI immediately
+    const prev = useTaskStore.getState();
+    set({
+      tasks: prev.tasks.filter((t) => t.id !== id),
+      selectedTaskId: prev.selectedTaskId === id ? null : prev.selectedTaskId,
+    });
+    try {
+      await transport.request("tasks.delete", { id });
+    } catch (err) {
+      // Rollback on failure
+      console.error("[tasks] Failed to delete task:", err);
+      set({ tasks: prev.tasks, selectedTaskId: prev.selectedTaskId });
+    }
   },
 
   clearTasks: () => {
