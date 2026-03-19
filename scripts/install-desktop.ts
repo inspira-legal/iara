@@ -28,13 +28,16 @@ const catalog = (rootPkg as any).workspaces.catalog as Record<string, unknown>;
 
 function killRunningIara() {
   const os = platform();
+  const myPid = process.pid;
   try {
     if (os === "win32") {
       spawnSync("taskkill", ["/F", "/IM", "iara.exe"], { stdio: "ignore" });
     } else {
-      // Kill Electron process by name (AppImage extracts as iara)
-      spawnSync("pkill", ["-f", "iara.AppImage"], { stdio: "ignore" });
-      spawnSync("pkill", ["-f", "iara --"], { stdio: "ignore" });
+      // Kill AppImage and iara-desktop processes, excluding our own PID
+      spawnSync("bash", [
+        "-c",
+        `pgrep -f 'iara.AppImage|iara-desktop' | grep -v ${myPid} | xargs -r kill 2>/dev/null`,
+      ], { stdio: "ignore" });
     }
     // Give processes time to exit
     spawnSync("sleep", ["1"], { stdio: "ignore" });
