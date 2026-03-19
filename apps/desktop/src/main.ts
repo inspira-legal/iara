@@ -224,14 +224,14 @@ function createWindow(): BrowserWindow {
     if (input.type !== "keyDown") return;
     if (!(input.control || input.meta)) return;
 
-    // Ctrl+key (no shift) → zoom
+    // Ctrl+key (no shift) → zoom only for =, +, -, 0
     if (!input.shift) {
       const action = zoomKeys[input.key];
       if (action) {
         action(win.webContents);
         event.preventDefault();
+        return;
       }
-      return;
     }
 
     // Ctrl+Shift+I/J → block DevTools (accessible via menu in dev, blocked in prod)

@@ -142,18 +142,6 @@ export function ProjectNode({
               {project.name}
             </button>
           )}
-
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              onCreateTask();
-            }}
-            className="shrink-0 rounded p-0.5 text-zinc-600 opacity-0 transition-opacity hover:bg-zinc-700 hover:text-zinc-300 group-hover:opacity-100"
-            title={`New Task (in ${project.name})`}
-          >
-            <Plus size={14} />
-          </button>
         </div>
 
         {/* Expanded: tasks */}
@@ -187,14 +175,6 @@ export function ProjectNode({
                   <RefreshCw size={12} />
                 </button>
               </div>
-            ) : tasks.length === 0 ? (
-              <button
-                type="button"
-                onClick={onCreateTask}
-                className="px-2 py-2 text-left text-xs text-zinc-600 hover:text-zinc-400"
-              >
-                No tasks — click to create
-              </button>
             ) : (
               <>
                 {visibleTasks.map((task) => (
@@ -222,6 +202,16 @@ export function ProjectNode({
                 )}
               </>
             )}
+
+            {/* Fixed add task button */}
+            <button
+              type="button"
+              onClick={onCreateTask}
+              className="flex w-full items-center gap-1.5 rounded-md px-2 py-1 text-left text-xs text-zinc-600 transition-colors hover:bg-zinc-800/50 hover:text-zinc-400"
+            >
+              <Plus size={12} className="shrink-0" />
+              <span>New task</span>
+            </button>
           </div>
         )}
       </div>

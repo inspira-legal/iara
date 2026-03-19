@@ -11,6 +11,7 @@ export function useKeyboardShortcuts(shortcuts: ShortcutMap): void {
       let key = "";
 
       if (mod) key += "mod+";
+      if (e.altKey) key += "alt+";
       if (e.shiftKey) key += "shift+";
       key += e.key.toLowerCase();
 
