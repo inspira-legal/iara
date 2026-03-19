@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Plus } from "lucide-react";
 import { useProjectStore } from "~/stores/projects";
 import { useTaskStore } from "~/stores/tasks";
@@ -18,12 +18,45 @@ export function Sidebar() {
     useProjectStore();
   const { selectedTaskId } = useTaskStore();
   const { discoverCommands } = useDevServerStore();
-  const { hydrateFromStorage } = useSidebarStore();
+  const { sidebarWidth, setSidebarWidth, hydrateFromStorage } = useSidebarStore();
 
   const [showCreateProject, setShowCreateProject] = useState(false);
   const [createTaskProjectId, setCreateTaskProjectId] = useState<string | null>(null);
   const [deleteProjectId, setDeleteProjectId] = useState<string | null>(null);
   const [addRepoProjectId, setAddRepoProjectId] = useState<string | null>(null);
+  const [isResizing, setIsResizing] = useState(false);
+  const startXRef = useRef(0);
+  const startWidthRef = useRef(0);
+
+  const onResizeStart = useCallback(
+    (e: React.MouseEvent) => {
+      e.preventDefault();
+      setIsResizing(true);
+      startXRef.current = e.clientX;
+      startWidthRef.current = sidebarWidth;
+    },
+    [sidebarWidth],
+  );
+
+  useEffect(() => {
+    if (!isResizing) return;
+
+    const onMouseMove = (e: MouseEvent) => {
+      const delta = e.clientX - startXRef.current;
+      setSidebarWidth(startWidthRef.current + delta);
+    };
+
+    const onMouseUp = () => {
+      setIsResizing(false);
+    };
+
+    document.addEventListener("mousemove", onMouseMove);
+    document.addEventListener("mouseup", onMouseUp);
+    return () => {
+      document.removeEventListener("mousemove", onMouseMove);
+      document.removeEventListener("mouseup", onMouseUp);
+    };
+  }, [isResizing, setSidebarWidth]);
 
   // Hydrate sidebar state from localStorage on mount
   useEffect(() => {
@@ -52,7 +85,10 @@ export function Sidebar() {
 
   return (
     <>
-      <aside className="flex w-64 shrink-0 flex-col border-r border-zinc-800 bg-zinc-900">
+      <aside
+        className="relative flex shrink-0 flex-col border-r border-zinc-800 bg-zinc-900"
+        style={{ width: sidebarWidth }}
+      >
         {/* Header */}
         <div className="flex h-12 items-center justify-between px-4">
           <div className="flex items-center gap-2">
@@ -90,7 +126,18 @@ export function Sidebar() {
         <div className="border-t border-zinc-800">
           <DevServerPanel />
         </div>
+        {/* Resize handle */}
+        <div
+          role="separator"
+          aria-orientation="vertical"
+          onMouseDown={onResizeStart}
+          onDoubleClick={() => setSidebarWidth(256)}
+          className={`absolute top-0 right-0 bottom-0 w-1 cursor-col-resize transition-colors hover:bg-blue-500/50 ${isResizing ? "bg-blue-500/50" : ""}`}
+        />
       </aside>
+
+      {/* Prevent text selection and pointer events while resizing */}
+      {isResizing && <div className="fixed inset-0 z-50 cursor-col-resize" />}
 
       {/* Dialogs */}
       <CreateProjectDialog open={showCreateProject} onClose={() => setShowCreateProject(false)} />

@@ -6,6 +6,7 @@ interface SidebarState {
   expandedProjectIds: Set<string>;
   projectOrder: string[];
   devServerPanelOpen: boolean;
+  sidebarWidth: number;
 }
 
 interface SidebarActions {
@@ -14,6 +15,7 @@ interface SidebarActions {
   collapseProject(id: string): void;
   setProjectOrder(ids: string[]): void;
   toggleDevServerPanel(): void;
+  setSidebarWidth(width: number): void;
   hydrateFromStorage(): void;
   removeProject(id: string): void;
 }
@@ -27,6 +29,7 @@ function loadFromStorage(): Partial<SidebarState> {
       expandedProjectIds: new Set(parsed.expandedProjectIds ?? []),
       projectOrder: parsed.projectOrder ?? [],
       devServerPanelOpen: parsed.devServerPanelOpen ?? true,
+      sidebarWidth: parsed.sidebarWidth ?? 256,
     };
   } catch {
     return {};
@@ -41,6 +44,7 @@ function saveToStorage(state: SidebarState) {
         expandedProjectIds: [...state.expandedProjectIds],
         projectOrder: state.projectOrder,
         devServerPanelOpen: state.devServerPanelOpen,
+        sidebarWidth: state.sidebarWidth,
       }),
     );
   } catch {
@@ -52,6 +56,7 @@ export const useSidebarStore = create<SidebarState & SidebarActions>((set) => ({
   expandedProjectIds: new Set<string>(),
   projectOrder: [],
   devServerPanelOpen: true,
+  sidebarWidth: 256,
 
   toggleProject: (id) => {
     set((state) => {
@@ -94,6 +99,15 @@ export const useSidebarStore = create<SidebarState & SidebarActions>((set) => ({
       const newState = { ...state, projectOrder: ids };
       saveToStorage(newState);
       return { projectOrder: ids };
+    });
+  },
+
+  setSidebarWidth: (width) => {
+    set((state) => {
+      const clamped = Math.max(200, Math.min(480, width));
+      const newState = { ...state, sidebarWidth: clamped };
+      saveToStorage(newState);
+      return { sidebarWidth: clamped };
     });
   },
 
