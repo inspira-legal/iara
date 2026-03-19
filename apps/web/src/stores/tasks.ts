@@ -6,6 +6,8 @@ interface TaskState {
   tasks: Task[];
   selectedTaskId: string | null;
   loading: boolean;
+  error: string | null;
+  tasksByProject: Map<string, Task[]>;
 }
 
 interface TaskActions {
@@ -15,20 +17,28 @@ interface TaskActions {
   completeTask(id: string): Promise<void>;
   deleteTask(id: string): Promise<void>;
   clearTasks(): void;
+  getTasksForProject(projectId: string): Task[];
 }
 
-export const useTaskStore = create<TaskState & TaskActions>((set) => ({
+export const useTaskStore = create<TaskState & TaskActions>((set, get) => ({
   tasks: [],
   selectedTaskId: null,
   loading: false,
+  error: null,
+  tasksByProject: new Map(),
 
   loadTasks: async (projectId) => {
-    set({ loading: true });
+    set({ loading: true, error: null });
     try {
       const tasks = await transport.request("tasks.list", { projectId });
-      set({ tasks, loading: false });
-    } catch {
-      set({ loading: false });
+      set((state) => {
+        const nextCache = new Map(state.tasksByProject);
+        nextCache.set(projectId, tasks);
+        return { tasks, loading: false, error: null, tasksByProject: nextCache };
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to load tasks";
+      set({ loading: false, error: message });
     }
   },
 
@@ -61,6 +71,10 @@ export const useTaskStore = create<TaskState & TaskActions>((set) => ({
   },
 
   clearTasks: () => {
-    set({ tasks: [], selectedTaskId: null });
+    set({ tasks: [], selectedTaskId: null, error: null });
+  },
+
+  getTasksForProject: (projectId) => {
+    return get().tasksByProject.get(projectId) ?? [];
   },
 }));

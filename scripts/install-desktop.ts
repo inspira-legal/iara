@@ -22,6 +22,29 @@ const root = resolve(import.meta.dirname, "..");
 const releaseDir = join(root, "release");
 const catalog = (rootPkg as any).workspaces.catalog as Record<string, unknown>;
 
+// ---------------------------------------------------------------------------
+// 0. Kill running iara instances before install
+// ---------------------------------------------------------------------------
+
+function killRunningIara() {
+  const os = platform();
+  try {
+    if (os === "win32") {
+      spawnSync("taskkill", ["/F", "/IM", "iara.exe"], { stdio: "ignore" });
+    } else {
+      // Kill Electron process by name (AppImage extracts as iara)
+      spawnSync("pkill", ["-f", "iara.AppImage"], { stdio: "ignore" });
+      spawnSync("pkill", ["-f", "iara --"], { stdio: "ignore" });
+    }
+    // Give processes time to exit
+    spawnSync("sleep", ["1"], { stdio: "ignore" });
+  } catch {
+    // No running instance — fine
+  }
+}
+
+killRunningIara();
+
 function run(cmd: string, cwd = root) {
   console.log(`> ${cmd}`);
   execSync(cmd, { cwd, stdio: "inherit" });

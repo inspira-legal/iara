@@ -1,10 +1,12 @@
 import { useEffect } from "react";
-import { Play, Square, Circle } from "lucide-react";
+import { Play, Square, Circle, ChevronRight, Loader2 } from "lucide-react";
 import { useDevServerStore } from "~/stores/devservers";
+import { useSidebarStore } from "~/stores/sidebar";
 import type { DevCommand } from "@iara/contracts";
 
 export function DevServerPanel() {
-  const { servers, commands, loadStatus, startServer } = useDevServerStore();
+  const { servers, commands, loading, loadStatus, startServer } = useDevServerStore();
+  const { devServerPanelOpen, toggleDevServerPanel } = useSidebarStore();
 
   useEffect(() => {
     void loadStatus();
@@ -12,11 +14,11 @@ export function DevServerPanel() {
     return () => clearInterval(interval);
   }, [loadStatus]);
 
-  // Show discovered commands that aren't running
   const runningNames = new Set(servers.map((s) => s.name));
   const available = commands.filter((c) => !runningNames.has(c.name));
+  const totalCount = servers.length + available.length;
 
-  if (servers.length === 0 && available.length === 0) {
+  if (totalCount === 0 && !loading) {
     return (
       <div className="px-4 py-2 text-xs text-zinc-600">
         <p>No dev servers</p>
@@ -25,18 +27,39 @@ export function DevServerPanel() {
   }
 
   return (
-    <div className="flex flex-col gap-1 px-4 py-2">
-      <h3 className="mb-1 text-xs font-medium uppercase tracking-wider text-zinc-500">
-        Dev Servers
-      </h3>
+    <div className="flex flex-col">
+      {/* Collapsible header */}
+      <button
+        type="button"
+        onClick={toggleDevServerPanel}
+        className="flex items-center gap-1.5 px-4 py-2 text-left hover:bg-zinc-800/50"
+      >
+        <ChevronRight
+          size={12}
+          className={`text-zinc-500 transition-transform duration-150 ${
+            devServerPanelOpen ? "rotate-90" : ""
+          }`}
+        />
+        <span className="text-xs font-medium uppercase tracking-wider text-zinc-500">
+          Dev Servers
+        </span>
+        {loading && <Loader2 size={10} className="animate-spin text-zinc-500" />}
+        {!devServerPanelOpen && servers.length > 0 && (
+          <span className="ml-auto text-xs text-zinc-600">{servers.length} running</span>
+        )}
+      </button>
 
-      {servers.map((server) => (
-        <DevServerRow key={server.name} server={server} />
-      ))}
-
-      {available.map((cmd) => (
-        <DiscoveredCommand key={cmd.name} command={cmd} onStart={() => void startServer(cmd)} />
-      ))}
+      {/* Content */}
+      {devServerPanelOpen && (
+        <div className="flex max-h-40 flex-col gap-1 overflow-y-auto px-4 pb-2">
+          {servers.map((server) => (
+            <DevServerRow key={server.name} server={server} />
+          ))}
+          {available.map((cmd) => (
+            <DiscoveredCommand key={cmd.name} command={cmd} onStart={() => void startServer(cmd)} />
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -55,12 +78,28 @@ function DevServerRow({
         ? "text-yellow-500"
         : "text-red-500";
 
+  const healthLabel =
+    server.health === "healthy"
+      ? "Healthy"
+      : server.health === "starting"
+        ? "Starting..."
+        : "Failed";
+
   return (
     <div className="flex items-center justify-between rounded-md bg-zinc-800/50 px-2 py-1.5">
       <div className="flex items-center gap-2">
-        <Circle size={6} className={`fill-current ${healthColor}`} />
-        <span className="text-xs text-zinc-300">{server.name}</span>
-        {server.port && <code className="text-xs text-zinc-600">:{server.port}</code>}
+        <Circle
+          size={8}
+          className={`fill-current ${healthColor} ${server.health === "starting" ? "animate-pulse" : ""}`}
+        />
+        <span className="text-xs text-zinc-300" title={`${server.name} — ${healthLabel}`}>
+          {server.name}
+        </span>
+        {server.port && (
+          <code className="text-xs text-zinc-600" title={`Port ${server.port}`}>
+            :{server.port}
+          </code>
+        )}
       </div>
       <button
         type="button"
