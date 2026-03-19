@@ -1,5 +1,6 @@
 import type { DevServerSupervisor } from "../services/devservers.js";
 import type { NotificationService } from "../services/notifications.js";
+import type { SessionWatcher } from "../services/session-watcher.js";
 import type { TerminalManager } from "../services/terminal.js";
 import { registerAppHandlers } from "./app.js";
 import { registerDevHandlers } from "./devservers.js";
@@ -17,12 +18,13 @@ export interface HandlerDeps {
   devSupervisor: DevServerSupervisor;
   notificationService: NotificationService;
   terminalManager: TerminalManager;
+  sessionWatcher: SessionWatcher;
 }
 
 export function registerAllHandlers(deps: HandlerDeps): void {
   registerAppHandlers();
   registerProjectHandlers();
-  registerTaskHandlers();
+  registerTaskHandlers(deps.sessionWatcher);
   registerLauncherHandlers();
   registerSessionHandlers();
   registerPromptHandlers();

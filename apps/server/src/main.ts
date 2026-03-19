@@ -9,6 +9,7 @@ import { SocketServer, registerSocketHandlers } from "./socket.js";
 import { syncShellEnvironment } from "./services/shell-env.js";
 import { mergeHooks, removeHooks } from "./services/hooks.js";
 import { generatePluginDir, cleanupPluginDir } from "./services/plugins.js";
+import { SessionWatcher } from "./services/session-watcher.js";
 
 syncShellEnvironment();
 
@@ -29,9 +30,10 @@ const notificationService = new NotificationService(pushAll);
 const terminalManager = new TerminalManager(pushAll);
 const socketServer = new SocketServer();
 registerSocketHandlers(socketServer, pushAll);
+const sessionWatcher = new SessionWatcher(pushAll);
 
 // Register all WS handlers
-registerAllHandlers({ devSupervisor, notificationService, terminalManager });
+registerAllHandlers({ devSupervisor, notificationService, terminalManager, sessionWatcher });
 
 // Auto-open browser panel when frontend dev server is healthy
 devSupervisor.on("healthy", (_name: string, port: number) => {
@@ -42,7 +44,8 @@ devSupervisor.on("healthy", (_name: string, port: number) => {
   }
 });
 
-// Initialize database
+// Start session file watcher
+sessionWatcher.refresh();
 
 // Start
 const { httpServer, stop: stopWs } = createServer({ port, authToken, webDir });
@@ -92,6 +95,9 @@ function shutdown() {
   } catch {}
   try {
     if (pluginDir) cleanupPluginDir(pluginDir);
+  } catch {}
+  try {
+    sessionWatcher.stop();
   } catch {}
   try {
     removeHooks();

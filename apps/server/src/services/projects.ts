@@ -182,7 +182,7 @@ export async function updateProject(id: string, input: UpdateProjectInput): Prom
         : [],
     );
 
-    const activeTasks = listTasks(id).filter((t) => t.status === "active");
+    const activeTasks = listTasks(id);
     const newRepoNames = new Set(input.repoSources.map(repoNameFromSource));
 
     // Clone new repos + create worktrees in active tasks

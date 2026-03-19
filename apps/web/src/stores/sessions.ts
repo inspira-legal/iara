@@ -85,3 +85,8 @@ export const useSessionStore = create<SessionState & SessionActions>((set, get) 
     void get().loadForTask(taskId);
   },
 }));
+
+// Auto-refresh sessions when server detects file changes
+transport.subscribe("session:changed", ({ taskId }: { taskId: string }) => {
+  useSessionStore.getState().invalidateTask(taskId);
+});

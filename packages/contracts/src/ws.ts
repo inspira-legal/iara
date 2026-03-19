@@ -94,6 +94,7 @@ export type WsPushEvents = {
   "dev:log": { name: string; line: string };
   notification: { title: string; body: string; type?: string };
   "clone:progress": CloneProgress;
+  "session:changed": { taskId: string };
 };
 
 // ---------------------------------------------------------------------------
