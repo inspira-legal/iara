@@ -26,7 +26,7 @@ function isValidProject(projectPath: string): boolean {
 function ensureProjectFiles(projectPath: string, name: string): void {
   const projectMdPath = path.join(projectPath, "PROJECT.md");
   if (!fs.existsSync(projectMdPath)) {
-    fs.writeFileSync(projectMdPath, `# ${name}\n`);
+    fs.writeFileSync(projectMdPath, "");
   }
 }
 
@@ -141,7 +141,7 @@ export async function createProject(input: CreateProjectInput): Promise<Project>
     // PROJECT.md
     const projectMdPath = path.join(projectDir, "PROJECT.md");
     if (!fs.existsSync(projectMdPath)) {
-      fs.writeFileSync(projectMdPath, `# ${input.name}\n`);
+      fs.writeFileSync(projectMdPath, "");
     }
 
     // Clone repos into .repos/

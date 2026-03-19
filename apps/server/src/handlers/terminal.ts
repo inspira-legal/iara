@@ -1,5 +1,6 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
+import type { RepoContext } from "../services/launcher.js";
 import { registerMethod } from "../router.js";
 import { getProject, getProjectDir } from "../services/projects.js";
 import { getTask } from "../services/tasks.js";
@@ -18,15 +19,21 @@ export function registerTerminalHandlers(manager: TerminalManager): void {
 
     // Resolve repo dirs (worktrees inside task dir)
     const repoDirs: string[] = [];
+    const repos: RepoContext[] = [];
     const reposDir = path.join(projectDir, ".repos");
     if (fs.existsSync(reposDir)) {
-      const repos = fs
+      const repoNames = fs
         .readdirSync(reposDir)
         .filter((name) => fs.statSync(path.join(reposDir, name)).isDirectory());
-      for (const repo of repos) {
-        const wtDir = path.join(taskDir, repo);
+      for (const name of repoNames) {
+        const wtDir = path.join(taskDir, name);
         if (fs.existsSync(wtDir)) {
           repoDirs.push(wtDir);
+          repos.push({
+            name,
+            worktreePath: wtDir,
+            mainRepoPath: path.join(reposDir, name),
+          });
         }
       }
     }
@@ -39,6 +46,14 @@ export function registerTerminalHandlers(manager: TerminalManager): void {
       taskId: params.taskId,
       taskDir,
       repoDirs,
+      taskContext: {
+        taskDir,
+        projectName: project.name,
+        taskName: task.name,
+        taskDescription: task.description,
+        branch: task.branch,
+        repos,
+      },
       ...(params.resumeSessionId != null ? { resumeSessionId: params.resumeSessionId } : {}),
       env: {
         IARA_TASK_ID: task.id,

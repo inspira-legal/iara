@@ -1,6 +1,12 @@
 import type { WsPushEvents } from "@iara/contracts";
 import * as pty from "node-pty";
-import { buildClaudeArgs, buildSystemPrompt, type LaunchConfig } from "./launcher.js";
+import {
+  buildClaudeArgs,
+  buildSystemPrompt,
+  buildSystemPromptFromDir,
+  type LaunchConfig,
+  type TaskContext,
+} from "./launcher.js";
 
 /** Keep only IARA_ vars from the server process env. */
 function cleanEnv(env: NodeJS.ProcessEnv): Record<string, string> {
@@ -17,6 +23,7 @@ export interface TerminalCreateConfig {
   taskId: string;
   taskDir: string;
   repoDirs: string[];
+  taskContext?: TaskContext;
   resumeSessionId?: string;
   env?: Record<string, string>;
   cols?: number;
@@ -47,7 +54,9 @@ export class TerminalManager {
 
     const terminalId = crypto.randomUUID();
     const sessionId = config.resumeSessionId ?? crypto.randomUUID();
-    const systemPrompt = buildSystemPrompt(config.taskDir);
+    const systemPrompt = config.taskContext
+      ? buildSystemPrompt(config.taskContext)
+      : buildSystemPromptFromDir(config.taskDir);
 
     const launchConfig: LaunchConfig = {
       taskDir: config.taskDir,

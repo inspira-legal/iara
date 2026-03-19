@@ -8,12 +8,31 @@ export interface LaunchConfig {
   sessionId?: string | undefined;
   resumeSessionId?: string | undefined;
   appendSystemPrompt?: string | undefined;
+  taskContext?: TaskContext | undefined;
   env?: Record<string, string> | undefined;
 }
 
 export interface LaunchResult {
   pid: number | null;
   sessionId: string;
+}
+
+/** Context about the task environment, used to build a richer system prompt. */
+export interface TaskContext {
+  taskDir: string;
+  projectName: string;
+  taskName: string;
+  taskDescription: string;
+  branch: string;
+  repos: RepoContext[];
+}
+
+export interface RepoContext {
+  name: string;
+  /** Absolute path to this repo's worktree inside the task directory. */
+  worktreePath: string;
+  /** Absolute path to the main repo in .repos/. */
+  mainRepoPath: string;
 }
 
 export function buildClaudeArgs(config: LaunchConfig): string[] {
@@ -39,17 +58,53 @@ export function buildClaudeArgs(config: LaunchConfig): string[] {
   return args;
 }
 
-export function buildSystemPrompt(taskDir: string): string {
+export function buildSystemPrompt(ctx: TaskContext): string {
+  const sections: string[] = [];
+
+  // # WORKTREES
+  const env = buildEnvironmentSection(ctx);
+  if (env) {
+    sections.push(`# WORKTREES\n${env}`);
+  }
+
+  // PROJECT.md and TASK.md — wrapped in tags, only if non-empty
+  for (const [file, tag] of [["PROJECT.md", "project"], ["TASK.md", "task"]] as const) {
+    const filePath = path.join(ctx.taskDir, file);
+    if (fs.existsSync(filePath)) {
+      const content = fs.readFileSync(filePath, "utf-8").trim();
+      if (content) {
+        sections.push(`<${tag}>\n${content}\n</${tag}>`);
+      }
+    }
+  }
+
+  return sections.join("\n\n");
+}
+
+function buildEnvironmentSection(ctx: TaskContext): string {
+  if (ctx.repos.length === 0) return "";
+
+  const lines = ctx.repos.map(
+    (r) => `${r.name}/  ← git worktree (branch: ${ctx.branch}, origem: ${r.mainRepoPath})`,
+  );
+
+  return lines.join("\n");
+}
+
+/** Fallback: build system prompt from just the task directory (no structured context). */
+export function buildSystemPromptFromDir(taskDir: string): string {
   const parts: string[] = [];
 
   const taskMd = path.join(taskDir, "TASK.md");
   if (fs.existsSync(taskMd)) {
-    parts.push(fs.readFileSync(taskMd, "utf-8"));
+    const content = fs.readFileSync(taskMd, "utf-8").trim();
+    if (content) parts.push(content);
   }
 
   const projectMd = path.join(taskDir, "PROJECT.md");
   if (fs.existsSync(projectMd)) {
-    parts.push(fs.readFileSync(projectMd, "utf-8"));
+    const content = fs.readFileSync(projectMd, "utf-8").trim();
+    if (content) parts.push(content);
   }
 
   return parts.join("\n\n---\n\n");
@@ -57,7 +112,9 @@ export function buildSystemPrompt(taskDir: string): string {
 
 export function launchClaude(config: LaunchConfig): LaunchResult {
   const sessionId = config.resumeSessionId ?? config.sessionId ?? crypto.randomUUID();
-  const systemPrompt = config.appendSystemPrompt ?? buildSystemPrompt(config.taskDir);
+  const systemPrompt =
+    config.appendSystemPrompt ??
+    (config.taskContext ? buildSystemPrompt(config.taskContext) : buildSystemPromptFromDir(config.taskDir));
   const args = buildClaudeArgs({ ...config, sessionId, appendSystemPrompt: systemPrompt });
 
   const env: Record<string, string> = {

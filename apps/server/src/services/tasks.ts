@@ -54,7 +54,7 @@ export async function createTask(projectId: string, input: CreateTaskInput): Pro
     // Create TASK.md
     fs.writeFileSync(
       path.join(taskDir, "TASK.md"),
-      `# ${input.name}\n\n${input.description ?? ""}\n`,
+      `${input.description?.trim() ?? ""}\n`,
     );
 
     // Symlink PROJECT.md
