@@ -1,6 +1,8 @@
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
-import { WebglAddon } from "@xterm/addon-webgl";
+import { ClipboardAddon } from "@xterm/addon-clipboard";
+import { WebLinksAddon } from "@xterm/addon-web-links";
+import { WebFontsAddon } from "@xterm/addon-web-fonts";
 import { transport } from "./ws-transport.js";
 import { setupTerminalKeybindings, type KeybindingHandlers } from "./terminal-keybindings.js";
 
@@ -57,6 +59,19 @@ export function getOrCreateTerminal(terminalId: string): CachedTerminal {
 
   const fitAddon = new FitAddon();
   term.loadAddon(fitAddon);
+
+  // Clipboard addon: handles OSC 52 clipboard sequences from CLI apps
+  term.loadAddon(new ClipboardAddon());
+
+  // Web links: clickable URLs in terminal output
+  term.loadAddon(new WebLinksAddon());
+
+  // Web fonts: ensure JetBrains Mono loads properly before rendering
+  const webFontsAddon = new WebFontsAddon();
+  term.loadAddon(webFontsAddon);
+  void webFontsAddon.loadFonts(["JetBrains Mono"]).then(() => {
+    fitAddon.fit();
+  });
 
   const unsub = transport.subscribe("terminal:data", ({ terminalId: tid, data }) => {
     if (tid === terminalId) {

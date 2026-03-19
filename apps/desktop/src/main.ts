@@ -197,20 +197,48 @@ function createWindow(): BrowserWindow {
     });
   }
 
-  // Ctrl+/Ctrl- zoom
+  // Keyboard handling: prevent Chromium built-in shortcuts from stealing terminal keys,
+  // and handle zoom shortcuts.
+  let redispatching = false;
   win.webContents.on("before-input-event", (event, input) => {
     if (input.type !== "keyDown") return;
     if (!(input.control || input.meta)) return;
+
+    // Guard: let re-dispatched events pass through to the renderer
+    if (redispatching) return;
+
+    // Zoom: Ctrl+=/Ctrl+-/Ctrl+0
     const wc = win.webContents;
-    if (input.key === "=" || input.key === "+") {
-      wc.setZoomLevel(wc.getZoomLevel() + 0.5);
+    if (!input.shift) {
+      if (input.key === "=" || input.key === "+") {
+        wc.setZoomLevel(wc.getZoomLevel() + 0.5);
+        event.preventDefault();
+        return;
+      }
+      if (input.key === "-") {
+        wc.setZoomLevel(wc.getZoomLevel() - 0.5);
+        event.preventDefault();
+        return;
+      }
+      if (input.key === "0") {
+        wc.setZoomLevel(0);
+        event.preventDefault();
+        return;
+      }
+    }
+
+    // Block Chromium DevTools shortcuts — they steal Ctrl+Shift+C/I/J from the terminal.
+    // DevTools is still accessible via menu (dev) or F12.
+    if (input.shift && (input.key === "C" || input.key === "I" || input.key === "J")) {
       event.preventDefault();
-    } else if (input.key === "-") {
-      wc.setZoomLevel(wc.getZoomLevel() - 0.5);
-      event.preventDefault();
-    } else if (input.key === "0") {
-      wc.setZoomLevel(0);
-      event.preventDefault();
+      // Re-dispatch so the renderer (xterm.js) receives the event
+      redispatching = true;
+      wc.sendInputEvent({
+        type: "keyDown",
+        keyCode: input.key,
+        modifiers: ["control", "shift"],
+      });
+      redispatching = false;
     }
   });
 
