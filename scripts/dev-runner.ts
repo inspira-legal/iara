@@ -34,12 +34,16 @@ function shutdown() {
   if (shuttingDown) return;
   shuttingDown = true;
   for (const child of children) {
-    try { child.kill("SIGTERM"); } catch {}
+    try {
+      child.kill("SIGTERM");
+    } catch {}
   }
   // Force kill after 2s
   setTimeout(() => {
     for (const child of children) {
-      try { child.kill("SIGKILL"); } catch {}
+      try {
+        child.kill("SIGKILL");
+      } catch {}
     }
     process.exit(0);
   }, 2000);
