@@ -6,7 +6,7 @@ import { WebLinksAddon } from "@xterm/addon-web-links";
 import { WebFontsAddon } from "@xterm/addon-web-fonts";
 import { transport } from "./ws-transport.js";
 import { setupTerminalKeybindings, type KeybindingHandlers } from "./terminal-keybindings.js";
-import { findFileLinks, parseFilePath } from "./terminal-links.js";
+import { findFileLinks, isRelativePath, parseFilePath } from "./terminal-links.js";
 
 interface CachedTerminal {
   term: Terminal;
@@ -148,9 +148,19 @@ export function getOrCreateTerminal(terminalId: string): CachedTerminal {
             },
             activate: (e: MouseEvent) => {
               if (!e.ctrlKey && !e.metaKey) return;
-              transport.request("files.open", parseFilePath(l.text)).catch((err) => {
-                console.error("[files.open] Failed:", err);
-              });
+              const open = (cwd?: string | null) => {
+                transport.request("files.open", parseFilePath(l.text, cwd)).catch((err) => {
+                  console.error("[files.open] Failed:", err);
+                });
+              };
+              if (isRelativePath(l.text)) {
+                transport
+                  .request("terminal.getCwd", { terminalId })
+                  .then(open)
+                  .catch(() => open());
+              } else {
+                open();
+              }
             },
           };
         }),

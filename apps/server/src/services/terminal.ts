@@ -1,3 +1,6 @@
+import { execFile } from "node:child_process";
+import * as fs from "node:fs/promises";
+import { promisify } from "node:util";
 import type { WsPushEvents } from "@iara/contracts";
 import * as pty from "node-pty";
 import {
@@ -34,6 +37,7 @@ interface ManagedTerminal {
   id: string;
   taskId: string;
   sessionId: string;
+  initialCwd: string;
   pty: pty.IPty;
 }
 
@@ -100,6 +104,7 @@ export class TerminalManager {
       id: terminalId,
       taskId: config.taskId,
       sessionId,
+      initialCwd: config.taskDir,
       pty: ptyProcess,
     };
 
@@ -150,6 +155,35 @@ export class TerminalManager {
     for (const [id] of this.terminals) {
       this.destroy(id);
     }
+  }
+
+  async getCwd(terminalId: string): Promise<string | null> {
+    const terminal = this.terminals.get(terminalId);
+    if (!terminal) return null;
+
+    const pid = terminal.pty.pid;
+    try {
+      if (process.platform === "linux") {
+        return await fs.readlink(`/proc/${pid}/cwd`);
+      }
+      if (process.platform === "darwin") {
+        const { stdout } = await promisify(execFile)("lsof", ["-p", String(pid), "-Fn"], {
+          timeout: 2000,
+        });
+        const cwdLine = stdout.split("\n").find((l) => l.startsWith("fcwd"));
+        if (cwdLine) {
+          // Next line is the path prefixed with "n"
+          const idx = stdout.indexOf(cwdLine);
+          const rest = stdout.slice(idx + cwdLine.length + 1);
+          const pathLine = rest.split("\n").find((l) => l.startsWith("n"));
+          if (pathLine) return pathLine.slice(1);
+        }
+      }
+    } catch {
+      // Process may have exited or command unavailable
+    }
+
+    return terminal.initialCwd;
   }
 
   getByTaskId(taskId: string): ManagedTerminal | undefined {

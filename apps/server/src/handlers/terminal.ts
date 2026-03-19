@@ -74,4 +74,8 @@ export function registerTerminalHandlers(manager: TerminalManager): void {
   registerMethod("terminal.destroy", async (params) => {
     manager.destroy(params.terminalId);
   });
+
+  registerMethod("terminal.getCwd", async (params) => {
+    return manager.getCwd(params.terminalId);
+  });
 }

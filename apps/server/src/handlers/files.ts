@@ -1,4 +1,6 @@
 import { execFileSync, spawn as nodeSpawn } from "node:child_process";
+import * as os from "node:os";
+import * as path from "node:path";
 import { registerMethod } from "../router.js";
 
 const GUI_EDITORS = ["cursor", "code", "zed", "subl", "atom"] as const;
@@ -34,7 +36,16 @@ function commandExists(cmd: string): boolean {
 
 export function registerFileHandlers(): void {
   registerMethod("files.open", async (params) => {
-    const { filePath, line, col } = params;
+    let { filePath, line, col } = params;
+
+    // Resolve ~/ to home directory
+    if (filePath.startsWith("~/")) {
+      filePath = path.join(os.homedir(), filePath.slice(2));
+    }
+
+    // Normalize ../ and ./ segments
+    filePath = path.resolve(filePath);
+
     const target = line ? `${filePath}:${line}${col ? `:${col}` : ""}` : filePath;
 
     for (const editor of GUI_EDITORS) {

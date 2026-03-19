@@ -84,6 +84,7 @@ export type WsMethods = {
   "terminal.write": { params: { terminalId: string; data: string }; result: void };
   "terminal.resize": { params: { terminalId: string; cols: number; rows: number }; result: void };
   "terminal.destroy": { params: { terminalId: string }; result: void };
+  "terminal.getCwd": { params: { terminalId: string }; result: string | null };
 };
 
 // ---------------------------------------------------------------------------
