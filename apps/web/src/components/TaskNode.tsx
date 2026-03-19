@@ -1,5 +1,5 @@
 import { useState, useCallback } from "react";
-import { GitBranch, Circle, Pencil, Copy, Trash2 } from "lucide-react";
+import { GitBranch, Pencil, Copy, Trash2 } from "lucide-react";
 import type { Task } from "@iara/contracts";
 import { SidebarContextMenu, type ContextMenuItem } from "./SidebarContextMenu";
 import { formatRelativeTime, formatAbsoluteTime } from "~/lib/format-relative-time";
@@ -84,11 +84,6 @@ export function TaskNode({
             : "text-zinc-400 hover:bg-zinc-800/50 hover:text-zinc-300"
         }`}
       >
-        {/* Status icon */}
-        <div className="mt-0.5 shrink-0" title="Active">
-          <Circle size={14} className="fill-current text-blue-400" />
-        </div>
-
         {/* Content */}
         <div className="min-w-0 flex-1">
           {editing ? (

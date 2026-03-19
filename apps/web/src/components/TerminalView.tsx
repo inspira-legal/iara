@@ -39,7 +39,7 @@ export function TerminalView({ taskId, resumeSessionId }: TerminalViewProps) {
     const cached = getOrCreateTerminal(terminalId);
     const { term, fitAddon, keybindingHandlers } = cached;
 
-    keybindingHandlers.onCopy = () => toast("Texto copiado", "success");
+    keybindingHandlers.onCopy = () => toast("Copied to clipboard", "success");
 
     // If the terminal hasn't been opened yet, open it
     if (!term.element) {

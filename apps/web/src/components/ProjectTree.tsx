@@ -22,9 +22,13 @@ interface ProjectTreeProps {
   onDeleteProject: (id: string) => void;
   onRenameProject: (id: string, newName: string) => Promise<void>;
   onCreateFirstProject: () => void;
+  onAddRepo?: (projectId: string) => void;
 }
 
-type TreeItem = { type: "project"; id: string } | { type: "task"; id: string; projectId: string };
+type TreeItem =
+  | { type: "project"; id: string }
+  | { type: "root"; id: string }
+  | { type: "task"; id: string; projectId: string };
 
 export function ProjectTree({
   projects,
@@ -32,6 +36,7 @@ export function ProjectTree({
   onDeleteProject,
   onRenameProject,
   onCreateFirstProject,
+  onAddRepo,
 }: ProjectTreeProps) {
   const {
     expandedProjectIds,
@@ -80,6 +85,7 @@ export function ProjectTree({
     for (const project of sortedProjects) {
       items.push({ type: "project", id: project.id });
       if (expandedProjectIds.has(project.id)) {
+        items.push({ type: "root", id: project.id });
         const tasks = getTasksForProject(project.id);
         for (const task of tasks) {
           items.push({ type: "task", id: task.id, projectId: project.id });
@@ -94,8 +100,19 @@ export function ProjectTree({
     if (selectedTaskId) {
       return flatItems.findIndex((item) => item.type === "task" && item.id === selectedTaskId);
     }
+    if (selectedProjectId && !selectedTaskId) {
+      // Check if we're on the root item (project expanded, no task selected)
+      const rootIdx = flatItems.findIndex(
+        (item) => item.type === "root" && item.id === selectedProjectId,
+      );
+      if (rootIdx !== -1) return rootIdx;
+      // Fallback to project header
+      return flatItems.findIndex(
+        (item) => item.type === "project" && item.id === selectedProjectId,
+      );
+    }
     return -1;
-  }, [flatItems, selectedTaskId]);
+  }, [flatItems, selectedTaskId, selectedProjectId]);
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
@@ -113,6 +130,9 @@ export function ProjectTree({
             selectProject(item.id);
             selectTask(null);
             expandProject(item.id);
+          } else if (item?.type === "root") {
+            selectProject(item.id);
+            selectTask(null);
           }
           break;
         }
@@ -126,6 +146,9 @@ export function ProjectTree({
           } else if (item?.type === "project") {
             selectProject(item.id);
             selectTask(null);
+          } else if (item?.type === "root") {
+            selectProject(item.id);
+            selectTask(null);
           }
           break;
         }
@@ -134,6 +157,7 @@ export function ProjectTree({
           // Expand current project
           const item = currentIdx >= 0 ? flatItems[currentIdx] : flatItems[0];
           if (item?.type === "project") expandProject(item.id);
+          else if (item?.type === "root") expandProject(item.id);
           else if (item?.type === "task") expandProject(item.projectId);
           break;
         }
@@ -142,6 +166,7 @@ export function ProjectTree({
           // Collapse current project
           const item = currentIdx >= 0 ? flatItems[currentIdx] : null;
           if (item?.type === "project") collapseProject(item.id);
+          else if (item?.type === "root") collapseProject(item.id);
           else if (item?.type === "task") collapseProject(item.projectId);
           break;
         }
@@ -150,7 +175,10 @@ export function ProjectTree({
           e.preventDefault();
           const item = currentIdx >= 0 ? flatItems[currentIdx] : null;
           if (item?.type === "project") toggleProject(item.id);
-          else if (item?.type === "task") selectTask(item.id);
+          else if (item?.type === "root") {
+            selectProject(item.id);
+            selectTask(null);
+          } else if (item?.type === "task") selectTask(item.id);
           break;
         }
       }
@@ -198,17 +226,14 @@ export function ProjectTree({
               isExpanded={expandedProjectIds.has(project.id)}
               isSelected={selectedProjectId === project.id && !selectedTaskId}
               onToggle={() => {
-                if (
-                  selectedProjectId === project.id &&
-                  !selectedTaskId &&
-                  expandedProjectIds.has(project.id)
-                ) {
-                  collapseProject(project.id);
-                } else {
-                  selectProject(project.id);
-                  selectTask(null);
-                  expandProject(project.id);
+                if (expandedProjectIds.has(project.id)) {
+                  // Collapsing: deselect task/root if it belongs to this project
+                  if (selectedProjectId === project.id) {
+                    selectTask(null);
+                    selectProject(null);
+                  }
                 }
+                toggleProject(project.id);
               }}
               selectedTaskId={selectedTaskId}
               onSelectTask={(id) => {
@@ -218,6 +243,7 @@ export function ProjectTree({
               onCreateTask={() => onCreateTask(project.id)}
               onDeleteProject={() => onDeleteProject(project.id)}
               onRenameProject={(newName) => onRenameProject(project.id, newName)}
+              onAddRepo={onAddRepo ? () => onAddRepo(project.id) : undefined}
             />
           ))}
         </div>
@@ -235,10 +261,11 @@ function SortableProjectNode({
   isSelected: boolean;
   onToggle: () => void;
   selectedTaskId: string | null;
-  onSelectTask: (id: string) => void;
+  onSelectTask: (id: string | null) => void;
   onCreateTask: () => void;
   onDeleteProject: () => void;
   onRenameProject: (newName: string) => Promise<void>;
+  onAddRepo?: (() => void) | undefined;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: project.id,

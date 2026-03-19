@@ -187,7 +187,7 @@ export function ProjectView({ project }: ProjectViewProps) {
         details={
           <div className="mt-2 text-xs text-zinc-500">
             <p>
-              The repo directory in .repos/ will be deleted. Worktrees in active tasks will be
+              The repo directory in default/ will be deleted. Worktrees in active tasks will be
               removed.
             </p>
           </div>

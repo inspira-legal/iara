@@ -10,6 +10,8 @@ import { CreateTaskDialog } from "./CreateTaskDialog";
 import { DevServerPanel } from "./DevServerPanel";
 import { BrowserToggle } from "./BrowserToggle";
 import { ConfirmDialog } from "./ConfirmDialog";
+import { AddRepoDialog } from "./AddRepoDialog";
+import { transport } from "~/lib/ws-transport";
 
 export function Sidebar() {
   const { projects, selectedProjectId, loading, loadProjects, updateProject, deleteProject } =
@@ -21,6 +23,7 @@ export function Sidebar() {
   const [showCreateProject, setShowCreateProject] = useState(false);
   const [createTaskProjectId, setCreateTaskProjectId] = useState<string | null>(null);
   const [deleteProjectId, setDeleteProjectId] = useState<string | null>(null);
+  const [addRepoProjectId, setAddRepoProjectId] = useState<string | null>(null);
 
   // Hydrate sidebar state from localStorage on mount
   useEffect(() => {
@@ -79,6 +82,7 @@ export function Sidebar() {
               await updateProject(id, { name: newName });
             }}
             onCreateFirstProject={() => setShowCreateProject(true)}
+            onAddRepo={(projectId) => setAddRepoProjectId(projectId)}
           />
         </div>
 
@@ -96,6 +100,16 @@ export function Sidebar() {
           open={createTaskProjectId !== null}
           onClose={() => setCreateTaskProjectId(null)}
           projectId={createTaskProjectId}
+        />
+      )}
+
+      {addRepoProjectId && (
+        <AddRepoDialog
+          open={addRepoProjectId !== null}
+          onClose={() => setAddRepoProjectId(null)}
+          onAdd={async (input) => {
+            await transport.request("repos.add", { projectId: addRepoProjectId, ...input });
+          }}
         />
       )}
 

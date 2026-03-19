@@ -18,6 +18,7 @@ interface TerminalState {
 interface TerminalActions {
   getEntry(taskId: string): TerminalEntry;
   create(taskId: string, resumeSessionId?: string): Promise<void>;
+  createRoot(projectId: string, resumeSessionId?: string): Promise<void>;
   restart(taskId: string): Promise<void>;
   destroy(taskId: string): Promise<void>;
   resetToSessions(taskId: string): void;
@@ -65,6 +66,43 @@ export const useTerminalStore = create<TerminalState & TerminalActions>((set, ge
       set((state) => {
         const next = new Map(state.entries);
         next.set(taskId, { ...DEFAULT_ENTRY, status: "exited", exitCode: -1 });
+        return { entries: next };
+      });
+    }
+  },
+
+  createRoot: async (projectId, resumeSessionId?) => {
+    const key = `root:${projectId}`;
+    set((state) => {
+      const next = new Map(state.entries);
+      next.set(key, { ...DEFAULT_ENTRY, status: "connecting" });
+      return { entries: next };
+    });
+    try {
+      const params: { projectId: string; root: true; resumeSessionId?: string } = {
+        projectId,
+        root: true,
+      };
+      if (resumeSessionId !== undefined) {
+        params.resumeSessionId = resumeSessionId;
+      }
+      const result = await transport.request("terminal.create", params);
+      set((state) => {
+        const next = new Map(state.entries);
+        next.set(key, {
+          terminalId: result.terminalId,
+          sessionId: result.sessionId,
+          status: "active",
+          exitCode: null,
+        });
+        return { entries: next };
+      });
+      // Sessions will refresh on next view
+    } catch (err) {
+      console.error("Failed to create root terminal:", err);
+      set((state) => {
+        const next = new Map(state.entries);
+        next.set(key, { ...DEFAULT_ENTRY, status: "exited", exitCode: -1 });
         return { entries: next };
       });
     }
@@ -121,7 +159,13 @@ export const useTerminalStore = create<TerminalState & TerminalActions>((set, ge
       const next = new Map(state.entries);
       for (const [taskId, entry] of next) {
         if (entry.terminalId === terminalId) {
-          next.set(taskId, { ...entry, status: "exited", exitCode, terminalId: null });
+          if (exitCode === 0) {
+            // Clean exit — go back to sessions screen
+            next.delete(taskId);
+            useSessionStore.getState().invalidateTask(taskId);
+          } else {
+            next.set(taskId, { ...entry, status: "exited", exitCode, terminalId: null });
+          }
           break;
         }
       }

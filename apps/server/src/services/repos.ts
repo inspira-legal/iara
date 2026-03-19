@@ -9,7 +9,7 @@ import { listTasks } from "./tasks.js";
 export async function getRepoInfo(projectSlug: string): Promise<RepoInfo[]> {
   const repos = discoverRepos(projectSlug);
   const projectDir = getProjectDir(projectSlug);
-  const reposDir = path.join(projectDir, ".repos");
+  const reposDir = path.join(projectDir, "default");
 
   return repos.map((name) => {
     const repoPath = path.join(reposDir, name);
@@ -31,7 +31,7 @@ export async function addRepo(
   onProgress?: (progress: CloneProgress) => void,
 ): Promise<void> {
   const projectDir = getProjectDir(projectSlug);
-  const reposDir = path.join(projectDir, ".repos");
+  const reposDir = path.join(projectDir, "default");
   fs.mkdirSync(reposDir, { recursive: true });
   const dest = path.join(reposDir, input.name);
 
@@ -103,23 +103,23 @@ export async function addRepo(
 }
 
 /**
- * Pull default branch on all repos in .repos/ (updates base for new worktrees).
+ * Pull default branch on all repos in default/ (updates base for new worktrees).
  * Best-effort: skips repos that fail (no upstream, network error, etc).
  */
 export async function pullRepos(projectSlug: string): Promise<void> {
   const repos = discoverRepos(projectSlug);
-  const reposDir = path.join(getProjectDir(projectSlug), ".repos");
+  const reposDir = path.join(getProjectDir(projectSlug), "default");
 
   await Promise.all(repos.map((name) => gitPull(path.join(reposDir, name)).catch(() => {})));
 }
 
 /**
- * Fetch origin on all repos in .repos/ (updates ahead/behind without merging).
+ * Fetch origin on all repos in default/ (updates ahead/behind without merging).
  * Best-effort: silently skips failures.
  */
 export async function fetchRepos(projectSlug: string): Promise<void> {
   const repos = discoverRepos(projectSlug);
-  const reposDir = path.join(getProjectDir(projectSlug), ".repos");
+  const reposDir = path.join(getProjectDir(projectSlug), "default");
 
   await Promise.all(repos.map((name) => gitFetch(path.join(reposDir, name)).catch(() => {})));
 }

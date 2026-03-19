@@ -26,8 +26,10 @@ export function CreateTaskDialog({ open, onClose, projectId }: CreateTaskDialogP
     }
   };
 
+  const isSlugDefault = slug.trim() === "default";
+
   const handleSubmit = async () => {
-    if (!name.trim() || !slug.trim()) return;
+    if (!name.trim() || !slug.trim() || isSlugDefault) return;
     setSubmitting(true);
     try {
       const input = description.trim()
@@ -78,7 +80,13 @@ export function CreateTaskDialog({ open, onClose, projectId }: CreateTaskDialogP
               placeholder="add-auth"
               className="w-full rounded-md border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-zinc-100 placeholder-zinc-600 outline-none focus:border-blue-500"
             />
-            <p className="mt-1 text-xs text-zinc-600">Branch: feat/{slug || "..."}</p>
+            {isSlugDefault ? (
+              <p className="mt-1 text-xs text-red-400">
+                Slug &quot;default&quot; is reserved and cannot be used
+              </p>
+            ) : (
+              <p className="mt-1 text-xs text-zinc-600">Branch: feat/{slug || "..."}</p>
+            )}
           </div>
 
           <div>
@@ -95,7 +103,7 @@ export function CreateTaskDialog({ open, onClose, projectId }: CreateTaskDialogP
           <button
             type="button"
             onClick={() => void handleSubmit()}
-            disabled={!name.trim() || !slug.trim() || submitting}
+            disabled={!name.trim() || !slug.trim() || isSlugDefault || submitting}
             className="w-full rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-500 disabled:opacity-50"
           >
             {submitting ? "Creating..." : "Create Task"}

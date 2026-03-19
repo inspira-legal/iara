@@ -73,7 +73,7 @@ export function SessionList({ taskId, projectId, onLaunch }: SessionListProps) {
 }
 
 function SessionMeta({ session, index }: { session: SessionInfo; index: number }) {
-  const title = session.title || `Sessão #${index}`;
+  const title = session.title || `Session #${index}`;
   return (
     <div className="min-w-0 flex-1">
       <div className="truncate text-zinc-300">{title}</div>

@@ -58,9 +58,9 @@ describe("findFileLinks", () => {
     });
 
     it("detects deep directory paths without extension", () => {
-      const links = findFileLinks("cd /home/ahtwr/iara/iara/.repos/iara");
+      const links = findFileLinks("cd /home/ahtwr/iara/iara/default/iara");
       expect(links).toHaveLength(1);
-      expect(links[0]!.text).toBe("/home/ahtwr/iara/iara/.repos/iara");
+      expect(links[0]!.text).toBe("/home/ahtwr/iara/iara/default/iara");
     });
 
     it("ignores lone slash", () => {
@@ -119,10 +119,10 @@ describe("findFileLinks", () => {
 
     it("detects path in Bash() output", () => {
       const links = findFileLinks(
-        "Bash(cd /home/ahtwr/iara/iara/.repos/iara && git checkout main)",
+        "Bash(cd /home/ahtwr/iara/iara/default/iara && git checkout main)",
       );
       expect(links).toHaveLength(1);
-      expect(links[0]!.text).toBe("/home/ahtwr/iara/iara/.repos/iara");
+      expect(links[0]!.text).toBe("/home/ahtwr/iara/iara/default/iara");
     });
 
     it("handles Go compiler error format", () => {

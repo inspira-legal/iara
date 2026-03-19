@@ -36,10 +36,9 @@ export interface CreateTaskInput {
   branch?: string;
 }
 
-export interface LaunchClaudeInput {
-  taskId: string;
-  resumeSessionId?: string;
-}
+export type LaunchClaudeInput =
+  | { taskId: string; resumeSessionId?: string }
+  | { projectId: string; root: true; resumeSessionId?: string };
 
 export interface LaunchResult {
   pid: number | null;

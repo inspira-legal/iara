@@ -6,35 +6,37 @@ import {
   AlertCircle,
   ArrowUp,
   ArrowDown,
+  Plus,
+  X,
 } from "lucide-react";
-import type { Task, Project, RepoInfo } from "@iara/contracts";
+import type { Project, RepoInfo } from "@iara/contracts";
 import { transport } from "~/lib/ws-transport.js";
+import { useProjectStore } from "~/stores/projects";
 import { useTerminalStore } from "~/stores/terminal";
 import { TerminalView } from "./TerminalView";
 import { SessionList } from "./SessionList";
+import { AddRepoDialog } from "./AddRepoDialog";
+import { ConfirmDialog } from "./ConfirmDialog";
 
 const FETCH_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
 
-interface TaskWorkspaceProps {
+interface ProjectRootWorkspaceProps {
   project: Project;
-  task: Task;
 }
 
-export function TaskWorkspace({ project, task }: TaskWorkspaceProps) {
-  const terminalEntry = useTerminalStore((s) => s.getEntry(task.id));
+export function ProjectRootWorkspace({ project }: ProjectRootWorkspaceProps) {
+  const rootKey = `root:${project.id}`;
+  const terminalEntry = useTerminalStore((s) => s.getEntry(rootKey));
   const resetToSessions = useTerminalStore((s) => s.resetToSessions);
-  const createTerminal = useTerminalStore((s) => s.create);
+  const createRoot = useTerminalStore((s) => s.createRoot);
   const [repoInfo, setRepoInfo] = useState<RepoInfo[]>([]);
   const [repoLoading, setRepoLoading] = useState(true);
 
-  // Determine view based on terminal store state
-  // If there's an active/connecting terminal entry, show terminal
   const hasTerminal = terminalEntry.status !== "idle";
 
-  // Track resumeSessionId for when user launches from session list
   const [pendingResumeSessionId, setPendingResumeSessionId] = useState<string | undefined>();
 
-  // Auto-fetch repos every 5 minutes while a task is active
+  // Auto-fetch repos every 5 minutes
   useEffect(() => {
     const doFetch = () => {
       void transport.request("repos.fetch", { projectId: project.id }).catch(() => {});
@@ -72,11 +74,11 @@ export function TaskWorkspace({ project, task }: TaskWorkspaceProps) {
 
   const handleLaunchSession = (resumeSessionId?: string) => {
     setPendingResumeSessionId(resumeSessionId);
-    void createTerminal(task.id, resumeSessionId);
+    void createRoot(project.id, resumeSessionId);
   };
 
   const handleBack = () => {
-    resetToSessions(task.id);
+    resetToSessions(rootKey);
     setPendingResumeSessionId(undefined);
   };
 
@@ -96,12 +98,7 @@ export function TaskWorkspace({ project, task }: TaskWorkspaceProps) {
             </button>
           )}
           <div>
-            <div className="text-xs text-zinc-500">{project.name}</div>
-            <div className="text-sm font-medium text-zinc-100">{task.name}</div>
-          </div>
-          <div className="flex items-center gap-1.5 text-xs text-zinc-500">
-            <GitBranch size={12} />
-            <code className="rounded bg-zinc-800 px-1 py-0.5">{task.branch}</code>
+            <div className="text-sm font-medium text-zinc-100">{project.name}</div>
           </div>
         </div>
       </div>
@@ -109,14 +106,15 @@ export function TaskWorkspace({ project, task }: TaskWorkspaceProps) {
       {/* Content */}
       {hasTerminal ? (
         <TerminalView
-          taskId={task.id}
+          taskId={rootKey}
           {...(pendingResumeSessionId ? { resumeSessionId: pendingResumeSessionId } : {})}
         />
       ) : (
-        <TaskDetailView
-          task={task}
+        <ProjectRootDetailView
+          project={project}
           repoInfo={repoInfo}
           repoLoading={repoLoading}
+          setRepoInfo={setRepoInfo}
           onLaunchSession={handleLaunchSession}
         />
       )}
@@ -125,47 +123,101 @@ export function TaskWorkspace({ project, task }: TaskWorkspaceProps) {
 }
 
 // ---------------------------------------------------------------------------
-// Task Detail View (sessions screen)
+// Project Root Detail View (sessions screen)
 // ---------------------------------------------------------------------------
 
-function TaskDetailView({
-  task,
+function ProjectRootDetailView({
+  project,
   repoInfo,
   repoLoading,
+  setRepoInfo,
   onLaunchSession,
 }: {
-  task: Task;
+  project: Project;
   repoInfo: RepoInfo[];
   repoLoading: boolean;
+  setRepoInfo: (info: RepoInfo[]) => void;
   onLaunchSession: (resumeSessionId?: string) => void;
 }) {
+  const [showAddRepo, setShowAddRepo] = useState(false);
+  const [repoToDelete, setRepoToDelete] = useState<string | null>(null);
+  const { updateProject } = useProjectStore();
+
   return (
     <div className="flex-1 overflow-y-auto p-6">
-      {/* Task info */}
-      {task.description && (
-        <div className="mb-6">
-          <p className="text-sm text-zinc-400">{task.description}</p>
-        </div>
-      )}
-
       {/* Repos */}
       <div className="mb-6">
         <h3 className="mb-3 text-sm font-medium text-zinc-300">Repos</h3>
         <div className="space-y-2">
           {repoLoading ? (
-            Array.from({ length: 1 }, (_, i) => <RepoSkeleton key={i} />)
+            Array.from({ length: project.repoSources.length || 1 }, (_, i) => (
+              <RepoSkeleton key={i} />
+            ))
           ) : repoInfo.length === 0 ? (
-            <p className="text-xs text-zinc-600">No repos configured.</p>
+            <p className="text-xs text-zinc-600">No repos yet. Add a repo to get started.</p>
           ) : (
-            repoInfo.map((repo) => <RepoCard key={repo.name} repo={repo} />)
+            repoInfo.map((repo) => (
+              <RepoCard key={repo.name} repo={repo} onRemove={() => setRepoToDelete(repo.name)} />
+            ))
           )}
         </div>
+
+        <button
+          type="button"
+          onClick={() => setShowAddRepo(true)}
+          className="mt-3 flex items-center gap-1.5 rounded-md border border-dashed border-zinc-700 px-3 py-2 text-xs text-zinc-500 hover:border-zinc-500 hover:text-zinc-300"
+        >
+          <Plus size={14} />
+          Add Repo
+        </button>
       </div>
 
       {/* Sessions */}
       <div>
-        <SessionList taskId={task.id} onLaunch={onLaunchSession} />
+        <SessionList projectId={project.id} onLaunch={onLaunchSession} />
       </div>
+
+      <AddRepoDialog
+        open={showAddRepo}
+        onClose={() => setShowAddRepo(false)}
+        onAdd={async (input) => {
+          await transport.request("repos.add", { projectId: project.id, ...input });
+          const info = await transport.request("repos.getInfo", { projectId: project.id });
+          setRepoInfo(info);
+        }}
+      />
+
+      <ConfirmDialog
+        open={repoToDelete !== null}
+        title="Remove Repo"
+        description={`Remove "${repoToDelete}" from this project?`}
+        details={
+          <div className="mt-2 text-xs text-zinc-500">
+            <p>
+              The repo directory in default/ will be deleted. Worktrees in active tasks will be
+              removed.
+            </p>
+          </div>
+        }
+        confirmText="Remove Repo"
+        confirmVariant="danger"
+        onConfirm={async () => {
+          await updateProject(project.id, {
+            repoSources: project.repoSources.filter((s) => {
+              const name =
+                s
+                  .split("/")
+                  .pop()
+                  ?.replace(/\.git\/?$/, "") || s;
+              return name !== repoToDelete;
+            }),
+          });
+          setRepoToDelete(null);
+          const info = await transport.request("repos.getInfo", { projectId: project.id });
+          setRepoInfo(info);
+        }}
+        onCancel={() => setRepoToDelete(null)}
+      />
     </div>
   );
 }
@@ -186,7 +238,7 @@ function RepoSkeleton() {
   );
 }
 
-function RepoCard({ repo }: { repo: RepoInfo }) {
+function RepoCard({ repo, onRemove }: { repo: RepoInfo; onRemove: () => void }) {
   const isClean = repo.dirtyCount === 0;
   const showAheadBehind = repo.ahead > 0 || repo.behind > 0;
 
@@ -227,28 +279,15 @@ function RepoCard({ repo }: { repo: RepoInfo }) {
           )}
         </span>
       )}
+
+      <button
+        type="button"
+        onClick={onRemove}
+        className="ml-auto shrink-0 rounded-md p-1 text-zinc-600 hover:bg-zinc-700 hover:text-red-400"
+        title="Remove repo"
+      >
+        <X size={14} />
+      </button>
     </div>
   );
-}
-
-function formatDate(iso: string): string {
-  try {
-    const d = new Date(iso);
-    const now = new Date();
-    const diffMs = now.getTime() - d.getTime();
-    const diffMins = Math.floor(diffMs / 60000);
-
-    if (diffMins < 1) return "now";
-    if (diffMins < 60) return `${diffMins}m ago`;
-
-    const diffHours = Math.floor(diffMins / 60);
-    if (diffHours < 24) return `${diffHours}h ago`;
-
-    const diffDays = Math.floor(diffHours / 24);
-    if (diffDays < 7) return `${diffDays}d ago`;
-
-    return d.toLocaleDateString();
-  } catch {
-    return iso;
-  }
 }

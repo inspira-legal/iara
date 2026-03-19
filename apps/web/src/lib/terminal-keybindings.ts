@@ -7,13 +7,16 @@ export interface KeybindingHandlers {
 
 /** Returns true if the event matches a keybinding we handle. */
 function matchesKeybinding(event: KeyboardEvent): boolean {
+  // Shift+Enter (no ctrl) = newline
+  if (event.shiftKey && !event.ctrlKey && !event.metaKey && event.key === "Enter") return true;
+
   const isCtrl = event.ctrlKey || event.metaKey;
   if (!isCtrl) return false;
 
   if (event.shiftKey) {
     return event.code === "KeyC" || event.code === "KeyV" || event.code === "KeyA";
   }
-  return event.key === "Enter" || event.key === "Backspace";
+  return event.key === "Backspace";
 }
 
 export function setupTerminalKeybindings(
@@ -67,8 +70,8 @@ export function setupTerminalKeybindings(
       return false;
     }
 
-    // Ctrl+Enter = Newline literal
-    if (isCtrl && !event.shiftKey && event.key === "Enter") {
+    // Shift+Enter = Newline literal
+    if (!isCtrl && event.shiftKey && event.key === "Enter") {
       write("\n");
       return false;
     }

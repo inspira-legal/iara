@@ -78,7 +78,9 @@ export type WsMethods = {
 
   // Terminal
   "terminal.create": {
-    params: { taskId: string; resumeSessionId?: string };
+    params:
+      | { taskId: string; resumeSessionId?: string }
+      | { projectId: string; root: true; resumeSessionId?: string };
     result: { terminalId: string; sessionId: string };
   };
   "terminal.write": { params: { terminalId: string; data: string }; result: void };

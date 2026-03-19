@@ -31,7 +31,7 @@ export interface RepoContext {
   name: string;
   /** Absolute path to this repo's worktree inside the task directory. */
   worktreePath: string;
-  /** Absolute path to the main repo in .repos/. */
+  /** Absolute path to the main repo in default/. */
   mainRepoPath: string;
 }
 
@@ -113,6 +113,33 @@ export function buildSystemPromptFromDir(taskDir: string): string {
   }
 
   return parts.join("\n\n---\n\n");
+}
+
+export interface RootContext {
+  projectDir: string;
+  projectName: string;
+  repos: Array<{ name: string; branch: string; repoPath: string }>;
+}
+
+export function buildRootPrompt(ctx: RootContext): string {
+  const sections: string[] = [];
+
+  // # REPOS
+  if (ctx.repos.length > 0) {
+    const lines = ctx.repos.map((r) => `${r.name}/  ← git repository (branch: ${r.branch})`);
+    sections.push(`# REPOS\n${lines.join("\n")}`);
+  }
+
+  // PROJECT.md wrapped in tags, only if non-empty
+  const projectMdPath = path.join(ctx.projectDir, "PROJECT.md");
+  if (fs.existsSync(projectMdPath)) {
+    const content = fs.readFileSync(projectMdPath, "utf-8").trim();
+    if (content) {
+      sections.push(`<project>\n${content}\n</project>`);
+    }
+  }
+
+  return sections.join("\n\n");
 }
 
 export function launchClaude(config: LaunchConfig): LaunchResult {

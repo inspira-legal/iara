@@ -1,6 +1,8 @@
+import { execFileSync } from "node:child_process";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import type { RepoContext } from "../services/launcher.js";
+import { buildRootPrompt } from "../services/launcher.js";
 import { registerMethod } from "../router.js";
 import { getProject, getProjectDir } from "../services/projects.js";
 import { getTask } from "../services/tasks.js";
@@ -8,6 +10,64 @@ import type { TerminalManager } from "../services/terminal.js";
 
 export function registerTerminalHandlers(manager: TerminalManager): void {
   registerMethod("terminal.create", async (params) => {
+    // Root mode: launch Claude at the project level (no task)
+    if ("root" in params && params.root) {
+      const project = getProject(params.projectId);
+      if (!project) throw new Error(`Project not found: ${params.projectId}`);
+
+      const projectDir = getProjectDir(project.slug);
+      const reposDir = path.join(projectDir, "default");
+
+      const repoDirs: string[] = [];
+      const repos: Array<{ name: string; branch: string; repoPath: string }> = [];
+
+      if (fs.existsSync(reposDir)) {
+        const repoNames = fs
+          .readdirSync(reposDir)
+          .filter((name) => fs.statSync(path.join(reposDir, name)).isDirectory());
+        for (const name of repoNames) {
+          const repoPath = path.join(reposDir, name);
+          repoDirs.push(repoPath);
+
+          let branch = "main";
+          try {
+            branch = execFileSync("git", ["branch", "--show-current"], {
+              cwd: repoPath,
+              encoding: "utf-8",
+            }).trim();
+          } catch {
+            // fallback to "main"
+          }
+
+          repos.push({ name, branch, repoPath });
+        }
+      }
+
+      if (repoDirs.length === 0) {
+        repoDirs.push(projectDir);
+      }
+
+      const systemPrompt = buildRootPrompt({
+        projectDir,
+        projectName: project.name,
+        repos,
+      });
+
+      return manager.create({
+        taskId: `root:${params.projectId}`,
+        taskDir: projectDir,
+        repoDirs,
+        appendSystemPrompt: systemPrompt,
+        ...(params.resumeSessionId != null ? { resumeSessionId: params.resumeSessionId } : {}),
+        env: {
+          IARA_ROOT: "1",
+          IARA_PROJECT_ID: project.id,
+          IARA_PROJECT_DIR: projectDir,
+        },
+      });
+    }
+
+    // Task mode (existing behavior)
     const task = getTask(params.taskId);
     if (!task) throw new Error(`Task not found: ${params.taskId}`);
 
@@ -20,7 +80,7 @@ export function registerTerminalHandlers(manager: TerminalManager): void {
     // Resolve repo dirs (worktrees inside task dir)
     const repoDirs: string[] = [];
     const repos: RepoContext[] = [];
-    const reposDir = path.join(projectDir, ".repos");
+    const reposDir = path.join(projectDir, "default");
     if (fs.existsSync(reposDir)) {
       const repoNames = fs
         .readdirSync(reposDir)

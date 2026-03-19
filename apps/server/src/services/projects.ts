@@ -8,9 +8,9 @@ import { db, schema } from "../db.js";
 import { getProjectsDir } from "./config.js";
 import { listTasks } from "./tasks.js";
 
-/** Check if a project folder has .repos/ with at least one git repo inside. */
+/** Check if a project folder has default/ with at least one git repo inside. */
 function isValidProject(projectPath: string): boolean {
-  const reposDir = path.join(projectPath, ".repos");
+  const reposDir = path.join(projectPath, "default");
   if (!fs.existsSync(reposDir)) return false;
   try {
     return fs.readdirSync(reposDir).some((name) => {
@@ -22,7 +22,7 @@ function isValidProject(projectPath: string): boolean {
   }
 }
 
-/** Regenerate missing project files (PROJECT.md) from existing .repos/. */
+/** Regenerate missing project files (PROJECT.md) from existing default/. */
 function ensureProjectFiles(projectPath: string, name: string): void {
   const projectMdPath = path.join(projectPath, "PROJECT.md");
   if (!fs.existsSync(projectMdPath)) {
@@ -31,7 +31,7 @@ function ensureProjectFiles(projectPath: string, name: string): void {
 }
 
 export function syncProjects(): void {
-  // 1. Scan projects dir — only folders with .repos/ containing at least one repo
+  // 1. Scan projects dir — only folders with default/ containing at least one repo
   const projectsDir = getProjectsDir();
   fs.mkdirSync(projectsDir, { recursive: true });
   const fsSlugs = fs.readdirSync(projectsDir).filter((name) => {
@@ -135,7 +135,7 @@ export async function createProject(input: CreateProjectInput): Promise<Project>
   // Create project directory structure with retry on failure
   await withRetry(async () => {
     const projectDir = getProjectDir(input.slug);
-    const reposDir = path.join(projectDir, ".repos");
+    const reposDir = path.join(projectDir, "default");
     fs.mkdirSync(reposDir, { recursive: true });
 
     // PROJECT.md
@@ -144,7 +144,7 @@ export async function createProject(input: CreateProjectInput): Promise<Project>
       fs.writeFileSync(projectMdPath, "");
     }
 
-    // Clone repos into .repos/
+    // Clone repos into default/
     for (const source of input.repoSources) {
       const repoName = repoNameFromSource(source);
       const dest = path.join(reposDir, repoName);
@@ -173,7 +173,7 @@ export async function updateProject(id: string, input: UpdateProjectInput): Prom
 
     // Clone any new repos
     const projectDir = getProjectDir(project.slug);
-    const reposDir = path.join(projectDir, ".repos");
+    const reposDir = path.join(projectDir, "default");
     fs.mkdirSync(reposDir, { recursive: true });
 
     const existingRepoNames = new Set(
@@ -250,12 +250,12 @@ export function getProjectDir(slug: string): string {
 }
 
 /**
- * Discover repos by scanning .repos/ directory of a project.
+ * Discover repos by scanning default/ directory of a project.
  * Each subdirectory containing a .git folder (or file, for worktrees) is a repo.
  * Returns array of repo names (directory names).
  */
 export function discoverRepos(projectSlug: string): string[] {
-  const reposDir = path.join(getProjectDir(projectSlug), ".repos");
+  const reposDir = path.join(getProjectDir(projectSlug), "default");
   if (!fs.existsSync(reposDir)) return [];
 
   return fs.readdirSync(reposDir).filter((name) => {

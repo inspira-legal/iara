@@ -27,6 +27,7 @@ export interface TerminalCreateConfig {
   taskDir: string;
   repoDirs: string[];
   taskContext?: TaskContext;
+  appendSystemPrompt?: string;
   resumeSessionId?: string;
   env?: Record<string, string>;
   cols?: number;
@@ -58,9 +59,11 @@ export class TerminalManager {
 
     const terminalId = crypto.randomUUID();
     const sessionId = config.resumeSessionId ?? crypto.randomUUID();
-    const systemPrompt = config.taskContext
-      ? buildSystemPrompt(config.taskContext)
-      : buildSystemPromptFromDir(config.taskDir);
+    const systemPrompt =
+      config.appendSystemPrompt ??
+      (config.taskContext
+        ? buildSystemPrompt(config.taskContext)
+        : buildSystemPromptFromDir(config.taskDir));
 
     const launchConfig: LaunchConfig = {
       taskDir: config.taskDir,

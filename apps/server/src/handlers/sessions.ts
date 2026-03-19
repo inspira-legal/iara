@@ -33,7 +33,7 @@ export function registerSessionHandlers(): void {
     if (!project) throw new Error(`Project not found: ${params.projectId}`);
 
     const projectDir = getProjectDir(project.slug);
-    const reposDir = path.join(projectDir, ".repos");
+    const reposDir = path.join(projectDir, "default");
     const repoDirs = getRepoDirs(reposDir);
 
     if (repoDirs.length === 0) {

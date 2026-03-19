@@ -1,5 +1,14 @@
 import { useState, useCallback, useEffect } from "react";
-import { ChevronRight, FolderOpen, Plus, Pencil, Trash2, RefreshCw } from "lucide-react";
+import {
+  ChevronRight,
+  FolderOpen,
+  FolderGit2,
+  FolderPlus,
+  Plus,
+  Pencil,
+  Trash2,
+  RefreshCw,
+} from "lucide-react";
 import type { Project, Task } from "@iara/contracts";
 import { TaskNode } from "./TaskNode";
 import { SidebarContextMenu, type ContextMenuItem } from "./SidebarContextMenu";
@@ -14,10 +23,11 @@ interface ProjectNodeProps {
   isSelected: boolean;
   onToggle: () => void;
   selectedTaskId: string | null;
-  onSelectTask: (id: string) => void;
+  onSelectTask: (id: string | null) => void;
   onCreateTask: () => void;
   onDeleteProject: () => void;
   onRenameProject: (newName: string) => Promise<void> | void;
+  onAddRepo?: () => void;
 }
 
 export function ProjectNode({
@@ -30,6 +40,7 @@ export function ProjectNode({
   onCreateTask,
   onDeleteProject,
   onRenameProject,
+  onAddRepo,
 }: ProjectNodeProps) {
   const { loadTasks, getTasksForProject, deleteTask, loading, error } = useTaskStore();
 
@@ -70,6 +81,7 @@ export function ProjectNode({
 
   const contextMenuItems: ContextMenuItem[] = [
     { label: "New Task", icon: Plus, onClick: onCreateTask },
+    ...(onAddRepo ? [{ label: "Add Repo", icon: FolderPlus, onClick: onAddRepo }] : []),
     {
       label: "Rename",
       icon: Pencil,
@@ -86,9 +98,7 @@ export function ProjectNode({
       <div className="flex flex-col">
         {/* Project header */}
         <div
-          className={`group flex items-center gap-1 rounded-md px-2 py-1.5 transition-colors ${
-            isSelected ? "bg-zinc-800 text-zinc-100" : "hover:bg-zinc-800/50"
-          }`}
+          className="group flex items-center gap-1 rounded-md px-2 py-1.5 transition-colors hover:bg-zinc-800/50"
           onContextMenu={handleContextMenu}
         >
           <button
@@ -149,6 +159,20 @@ export function ProjectNode({
         {/* Expanded: tasks */}
         {isExpanded && (
           <div className="ml-3 flex flex-col gap-0.5 border-l border-zinc-800 pl-2">
+            {/* Project root item */}
+            <button
+              type="button"
+              onClick={() => onSelectTask(null)}
+              className={`flex h-8 w-full items-center gap-1.5 rounded-md px-2 text-left text-sm transition-colors ${
+                isSelected
+                  ? "bg-zinc-800 text-zinc-100"
+                  : "text-zinc-400 hover:bg-zinc-800/50 hover:text-zinc-300"
+              } mb-1`}
+            >
+              <FolderGit2 size={12} className="shrink-0" />
+              <span className="truncate">project root</span>
+            </button>
+
             {loading && tasks.length === 0 ? (
               <p className="px-2 py-2 text-xs text-zinc-600">Loading...</p>
             ) : error ? (

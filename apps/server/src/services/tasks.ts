@@ -19,6 +19,10 @@ export function getTask(id: string): Task | null {
 }
 
 export async function createTask(projectId: string, input: CreateTaskInput): Promise<Task> {
+  if (input.slug === "default") {
+    throw new Error('Slug "default" is reserved and cannot be used for tasks');
+  }
+
   const project = getProject(projectId);
   if (!project) throw new Error(`Project not found: ${projectId}`);
 
@@ -57,8 +61,8 @@ export async function createTask(projectId: string, input: CreateTaskInput): Pro
       fs.symlinkSync(projectMdSrc, projectMdDest);
     }
 
-    // Create worktrees from .repos/
-    const reposDir = path.join(projectDir, ".repos");
+    // Create worktrees from default/
+    const reposDir = path.join(projectDir, "default");
     if (fs.existsSync(reposDir)) {
       const repos = fs.readdirSync(reposDir).filter((name) => {
         return fs.statSync(path.join(reposDir, name)).isDirectory();
@@ -109,7 +113,7 @@ export function getTaskDir(projectSlug: string, taskSlug: string): string {
 async function cleanupWorktrees(projectSlug: string, taskSlug: string): Promise<void> {
   const projectDir = getProjectDir(projectSlug);
   const taskDir = path.join(projectDir, taskSlug);
-  const reposDir = path.join(projectDir, ".repos");
+  const reposDir = path.join(projectDir, "default");
 
   // Remove git worktrees first
   if (fs.existsSync(reposDir)) {

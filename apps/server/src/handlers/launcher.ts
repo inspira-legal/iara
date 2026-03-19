@@ -19,7 +19,7 @@ export function registerLauncherHandlers(): void {
     // Resolve repo dirs (worktrees inside task dir)
     const repoDirs: string[] = [];
     const repos: RepoContext[] = [];
-    const reposDir = path.join(projectDir, ".repos");
+    const reposDir = path.join(projectDir, "default");
     if (fs.existsSync(reposDir)) {
       const repoNames = fs
         .readdirSync(reposDir)
