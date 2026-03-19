@@ -27,6 +27,17 @@ export interface Task {
   updatedAt: string;
 }
 
+export interface EnvEntry {
+  key: string;
+  value: string;
+}
+
+export interface EnvRepoEntries {
+  repo: string;
+  global: EnvEntry[];
+  local: EnvEntry[];
+}
+
 export interface CloneProgress {
   repo: string;
   status: "started" | "progress" | "done" | "error";

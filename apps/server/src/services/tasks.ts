@@ -5,6 +5,7 @@ import { eq } from "drizzle-orm";
 import type { CreateTaskInput, Task } from "@iara/contracts";
 import { gitWorktreeAdd, gitWorktreeRemove } from "@iara/shared/git";
 import { db, schema } from "../db.js";
+import { ensureGlobalSymlinks } from "./env.js";
 import { getProject, getProjectDir } from "./projects.js";
 import { pullRepos } from "./repos.js";
 
@@ -41,8 +42,8 @@ export async function createTask(projectId: string, input: CreateTaskInput): Pro
     updatedAt: now,
   };
 
-  // Best-effort pull — don't block task creation on network issues
-  await pullRepos(project.slug).catch(() => {});
+  // Best-effort pull — fire-and-forget to avoid blocking task creation
+  void pullRepos(project.slug).catch(() => {});
 
   // Create worktrees BEFORE inserting into DB — rollback is just fs cleanup
   const projectDir = getProjectDir(project.slug);
@@ -73,6 +74,9 @@ export async function createTask(projectId: string, input: CreateTaskInput): Pro
         const wtDir = path.join(taskDir, repo);
         await gitWorktreeAdd(repoDir, wtDir, branch);
       }
+
+      // Create global env symlinks in task dir
+      ensureGlobalSymlinks(project.slug, taskDir, repos);
     }
   } catch (err) {
     // Rollback: clean up partial filesystem state

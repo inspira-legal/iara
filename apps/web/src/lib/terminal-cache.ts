@@ -5,8 +5,15 @@ import { ClipboardAddon } from "@xterm/addon-clipboard";
 import { WebLinksAddon } from "@xterm/addon-web-links";
 import { WebFontsAddon } from "@xterm/addon-web-fonts";
 import { transport } from "./ws-transport.js";
-import { setupTerminalKeybindings, type KeybindingHandlers } from "./terminal-keybindings.js";
-import { findFileLinks, isRelativePath, parseFilePath } from "./terminal-links.js";
+import {
+  setupTerminalKeybindings,
+  type KeybindingHandlers,
+} from "./terminal-keybindings.js";
+import {
+  findFileLinks,
+  isRelativePath,
+  parseFilePath,
+} from "./terminal-links.js";
 
 interface CachedTerminal {
   term: Terminal;
@@ -44,7 +51,10 @@ const THEME = {
 
 // Ghostty-style: underline + pointer only when Ctrl/Cmd is held
 let modHeld = false;
-const activeDecorations = new Set<{ underline: boolean; pointerCursor: boolean }>();
+const activeDecorations = new Set<{
+  underline: boolean;
+  pointerCursor: boolean;
+}>();
 
 function setModHeld(held: boolean): void {
   if (held === modHeld) return;
@@ -60,7 +70,7 @@ export function getOrCreateTerminal(terminalId: string): CachedTerminal {
   if (existing) return existing;
 
   const term = new Terminal({
-    fontFamily: "'JetBrains Mono', monospace",
+    fontFamily: "'JetBrains Mono NF', monospace",
     fontSize: 14,
     lineHeight: 1.0,
     letterSpacing: 0,
@@ -149,9 +159,11 @@ export function getOrCreateTerminal(terminalId: string): CachedTerminal {
             activate: (e: MouseEvent) => {
               if (!e.ctrlKey && !e.metaKey) return;
               const open = (cwd?: string | null) => {
-                transport.request("files.open", parseFilePath(l.text, cwd)).catch((err) => {
-                  console.error("[files.open] Failed:", err);
-                });
+                transport
+                  .request("files.open", parseFilePath(l.text, cwd))
+                  .catch((err) => {
+                    console.error("[files.open] Failed:", err);
+                  });
               };
               if (isRelativePath(l.text)) {
                 transport
@@ -171,13 +183,18 @@ export function getOrCreateTerminal(terminalId: string): CachedTerminal {
   // Web fonts: ensure JetBrains Mono loads before rendering
   const webFontsAddon = new WebFontsAddon();
   term.loadAddon(webFontsAddon);
-  void webFontsAddon.loadFonts(["JetBrains Mono"]).then(() => fitAddon.fit());
+  void webFontsAddon
+    .loadFonts(["JetBrains Mono NF"])
+    .then(() => fitAddon.fit());
 
-  const unsub = transport.subscribe("terminal:data", ({ terminalId: tid, data }) => {
-    if (tid === terminalId) {
-      term.write(data);
-    }
-  });
+  const unsub = transport.subscribe(
+    "terminal:data",
+    ({ terminalId: tid, data }) => {
+      if (tid === terminalId) {
+        term.write(data);
+      }
+    },
+  );
 
   const write = (data: string) => {
     transport.request("terminal.write", { terminalId, data }).catch(() => {});
@@ -207,6 +224,8 @@ export function destroyTerminal(terminalId: string): void {
   }
 }
 
-export function getCachedTerminal(terminalId: string): CachedTerminal | undefined {
+export function getCachedTerminal(
+  terminalId: string,
+): CachedTerminal | undefined {
   return cache.get(terminalId);
 }

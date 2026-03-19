@@ -1,6 +1,7 @@
 import { execFileSync } from "node:child_process";
 import * as fs from "node:fs";
 import * as path from "node:path";
+import { mergeEnvForContext } from "../services/env.js";
 import type { RepoContext } from "../services/launcher.js";
 import { buildRootPrompt } from "../services/launcher.js";
 import { registerMethod } from "../router.js";
@@ -53,6 +54,10 @@ export function registerTerminalHandlers(manager: TerminalManager): void {
         repos,
       });
 
+      // Merge env files (global + local) for all repos
+      const repoNames = repoDirs.map((d) => path.basename(d));
+      const envVars = mergeEnvForContext(project.slug, "root", repoNames);
+
       return manager.create({
         taskId: `root:${params.projectId}`,
         taskDir: projectDir,
@@ -60,6 +65,7 @@ export function registerTerminalHandlers(manager: TerminalManager): void {
         appendSystemPrompt: systemPrompt,
         ...(params.resumeSessionId != null ? { resumeSessionId: params.resumeSessionId } : {}),
         env: {
+          ...envVars,
           IARA_ROOT: "1",
           IARA_PROJECT_ID: project.id,
           IARA_PROJECT_DIR: projectDir,
@@ -102,6 +108,10 @@ export function registerTerminalHandlers(manager: TerminalManager): void {
       repoDirs.push(taskDir);
     }
 
+    // Merge env files (global + local) for all repos
+    const repoNames = repos.map((r) => r.name);
+    const envVars = mergeEnvForContext(project.slug, task.slug, repoNames);
+
     return manager.create({
       taskId: params.taskId,
       taskDir,
@@ -116,6 +126,7 @@ export function registerTerminalHandlers(manager: TerminalManager): void {
       },
       ...(params.resumeSessionId != null ? { resumeSessionId: params.resumeSessionId } : {}),
       env: {
+        ...envVars,
         IARA_TASK_ID: task.id,
         IARA_PROJECT_ID: project.id,
         IARA_PROJECT_DIR: projectDir,

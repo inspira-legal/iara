@@ -10,8 +10,10 @@ import { syncShellEnvironment } from "./services/shell-env.js";
 import { mergeHooks, removeHooks } from "./services/hooks.js";
 import { generatePluginDir, cleanupPluginDir } from "./services/plugins.js";
 import { SessionWatcher } from "./services/session-watcher.js";
+import { syncEnvSymlinks } from "./services/env.js";
 
 syncShellEnvironment();
+syncEnvSymlinks();
 
 const port = Number(
   process.env.IARA_PORT ?? process.argv.find((_, i, a) => a[i - 1] === "--port") ?? 3773,

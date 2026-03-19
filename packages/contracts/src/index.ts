@@ -13,7 +13,7 @@ export type {
   SessionInfo,
   UpdateProjectInput,
 } from "./ipc.js";
-export type { CloneProgress, Project, RepoInfo, Task } from "./models.js";
+export type { CloneProgress, EnvEntry, EnvRepoEntries, Project, RepoInfo, Task } from "./models.js";
 export type {
   WsClientMessage,
   WsMethods,

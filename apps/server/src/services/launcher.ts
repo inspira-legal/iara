@@ -69,6 +69,11 @@ export function buildSystemPrompt(ctx: TaskContext): string {
     );
   }
 
+  // # ENV FILES
+  if (ctx.repos.length > 0) {
+    sections.push(buildEnvSection(ctx.repos.map((r) => r.name)));
+  }
+
   // PROJECT.md and TASK.md — wrapped in tags, only if non-empty
   for (const [file, tag] of [
     ["PROJECT.md", "project"],
@@ -130,6 +135,11 @@ export function buildRootPrompt(ctx: RootContext): string {
     sections.push(`# REPOS\n${lines.join("\n")}`);
   }
 
+  // # ENV FILES
+  if (ctx.repos.length > 0) {
+    sections.push(buildEnvSection(ctx.repos.map((r) => r.name)));
+  }
+
   // PROJECT.md wrapped in tags, only if non-empty
   const projectMdPath = path.join(ctx.projectDir, "PROJECT.md");
   if (fs.existsSync(projectMdPath)) {
@@ -140,6 +150,14 @@ export function buildRootPrompt(ctx: RootContext): string {
   }
 
   return sections.join("\n\n");
+}
+
+function buildEnvSection(repoNames: string[]): string {
+  const lines = repoNames.flatMap((r) => [
+    `.env.${r}.global  ← shared env vars (symlink to global — edit here or via iara UI)`,
+    `.env.${r}.local   ← local env vars for this context only`,
+  ]);
+  return `# ENV FILES\n${lines.join("\n")}\n\nEnvironment variables are already injected into this session. To add or change env vars, edit the files above (NOT .env inside the repo). Changes take effect on next session restart.`;
 }
 
 export function launchClaude(config: LaunchConfig): LaunchResult {

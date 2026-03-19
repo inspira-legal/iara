@@ -1,8 +1,6 @@
 import { useRef, useEffect, useCallback } from "react";
 import { WebglAddon } from "@xterm/addon-webgl";
 import "@xterm/xterm/css/xterm.css";
-import "@fontsource/jetbrains-mono/400.css";
-import "@fontsource/jetbrains-mono/700.css";
 import { transport } from "~/lib/ws-transport.js";
 import { getOrCreateTerminal, destroyTerminal } from "~/lib/terminal-cache.js";
 import { useTerminalStore } from "~/stores/terminal";
@@ -59,13 +57,20 @@ export function TerminalView({ taskId, resumeSessionId }: TerminalViewProps) {
     fitAddon.fit();
 
     transport
-      .request("terminal.resize", { terminalId, cols: term.cols, rows: term.rows })
+      .request("terminal.resize", {
+        terminalId,
+        cols: term.cols,
+        rows: term.rows,
+      })
       .catch(() => {});
 
     const onData = term.onData((data) => {
       if (terminalIdRef.current) {
         transport
-          .request("terminal.write", { terminalId: terminalIdRef.current, data })
+          .request("terminal.write", {
+            terminalId: terminalIdRef.current,
+            data,
+          })
           .catch(() => {});
       }
     });
@@ -126,7 +131,9 @@ export function TerminalView({ taskId, resumeSessionId }: TerminalViewProps) {
       {status === "exited" && (
         <div className="absolute inset-0 flex items-center justify-center bg-zinc-950/80">
           <div className="flex flex-col items-center gap-3 text-zinc-400">
-            <p className="text-sm">Claude exited{exitCode != null ? ` (code ${exitCode})` : ""}</p>
+            <p className="text-sm">
+              Claude exited{exitCode != null ? ` (code ${exitCode})` : ""}
+            </p>
             <button
               type="button"
               onClick={handleRestart}

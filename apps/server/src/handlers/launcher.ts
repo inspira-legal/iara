@@ -1,5 +1,6 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
+import { mergeEnvForContext } from "../services/env.js";
 import { registerMethod } from "../router.js";
 import { launchClaude, type RepoContext } from "../services/launcher.js";
 import { getProject, getProjectDir } from "../services/projects.js";
@@ -41,11 +42,16 @@ export function registerLauncherHandlers(): void {
       repoDirs.push(taskDir);
     }
 
+    // Merge env files (global + local) for all repos
+    const repoNames = repos.map((r) => r.name);
+    const envVars = mergeEnvForContext(project.slug, task.slug, repoNames);
+
     return launchClaude({
       taskDir,
       repoDirs,
       resumeSessionId: params.resumeSessionId,
       env: {
+        ...envVars,
         IARA_TASK_ID: task.id,
         IARA_PROJECT_ID: project.id,
         IARA_PROJECT_DIR: projectDir,

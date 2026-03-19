@@ -6,6 +6,7 @@ import type { CreateProjectInput, Project, UpdateProjectInput } from "@iara/cont
 import { gitClone, gitWorktreeAdd, gitWorktreeRemove } from "@iara/shared/git";
 import { db, schema } from "../db.js";
 import { getProjectsDir } from "./config.js";
+import { ensureGlobalSymlinks } from "./env.js";
 import { listTasks } from "./tasks.js";
 
 /** Check if a project folder has default/ with at least one git repo inside. */
@@ -145,13 +146,18 @@ export async function createProject(input: CreateProjectInput): Promise<Project>
     }
 
     // Clone repos into default/
+    const repoNames: string[] = [];
     for (const source of input.repoSources) {
       const repoName = repoNameFromSource(source);
+      repoNames.push(repoName);
       const dest = path.join(reposDir, repoName);
       if (!fs.existsSync(dest)) {
         await gitClone(source, dest);
       }
     }
+
+    // Create global env symlinks in default/
+    ensureGlobalSymlinks(input.slug, reposDir, repoNames);
   });
 
   return deserializeProject(row);
@@ -192,6 +198,9 @@ export async function updateProject(id: string, input: UpdateProjectInput): Prom
         const dest = path.join(reposDir, repoName);
         await gitClone(source, dest);
 
+        // Create global env symlink in default/
+        ensureGlobalSymlinks(project.slug, reposDir, [repoName]);
+
         // Add worktree for each active task
         for (const task of activeTasks) {
           const taskDir = path.join(projectDir, task.slug);
@@ -199,6 +208,8 @@ export async function updateProject(id: string, input: UpdateProjectInput): Prom
           if (fs.existsSync(taskDir) && !fs.existsSync(wtDir)) {
             try {
               await gitWorktreeAdd(dest, wtDir, task.branch);
+              // Create global env symlink in task dir
+              ensureGlobalSymlinks(project.slug, taskDir, [repoName]);
             } catch {
               // Best effort — task may not have matching branch
             }

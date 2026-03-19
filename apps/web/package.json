@@ -14,7 +14,6 @@
     "@dnd-kit/core": "^6.3.1",
     "@dnd-kit/sortable": "^10.0.0",
     "@dnd-kit/utilities": "^3.2.2",
-    "@fontsource/jetbrains-mono": "^5.2.8",
     "@iara/contracts": "workspace:*",
     "@tanstack/react-router": "^1.160.2",
     "@xterm/addon-clipboard": "^0.2.0",

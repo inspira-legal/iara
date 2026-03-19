@@ -89,13 +89,9 @@ export class TerminalManager {
       TERM: "xterm-256color",
     } as Record<string, string>;
 
-    const shell = process.platform === "win32" ? "cmd.exe" : "bash";
-    const shellArgs =
-      process.platform === "win32"
-        ? ["/c", "claude", ...args]
-        : ["-lc", `claude ${args.map((a) => `'${a.replace(/'/g, "'\\''")}'`).join(" ")}`];
+    console.log("[terminal] spawn claude", { cwd: config.taskDir, args });
 
-    const ptyProcess = pty.spawn(shell, shellArgs, {
+    const ptyProcess = pty.spawn("claude", args, {
       name: "xterm-256color",
       cols: config.cols ?? 80,
       rows: config.rows ?? 24,
@@ -113,11 +109,27 @@ export class TerminalManager {
 
     this.terminals.set(terminalId, managed);
 
+    // Buffer initial output for debugging exit errors
+    let outputBuffer = "";
+    const bufferTimeout = setTimeout(() => {
+      outputBuffer = "";
+    }, 5000);
+
     ptyProcess.onData((data: string) => {
+      if (outputBuffer !== "") outputBuffer += data;
+      else if (bufferTimeout) outputBuffer = data;
       this.pushFn("terminal:data", { terminalId, data });
     });
 
     ptyProcess.onExit(({ exitCode }: { exitCode: number }) => {
+      clearTimeout(bufferTimeout);
+      if (exitCode !== 0) {
+        console.error(`[terminal] claude exited with code ${exitCode}`, {
+          taskId: config.taskId,
+          cwd: config.taskDir,
+          output: outputBuffer.slice(0, 2000),
+        });
+      }
       this.pushFn("terminal:exit", { terminalId, exitCode });
       this.terminals.delete(terminalId);
     });

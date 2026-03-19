@@ -69,9 +69,7 @@ function findBinding(event: KeyboardEvent): Keybinding | undefined {
   const isCtrl = event.ctrlKey || event.metaKey;
   const key = event.key.toLowerCase();
 
-  return KEYBINDINGS.find(
-    (b) => b.ctrl === isCtrl && b.shift === event.shiftKey && b.key === key,
-  );
+  return KEYBINDINGS.find((b) => b.ctrl === isCtrl && b.shift === event.shiftKey && b.key === key);
 }
 
 // ---------------------------------------------------------------------------

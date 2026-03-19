@@ -10,6 +10,7 @@ import {
 import type { Task, Project, RepoInfo } from "@iara/contracts";
 import { transport } from "~/lib/ws-transport.js";
 import { useTerminalStore } from "~/stores/terminal";
+import { EnvEditor } from "./EnvEditor";
 import { TerminalView } from "./TerminalView";
 import { SessionList } from "./SessionList";
 
@@ -117,6 +118,7 @@ export function TaskWorkspace({ project, task }: TaskWorkspaceProps) {
           task={task}
           repoInfo={repoInfo}
           repoLoading={repoLoading}
+          hasActiveTerminal={hasTerminal}
           onLaunchSession={handleLaunchSession}
         />
       )}
@@ -132,11 +134,13 @@ function TaskDetailView({
   task,
   repoInfo,
   repoLoading,
+  hasActiveTerminal,
   onLaunchSession,
 }: {
   task: Task;
   repoInfo: RepoInfo[];
   repoLoading: boolean;
+  hasActiveTerminal: boolean;
   onLaunchSession: (resumeSessionId?: string) => void;
 }) {
   return (
@@ -160,6 +164,16 @@ function TaskDetailView({
             repoInfo.map((repo) => <RepoCard key={repo.name} repo={repo} />)
           )}
         </div>
+      </div>
+
+      {/* Environment */}
+      <div className="mb-6">
+        <EnvEditor
+          projectId={task.projectId}
+          context={task.id}
+          repos={repoInfo.map((r) => r.name)}
+          hasActiveTerminal={hasActiveTerminal}
+        />
       </div>
 
       {/* Sessions */}

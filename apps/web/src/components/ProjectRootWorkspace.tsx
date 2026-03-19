@@ -13,6 +13,7 @@ import type { Project, RepoInfo } from "@iara/contracts";
 import { transport } from "~/lib/ws-transport.js";
 import { useProjectStore } from "~/stores/projects";
 import { useTerminalStore } from "~/stores/terminal";
+import { EnvEditor } from "./EnvEditor";
 import { TerminalView } from "./TerminalView";
 import { SessionList } from "./SessionList";
 import { AddRepoDialog } from "./AddRepoDialog";
@@ -170,6 +171,11 @@ function ProjectRootDetailView({
           <Plus size={14} />
           Add Repo
         </button>
+      </div>
+
+      {/* Environment */}
+      <div className="mb-6">
+        <EnvEditor projectId={project.id} context="root" repos={repoInfo.map((r) => r.name)} />
       </div>
 
       {/* Sessions */}

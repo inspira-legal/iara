@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { X } from "lucide-react";
+import { X, Loader2 } from "lucide-react";
 import { useTaskStore } from "~/stores/tasks";
 import { useToast } from "./Toast";
 
@@ -14,6 +14,7 @@ export function CreateTaskDialog({ open, onClose, projectId }: CreateTaskDialogP
   const [slug, setSlug] = useState("");
   const [description, setDescription] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [progress, setProgress] = useState("");
   const { createTask } = useTaskStore();
   const { toast } = useToast();
 
@@ -28,23 +29,37 @@ export function CreateTaskDialog({ open, onClose, projectId }: CreateTaskDialogP
 
   const isSlugDefault = slug.trim() === "default";
 
+  const resetForm = () => {
+    setName("");
+    setSlug("");
+    setDescription("");
+    setSubmitting(false);
+    setProgress("");
+  };
+
+  const handleClose = () => {
+    if (submitting) return;
+    resetForm();
+    onClose();
+  };
+
   const handleSubmit = async () => {
     if (!name.trim() || !slug.trim() || isSlugDefault) return;
     setSubmitting(true);
     try {
+      setProgress("Creating task and worktrees...");
       const input = description.trim()
         ? { name: name.trim(), slug: slug.trim(), description: description.trim() }
         : { name: name.trim(), slug: slug.trim() };
       await createTask(projectId, input);
       toast("Task created", "success");
-      setName("");
-      setSlug("");
-      setDescription("");
+      resetForm();
       onClose();
     } catch (err) {
       toast(`Failed: ${err instanceof Error ? err.message : String(err)}`, "error");
     } finally {
       setSubmitting(false);
+      setProgress("");
     }
   };
 
@@ -53,7 +68,12 @@ export function CreateTaskDialog({ open, onClose, projectId }: CreateTaskDialogP
       <div className="w-full max-w-md rounded-lg border border-zinc-700 bg-zinc-900 p-6 shadow-xl">
         <div className="mb-4 flex items-center justify-between">
           <h2 className="text-lg font-semibold text-zinc-100">New Task</h2>
-          <button type="button" onClick={onClose} className="text-zinc-500 hover:text-zinc-300">
+          <button
+            type="button"
+            onClick={handleClose}
+            disabled={submitting}
+            className="text-zinc-500 hover:text-zinc-300 disabled:opacity-30"
+          >
             <X size={18} />
           </button>
         </div>
@@ -67,7 +87,8 @@ export function CreateTaskDialog({ open, onClose, projectId }: CreateTaskDialogP
               onChange={(e) => handleNameChange(e.target.value)}
               placeholder="Add authentication"
               autoFocus
-              className="w-full rounded-md border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-zinc-100 placeholder-zinc-600 outline-none focus:border-blue-500"
+              disabled={submitting}
+              className="w-full rounded-md border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-zinc-100 placeholder-zinc-600 outline-none focus:border-blue-500 disabled:opacity-50"
             />
           </div>
 
@@ -78,7 +99,8 @@ export function CreateTaskDialog({ open, onClose, projectId }: CreateTaskDialogP
               value={slug}
               onChange={(e) => setSlug(e.target.value)}
               placeholder="add-auth"
-              className="w-full rounded-md border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-zinc-100 placeholder-zinc-600 outline-none focus:border-blue-500"
+              disabled={submitting}
+              className="w-full rounded-md border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-zinc-100 placeholder-zinc-600 outline-none focus:border-blue-500 disabled:opacity-50"
             />
             {isSlugDefault ? (
               <p className="mt-1 text-xs text-red-400">
@@ -96,16 +118,26 @@ export function CreateTaskDialog({ open, onClose, projectId }: CreateTaskDialogP
               onChange={(e) => setDescription(e.target.value)}
               placeholder="What needs to be done?"
               rows={3}
-              className="w-full rounded-md border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-zinc-100 placeholder-zinc-600 outline-none focus:border-blue-500"
+              disabled={submitting}
+              className="w-full rounded-md border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-zinc-100 placeholder-zinc-600 outline-none focus:border-blue-500 disabled:opacity-50"
             />
           </div>
+
+          {/* Progress indicator */}
+          {submitting && progress && (
+            <div className="flex items-center gap-2 text-sm text-zinc-400">
+              <Loader2 size={14} className="shrink-0 animate-spin text-blue-400" />
+              <span>{progress}</span>
+            </div>
+          )}
 
           <button
             type="button"
             onClick={() => void handleSubmit()}
             disabled={!name.trim() || !slug.trim() || isSlugDefault || submitting}
-            className="w-full rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-500 disabled:opacity-50"
+            className="flex w-full items-center justify-center gap-2 rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-500 disabled:opacity-50"
           >
+            {submitting && <Loader2 size={14} className="animate-spin" />}
             {submitting ? "Creating..." : "Create Task"}
           </button>
         </div>

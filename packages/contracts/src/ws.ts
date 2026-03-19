@@ -12,7 +12,7 @@ import type {
   SessionInfo,
   UpdateProjectInput,
 } from "./ipc.js";
-import type { CloneProgress, Project, RepoInfo, Task } from "./models.js";
+import type { CloneProgress, EnvEntry, EnvRepoEntries, Project, RepoInfo, Task } from "./models.js";
 
 // ---------------------------------------------------------------------------
 // WS Methods — request/response map
@@ -60,9 +60,26 @@ export type WsMethods = {
   "dev.discover": { params: { dir: string }; result: DevCommand[] };
 
   // Env
-  "env.read": { params: { projectDir: string }; result: string };
-  "env.write": { params: { projectDir: string; content: string }; result: void };
-  "env.merge": { params: { projectDir: string; vars: Record<string, string> }; result: void };
+  "env.list": { params: { projectId: string; context: string }; result: EnvRepoEntries[] };
+  "env.write": {
+    params: {
+      repo: string;
+      level: "global" | "local";
+      projectId?: string;
+      context?: string;
+      entries: EnvEntry[];
+    };
+    result: void;
+  };
+  "env.delete": {
+    params: {
+      repo: string;
+      level: "global" | "local";
+      projectId?: string;
+      context?: string;
+    };
+    result: void;
+  };
 
   // Files
   "files.open": { params: { filePath: string; line?: number; col?: number }; result: void };
@@ -101,6 +118,7 @@ export type WsPushEvents = {
   notification: { title: string; body: string; type?: string };
   "clone:progress": CloneProgress;
   "session:changed": { taskId: string };
+  "env:changed": { repo: string; level: "global" | "local" };
 };
 
 // ---------------------------------------------------------------------------
