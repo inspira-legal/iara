@@ -65,12 +65,14 @@ export function registerProjectHandlers(
     await fetchRepos(project.slug);
   });
 
-  // Fast synchronous suggest — metadata only, maxTurns: 3
   registerMethod("projects.suggest", async (params) => {
     const { userGoal } = params;
     const prompt = loadPrompt("project-suggest", { userGoal });
+    const requestId = crypto.randomUUID();
     const run = runClaude({ cwd: process.cwd(), prompt, maxTurns: 3 }, ProjectMetadataSchema);
-    return await run.result;
+    activeRuns.set(requestId, run);
+    streamClaudeRun(run, requestId, null, pushFn);
+    return { requestId };
   });
 
   registerMethod("projects.analyze", async (params) => {

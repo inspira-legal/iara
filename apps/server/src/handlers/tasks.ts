@@ -62,7 +62,6 @@ export function registerTaskHandlers(
     sessionWatcher.refresh();
   });
 
-  // Fast synchronous suggest — metadata only, no code exploration, maxTurns: 3
   registerMethod("tasks.suggest", async (params) => {
     const { projectId, userGoal } = params;
     const project = getProject(projectId);
@@ -90,16 +89,14 @@ NÃO explore arquivos. Responda apenas com base nas informações acima.`;
 
     const prompt = loadPrompt("task-suggest", { userGoal });
 
+    const requestId = crypto.randomUUID();
     const run = runClaude(
       { cwd: defaultDir, prompt, systemPrompt, maxTurns: 3 },
       TaskMetadataSchema,
     );
-    try {
-      return await run.result;
-    } catch (err) {
-      console.error("[tasks.suggest] failed:", err);
-      throw err;
-    }
+    activeRuns.set(requestId, run);
+    streamClaudeRun(run, requestId, null, pushFn);
+    return { requestId };
   });
 
   registerMethod("tasks.regenerate", async (params) => {

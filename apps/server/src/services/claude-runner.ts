@@ -169,8 +169,8 @@ function makeDescribeToolUse(cwd: string) {
         return `Searching for "${input.pattern as string}"${input.path ? ` in ${shortPath(input.path as string)}` : ""}`;
       case "Agent":
         return `Analyzing${input.description ? `: ${input.description}` : "..."}`;
-      case "submit_result":
-        return "Submitting result...";
+      case "mcp__iara__submit_result":
+        return "Preparing result...";
       default:
         return `${tool}...`;
     }
@@ -217,7 +217,7 @@ function createSubmitResultServer<T>(
             content: [
               {
                 type: "text" as const,
-                text: `Validation failed: ${issues}. Fix the errors and call submit_result again.`,
+                text: `Validation failed: ${issues}. Fix the errors and call mcp__iara__submit_result again.`,
               },
             ],
             isError: true,
@@ -265,7 +265,7 @@ export function runClaude<T>(
     prompt: config.prompt,
     systemPrompt: [
       config.systemPrompt,
-      "IMPORTANT: You MUST use the `submit_result` tool to submit your final answer. Do NOT output the result as text.",
+      "IMPORTANT: You MUST use the `mcp__iara__submit_result` tool to submit your final answer. Do NOT output the result as text.",
     ]
       .filter(Boolean)
       .join("\n\n"),
@@ -311,7 +311,11 @@ export function streamClaudeRun<T>(
         pushFn("claude:progress", { requestId, progress: event });
       }
       const data = await run.result;
-      const content = transform ? transform(data) : String(data);
+      const content = transform
+        ? transform(data)
+        : typeof data === "string"
+          ? data
+          : JSON.stringify(data);
       if (outputPath) {
         await fs.promises.writeFile(outputPath, content, "utf-8");
       }

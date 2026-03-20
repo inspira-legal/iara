@@ -38,7 +38,7 @@ export type WsMethods = {
   "projects.delete": { params: { id: string }; result: void };
   "projects.suggest": {
     params: { userGoal: string };
-    result: { name: string; description: string };
+    result: { requestId: string };
   };
 
   // Repos
@@ -52,7 +52,7 @@ export type WsMethods = {
   "tasks.create": { params: { projectId: string } & CreateTaskInput; result: Task };
   "tasks.suggest": {
     params: { projectId: string; userGoal: string };
-    result: { name: string; description: string; branches: Record<string, string> };
+    result: { requestId: string };
   };
   "tasks.regenerate": { params: { taskId: string }; result: { requestId: string } };
   "tasks.delete": { params: { id: string }; result: void };
