@@ -61,10 +61,7 @@ function loadResolvedConfig(
       ...svc,
       resolvedPort,
       // PORT as fallback, then project env, then scripts.yaml env, then interpolate
-      resolvedEnv: interpolateEnv(
-        { PORT: String(resolvedPort), ...projectEnv, ...svc.env },
-        ports,
-      ),
+      resolvedEnv: interpolateEnv({ PORT: String(resolvedPort), ...projectEnv, ...svc.env }, ports),
     };
   });
 

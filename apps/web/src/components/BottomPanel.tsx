@@ -676,9 +676,7 @@ function OutputTab() {
 
   // Current log lines — find the status id to look up logs
   const selectedStatus = selectedLog
-    ? allScripts.find(
-        (s) => s.service === selectedLog.service && s.script === selectedLog.script,
-      )
+    ? allScripts.find((s) => s.service === selectedLog.service && s.script === selectedLog.script)
     : null;
   const currentLines = selectedStatus ? (logs.get(selectedStatus.scriptId) ?? []) : [];
 
@@ -753,9 +751,7 @@ function OutputScriptEntry({
                 : "text-zinc-600"
           }`}
         />
-        <span className="truncate">
-          {status.service}
-        </span>
+        <span className="truncate">{status.service}</span>
       </span>
     </button>
   );

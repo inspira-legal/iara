@@ -25,10 +25,13 @@ export function TaskNode({
   onRename,
 }: TaskNodeProps) {
   const runningInTask = useScriptsStore(
-    (s) => s.config?.statuses.filter((st) => st.workspace === task.slug && isScriptActive(st)).length ?? 0,
+    (s) =>
+      s.config?.statuses.filter((st) => st.workspace === task.slug && isScriptActive(st)).length ??
+      0,
   );
   const hasUnhealthy = useScriptsStore(
-    (s) => s.config?.statuses.some((st) => st.workspace === task.slug && isScriptUnhealthy(st)) ?? false,
+    (s) =>
+      s.config?.statuses.some((st) => st.workspace === task.slug && isScriptUnhealthy(st)) ?? false,
   );
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
   const [editing, setEditing] = useState(false);

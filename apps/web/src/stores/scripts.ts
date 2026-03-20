@@ -49,7 +49,13 @@ export const useScriptsStore = create<ScriptsState & ScriptsActions>((set, get) 
   panelHeight: 240,
 
   loadConfig: async (projectId, workspace) => {
-    set({ loading: true, selectedLog: null, activeTab: "scripts", currentProjectId: projectId, currentWorkspace: workspace });
+    set({
+      loading: true,
+      selectedLog: null,
+      activeTab: "scripts",
+      currentProjectId: projectId,
+      currentWorkspace: workspace,
+    });
     try {
       const config = await transport.request("scripts.load", { projectId, workspace });
       set({ config, loading: false });
@@ -117,9 +123,7 @@ export const useScriptsStore = create<ScriptsState & ScriptsActions>((set, get) 
         if (!config) return;
         // Ignore statuses from other projects/workspaces
         if (status.projectId !== currentProjectId || status.workspace !== currentWorkspace) return;
-        const existing = config.statuses.findIndex(
-          (s) => s.scriptId === status.scriptId,
-        );
+        const existing = config.statuses.findIndex((s) => s.scriptId === status.scriptId);
         if (existing >= 0) {
           const prev = config.statuses[existing]!;
           if (
