@@ -27,15 +27,15 @@ import { PromptPreview } from "./PromptPreview";
 
 const FETCH_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
 
-interface ProjectRootWorkspaceProps {
+interface DefaultWorkspaceProps {
   project: Project;
 }
 
-export function ProjectRootWorkspace({ project }: ProjectRootWorkspaceProps) {
-  const rootKey = `root:${project.id}`;
-  const terminalEntry = useTerminalStore((s) => s.getEntry(rootKey));
+export function DefaultWorkspace({ project }: DefaultWorkspaceProps) {
+  const defaultKey = `default:${project.id}`;
+  const terminalEntry = useTerminalStore((s) => s.getEntry(defaultKey));
   const resetToSessions = useTerminalStore((s) => s.resetToSessions);
-  const createRoot = useTerminalStore((s) => s.createRoot);
+  const createDefault = useTerminalStore((s) => s.createDefault);
   const [repoInfo, setRepoInfo] = useState<RepoInfo[]>([]);
   const [repoLoading, setRepoLoading] = useState(true);
 
@@ -81,11 +81,11 @@ export function ProjectRootWorkspace({ project }: ProjectRootWorkspaceProps) {
 
   const handleLaunchSession = (resumeSessionId?: string, sessionCwd?: string) => {
     setPendingResumeSessionId(resumeSessionId);
-    void createRoot(project.id, resumeSessionId, sessionCwd);
+    void createDefault(project.id, resumeSessionId, sessionCwd);
   };
 
   const handleBack = () => {
-    resetToSessions(rootKey);
+    resetToSessions(defaultKey);
     setPendingResumeSessionId(undefined);
   };
 
@@ -133,11 +133,11 @@ export function ProjectRootWorkspace({ project }: ProjectRootWorkspaceProps) {
       {/* Content */}
       {hasTerminal ? (
         <TerminalView
-          taskId={rootKey}
+          taskId={defaultKey}
           {...(pendingResumeSessionId ? { resumeSessionId: pendingResumeSessionId } : {})}
         />
       ) : (
-        <ProjectRootDetailView
+        <DefaultWorkspaceDetailView
           project={project}
           repoInfo={repoInfo}
           repoLoading={repoLoading}
@@ -150,10 +150,10 @@ export function ProjectRootWorkspace({ project }: ProjectRootWorkspaceProps) {
 }
 
 // ---------------------------------------------------------------------------
-// Project Workspace Detail View (sessions screen)
+// Default Workspace Detail View (sessions screen)
 // ---------------------------------------------------------------------------
 
-function ProjectRootDetailView({
+function DefaultWorkspaceDetailView({
   project,
   repoInfo,
   repoLoading,
@@ -254,7 +254,7 @@ function ProjectRootDetailView({
 
       {/* Environment */}
       <div className="mb-6">
-        <EnvEditor projectId={project.id} context="root" repos={repoInfo.map((r) => r.name)} />
+        <EnvEditor projectId={project.id} workspace="default" repos={repoInfo.map((r) => r.name)} />
       </div>
 
       {/* Sessions */}

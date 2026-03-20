@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useProjectStore } from "~/stores/projects";
 import { useTaskStore } from "~/stores/tasks";
 import { TaskWorkspace } from "~/components/TaskWorkspace";
-import { ProjectRootWorkspace } from "~/components/ProjectRootWorkspace";
+import { DefaultWorkspace } from "~/components/DefaultWorkspace";
 
 export const Route = createFileRoute("/")({
   component: HomePage,
@@ -22,7 +22,7 @@ function HomePage() {
   }
 
   if (project) {
-    return <ProjectRootWorkspace project={project} />;
+    return <DefaultWorkspace project={project} />;
   }
 
   return (

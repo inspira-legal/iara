@@ -16,16 +16,18 @@ export function getGlobalEnvPath(repo: string): string {
   return path.join(getEnvironmentDir(), `.env.${repo}.global`);
 }
 
-export function getLocalEnvPath(projectSlug: string, context: string, repo: string): string {
+export function getLocalEnvPath(projectSlug: string, workspace: string, repo: string): string {
   const projectDir = getProjectDir(projectSlug);
-  const contextDir =
-    context === "root" ? path.join(projectDir, "default") : path.join(projectDir, context);
-  return path.join(contextDir, `.env.${repo}.local`);
+  const workspaceDir =
+    workspace === "default" ? path.join(projectDir, "default") : path.join(projectDir, workspace);
+  return path.join(workspaceDir, `.env.${repo}.local`);
 }
 
-function getContextDir(projectSlug: string, context: string): string {
+function getWorkspaceDir(projectSlug: string, workspace: string): string {
   const projectDir = getProjectDir(projectSlug);
-  return context === "root" ? path.join(projectDir, "default") : path.join(projectDir, context);
+  return workspace === "default"
+    ? path.join(projectDir, "default")
+    : path.join(projectDir, workspace);
 }
 
 // ---------------------------------------------------------------------------
@@ -200,15 +202,15 @@ export function syncEnvSymlinks(): void {
 // List env for context
 // ---------------------------------------------------------------------------
 
-export function listEnvForContext(
+export function listEnvForWorkspace(
   projectSlug: string,
-  context: string,
+  workspace: string,
   repoNames: string[],
 ): EnvRepoEntries[] {
   return repoNames.map((repo) => ({
     repo,
     global: readEnvFile(getGlobalEnvPath(repo)),
-    local: readEnvFile(getLocalEnvPath(projectSlug, context, repo)),
+    local: readEnvFile(getLocalEnvPath(projectSlug, workspace, repo)),
   }));
 }
 
@@ -216,9 +218,9 @@ export function listEnvForContext(
 // Merge env for injection into Claude Code
 // ---------------------------------------------------------------------------
 
-export function mergeEnvForContext(
+export function mergeEnvForWorkspace(
   projectSlug: string,
-  context: string,
+  workspace: string,
   repoNames: string[],
 ): Record<string, string> {
   const merged: Record<string, string> = {};
@@ -227,7 +229,7 @@ export function mergeEnvForContext(
   const sorted = [...repoNames].sort();
   for (const repo of sorted) {
     const globalEntries = readEnvFile(getGlobalEnvPath(repo));
-    const localEntries = readEnvFile(getLocalEnvPath(projectSlug, context, repo));
+    const localEntries = readEnvFile(getLocalEnvPath(projectSlug, workspace, repo));
 
     // Global first
     for (const entry of globalEntries) {

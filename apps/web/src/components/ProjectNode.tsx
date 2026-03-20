@@ -158,7 +158,7 @@ export function ProjectNode({
               } mb-1`}
             >
               <FolderGit2 size={12} className="shrink-0" />
-              <span className="truncate">Project Workspace</span>
+              <span className="truncate">Default Workspace</span>
             </button>
 
             {loading && tasks.length === 0 ? (

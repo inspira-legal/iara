@@ -35,12 +35,12 @@ export class SessionWatcher {
     for (const project of allProjects) {
       const projectDir = getProjectDir(project.slug);
 
-      // Watch project root sessions (root:<projectId>)
+      // Watch default workspace sessions (default:<projectId>)
       const rootHash = computeProjectHash(projectDir);
       if (!newHashes.has(rootHash)) {
         newHashes.set(rootHash, new Set());
       }
-      newHashes.get(rootHash)!.add(`root:${project.id}`);
+      newHashes.get(rootHash)!.add(`default:${project.id}`);
 
       const tasks = listTasks(project.id);
 

@@ -18,7 +18,7 @@ interface TerminalState {
 interface TerminalActions {
   getEntry(taskId: string): TerminalEntry;
   create(taskId: string, resumeSessionId?: string, sessionCwd?: string): Promise<void>;
-  createRoot(projectId: string, resumeSessionId?: string, sessionCwd?: string): Promise<void>;
+  createDefault(projectId: string, resumeSessionId?: string, sessionCwd?: string): Promise<void>;
   restart(taskId: string): Promise<void>;
   destroy(taskId: string): Promise<void>;
   resetToSessions(taskId: string): void;
@@ -74,8 +74,8 @@ export const useTerminalStore = create<TerminalState & TerminalActions>((set, ge
     }
   },
 
-  createRoot: async (projectId, resumeSessionId?, sessionCwd?) => {
-    const key = `root:${projectId}`;
+  createDefault: async (projectId, resumeSessionId?, sessionCwd?) => {
+    const key = `default:${projectId}`;
     set((state) => {
       const next = new Map(state.entries);
       next.set(key, { ...DEFAULT_ENTRY, status: "connecting" });
@@ -84,12 +84,12 @@ export const useTerminalStore = create<TerminalState & TerminalActions>((set, ge
     try {
       const params: {
         projectId: string;
-        root: true;
+        default: true;
         resumeSessionId?: string;
         sessionCwd?: string;
       } = {
         projectId,
-        root: true,
+        default: true,
       };
       if (resumeSessionId !== undefined) {
         params.resumeSessionId = resumeSessionId;
@@ -110,7 +110,7 @@ export const useTerminalStore = create<TerminalState & TerminalActions>((set, ge
       });
       // Sessions will refresh on next view
     } catch (err) {
-      console.error("Failed to create root terminal:", err);
+      console.error("Failed to create default workspace terminal:", err);
       set((state) => {
         const next = new Map(state.entries);
         next.set(key, { ...DEFAULT_ENTRY, status: "exited", exitCode: -1 });

@@ -260,7 +260,7 @@ function TaskDetailView({
       <div className="mb-6">
         <EnvEditor
           projectId={task.projectId}
-          context={task.id}
+          workspace={task.id}
           repos={repoInfo.map((r) => r.name)}
           hasActiveTerminal={hasActiveTerminal}
         />

@@ -1,7 +1,7 @@
 import { execFileSync } from "node:child_process";
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { mergeEnvForContext } from "../services/env.js";
+import { mergeEnvForWorkspace } from "../services/env.js";
 import type { RepoContext } from "../services/launcher.js";
 import { buildRootPrompt } from "../services/launcher.js";
 import { registerMethod } from "../router.js";
@@ -20,8 +20,8 @@ function getAutocompactEnv(): Record<string, string> {
 
 export function registerTerminalHandlers(manager: TerminalManager): void {
   registerMethod("terminal.create", async (params) => {
-    // Root mode: launch Claude at the project level (no task)
-    if ("root" in params && params.root) {
+    // Default workspace mode: launch Claude at the project level (no task)
+    if ("default" in params && params.default) {
       const project = getProject(params.projectId);
       if (!project) throw new Error(`Project not found: ${params.projectId}`);
 
@@ -65,7 +65,7 @@ export function registerTerminalHandlers(manager: TerminalManager): void {
 
       // Merge env files (global + local) for all repos
       const repoNames = repoDirs.map((d) => path.basename(d));
-      const envVars = mergeEnvForContext(project.slug, "root", repoNames);
+      const envVars = mergeEnvForWorkspace(project.slug, "default", repoNames);
 
       // Use reposDir as cwd so Claude opens directly where repos live.
       // When resuming a session, honour sessionCwd so the hash matches the original.
@@ -73,7 +73,7 @@ export function registerTerminalHandlers(manager: TerminalManager): void {
       const rootCwd = params.resumeSessionId && params.sessionCwd ? params.sessionCwd : defaultCwd;
 
       return manager.create({
-        taskId: `root:${params.projectId}`,
+        taskId: `default:${params.projectId}`,
         taskDir: rootCwd,
         repoDirs,
         appendSystemPrompt: systemPrompt,
@@ -126,10 +126,11 @@ export function registerTerminalHandlers(manager: TerminalManager): void {
 
     // Merge env files (global + local) for all repos
     const repoNames = repos.map((r) => r.name);
-    const envVars = mergeEnvForContext(project.slug, task.slug, repoNames);
+    const envVars = mergeEnvForWorkspace(project.slug, task.slug, repoNames);
 
     // When resuming a session, honour sessionCwd so the hash matches the original
-    const effectiveCwd = taskParams.resumeSessionId && taskParams.sessionCwd ? taskParams.sessionCwd : taskDir;
+    const effectiveCwd =
+      taskParams.resumeSessionId && taskParams.sessionCwd ? taskParams.sessionCwd : taskDir;
 
     return manager.create({
       taskId: taskParams.taskId,

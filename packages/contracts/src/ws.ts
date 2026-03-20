@@ -93,13 +93,13 @@ export type WsMethods = {
   "dev.discover": { params: { dir: string }; result: DevCommand[] };
 
   // Env
-  "env.list": { params: { projectId: string; context: string }; result: EnvRepoEntries[] };
+  "env.list": { params: { projectId: string; workspace: string }; result: EnvRepoEntries[] };
   "env.write": {
     params: {
       repo: string;
       level: "global" | "local";
       projectId?: string;
-      context?: string;
+      workspace?: string;
       entries: EnvEntry[];
     };
     result: void;
@@ -109,7 +109,7 @@ export type WsMethods = {
       repo: string;
       level: "global" | "local";
       projectId?: string;
-      context?: string;
+      workspace?: string;
     };
     result: void;
   };
@@ -143,7 +143,7 @@ export type WsMethods = {
   "terminal.create": {
     params:
       | { taskId: string; resumeSessionId?: string; sessionCwd?: string }
-      | { projectId: string; root: true; resumeSessionId?: string; sessionCwd?: string };
+      | { projectId: string; default: true; resumeSessionId?: string; sessionCwd?: string };
     result: { terminalId: string; sessionId: string };
   };
   "terminal.write": { params: { terminalId: string; data: string }; result: void };

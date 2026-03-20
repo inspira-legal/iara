@@ -6,12 +6,12 @@ import { cn } from "~/lib/utils";
 
 interface EnvEditorProps {
   projectId: string;
-  context: string; // "root" | taskId
+  workspace: string; // "default" | taskId
   repos: string[];
   hasActiveTerminal?: boolean;
 }
 
-export function EnvEditor({ projectId, context, repos, hasActiveTerminal }: EnvEditorProps) {
+export function EnvEditor({ projectId, workspace, repos, hasActiveTerminal }: EnvEditorProps) {
   const [data, setData] = useState<EnvRepoEntries[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeRepo, setActiveRepo] = useState<string>(repos[0] ?? "");
@@ -29,13 +29,13 @@ export function EnvEditor({ projectId, context, repos, hasActiveTerminal }: EnvE
 
   const load = useCallback(() => {
     transport
-      .request("env.list", { projectId, context })
+      .request("env.list", { projectId, workspace })
       .then((result) => {
         setData(result);
         setLoading(false);
       })
       .catch(() => setLoading(false));
-  }, [projectId, context]);
+  }, [projectId, workspace]);
 
   useEffect(() => {
     setLoading(true);
@@ -58,11 +58,11 @@ export function EnvEditor({ projectId, context, repos, hasActiveTerminal }: EnvE
         const params =
           level === "global"
             ? { repo, level, entries }
-            : { repo, level, projectId, context, entries };
+            : { repo, level, projectId, workspace, entries };
         void transport.request("env.write", params);
       }, 500);
     },
-    [projectId, context],
+    [projectId, workspace],
   );
 
   const updateEntry = (
@@ -196,7 +196,9 @@ export function EnvEditor({ projectId, context, repos, hasActiveTerminal }: EnvE
           />
           <EnvSection
             label="Local"
-            sublabel={context === "root" ? "this Project Workspace only" : "this task only"}
+            sublabel={
+              workspace === "default" ? "this Default Workspace only" : "this Task Workspace only"
+            }
             entries={repoData?.local ?? []}
             overriddenKeys={globalKeys}
             onUpdate={(i, f, v) => updateEntry("local", i, f, v)}

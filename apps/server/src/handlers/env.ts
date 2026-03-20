@@ -7,31 +7,34 @@ import {
   deleteEnvFile,
   getGlobalEnvPath,
   getLocalEnvPath,
-  listEnvForContext,
+  listEnvForWorkspace,
   validateEntries,
   writeEnvFile,
 } from "../services/env.js";
 
-function resolveContext(
+function resolveWorkspace(
   projectId: string,
-  context: string,
-): { projectSlug: string; context: string; repoNames: string[] } {
+  workspace: string,
+): { projectSlug: string; workspace: string; repoNames: string[] } {
   const project = getProject(projectId);
   if (!project) throw new Error(`Project not found: ${projectId}`);
   const repoNames = discoverRepos(project.slug);
-  if (context === "root") {
-    return { projectSlug: project.slug, context: "root", repoNames };
+  if (workspace === "default") {
+    return { projectSlug: project.slug, workspace: "default", repoNames };
   }
-  // context is a taskId
-  const task = getTask(context);
-  if (!task) throw new Error(`Task not found: ${context}`);
-  return { projectSlug: project.slug, context: task.slug, repoNames };
+  // workspace is a taskId
+  const task = getTask(workspace);
+  if (!task) throw new Error(`Task not found: ${workspace}`);
+  return { projectSlug: project.slug, workspace: task.slug, repoNames };
 }
 
 export function registerEnvHandlers(): void {
   registerMethod("env.list", async (params) => {
-    const { projectSlug, context, repoNames } = resolveContext(params.projectId, params.context);
-    return listEnvForContext(projectSlug, context, repoNames);
+    const { projectSlug, workspace, repoNames } = resolveWorkspace(
+      params.projectId,
+      params.workspace,
+    );
+    return listEnvForWorkspace(projectSlug, workspace, repoNames);
   });
 
   registerMethod("env.write", async (params) => {
@@ -41,11 +44,11 @@ export function registerEnvHandlers(): void {
       const filePath = getGlobalEnvPath(params.repo);
       writeEnvFile(filePath, params.entries);
     } else {
-      if (!params.projectId || !params.context) {
-        throw new Error("projectId and context are required when level is 'local'");
+      if (!params.projectId || !params.workspace) {
+        throw new Error("projectId and workspace are required when level is 'local'");
       }
-      const { projectSlug, context } = resolveContext(params.projectId, params.context);
-      const filePath = getLocalEnvPath(projectSlug, context, params.repo);
+      const { projectSlug, workspace } = resolveWorkspace(params.projectId, params.workspace);
+      const filePath = getLocalEnvPath(projectSlug, workspace, params.repo);
       writeEnvFile(filePath, params.entries);
     }
 
@@ -56,11 +59,11 @@ export function registerEnvHandlers(): void {
     if (params.level === "global") {
       deleteEnvFile(getGlobalEnvPath(params.repo));
     } else {
-      if (!params.projectId || !params.context) {
-        throw new Error("projectId and context are required when level is 'local'");
+      if (!params.projectId || !params.workspace) {
+        throw new Error("projectId and workspace are required when level is 'local'");
       }
-      const { projectSlug, context } = resolveContext(params.projectId, params.context);
-      deleteEnvFile(getLocalEnvPath(projectSlug, context, params.repo));
+      const { projectSlug, workspace } = resolveWorkspace(params.projectId, params.workspace);
+      deleteEnvFile(getLocalEnvPath(projectSlug, workspace, params.repo));
     }
 
     pushAll("env:changed", { repo: params.repo, level: params.level });

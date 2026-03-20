@@ -1,6 +1,6 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { mergeEnvForContext } from "../services/env.js";
+import { mergeEnvForWorkspace } from "../services/env.js";
 import { registerMethod } from "../router.js";
 import { launchClaude, type RepoContext } from "../services/launcher.js";
 import { getProject, getProjectDir } from "../services/projects.js";
@@ -46,7 +46,7 @@ export function registerLauncherHandlers(): void {
 
     // Merge env files (global + local) for all repos
     const repoNames = repos.map((r) => r.name);
-    const envVars = mergeEnvForContext(project.slug, task.slug, repoNames);
+    const envVars = mergeEnvForWorkspace(project.slug, task.slug, repoNames);
 
     const autocompactPct = getSetting("claude.autocompact_pct");
     const autocompactEnv = autocompactPct
