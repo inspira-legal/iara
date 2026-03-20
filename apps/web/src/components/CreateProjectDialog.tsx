@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import {
   X,
   Plus,
@@ -10,7 +10,7 @@ import {
   FolderOpen,
   FileText,
 } from "lucide-react";
-import type { AddRepoInput } from "@iara/contracts";
+import type { AddRepoInput, ClaudeProgress } from "@iara/contracts";
 import { useProjectStore } from "~/stores/projects";
 import { useSidebarStore } from "~/stores/sidebar";
 import { useRegenerateStore } from "~/stores/regenerate";
@@ -18,6 +18,7 @@ import { transport } from "~/lib/ws-transport.js";
 import { toSlug } from "~/lib/utils";
 import { useToast } from "./Toast";
 import { AddRepoDialog } from "./AddRepoDialog";
+import { ClaudeProgressLine } from "./ClaudeProgressLine";
 
 interface CreateProjectDialogProps {
   open: boolean;
@@ -54,7 +55,9 @@ export function CreateProjectDialog({ open, onClose }: CreateProjectDialogProps)
 
   const [submitting, setSubmitting] = useState(false);
   const [progress, setProgress] = useState("");
+  const [claudeMessages, setClaudeMessages] = useState<ClaudeProgress[]>([]);
   const [claudeError, setClaudeError] = useState<string | null>(null);
+  const unsubscribesRef = useRef<(() => void)[]>([]);
 
   const { projects, createProject, loadProjects } = useProjectStore();
   const { expandProject } = useSidebarStore();
@@ -63,9 +66,15 @@ export function CreateProjectDialog({ open, onClose }: CreateProjectDialogProps)
   const computedSlug = toSlug(name);
   const slugTaken = computedSlug !== "" && projects.some((p) => p.slug === computedSlug);
 
-  if (!open) return null;
+  const cleanupSubs = () => {
+    for (const unsub of unsubscribesRef.current) unsub();
+    unsubscribesRef.current = [];
+  };
+
+  useEffect(() => cleanupSubs, []);
 
   const resetForm = () => {
+    cleanupSubs();
     setStep("repos");
     setPendingRepos([]);
     setShowAddRepo(false);
@@ -74,8 +83,11 @@ export function CreateProjectDialog({ open, onClose }: CreateProjectDialogProps)
     setDescription("");
     setSubmitting(false);
     setProgress("");
+    setClaudeMessages([]);
     setClaudeError(null);
   };
+
+  if (!open) return null;
 
   const handleClose = () => {
     if (submitting) return;
@@ -96,16 +108,43 @@ export function CreateProjectDialog({ open, onClose }: CreateProjectDialogProps)
 
   const handleAskClaude = async () => {
     if (!userGoal.trim()) return;
+    cleanupSubs();
     setStep("loading");
+    setClaudeMessages([]);
     setClaudeError(null);
 
     try {
-      const result = await transport.request("projects.suggest", {
+      const { requestId } = await transport.request("projects.suggest", {
         userGoal: userGoal.trim(),
       });
-      setName(result.name);
-      setDescription(result.description);
-      setStep("review");
+
+      const unsub1 = transport.subscribe("claude:progress", (params) => {
+        if (params.requestId !== requestId) return;
+        setClaudeMessages((prev) => [...prev.slice(-4), params.progress]);
+      });
+      const unsub2 = transport.subscribe("claude:result", (params) => {
+        if (params.requestId !== requestId) return;
+        cleanupSubs();
+        const data = params.result as { content: string };
+        try {
+          const parsed = JSON.parse(data.content);
+          setName(parsed.name ?? "");
+          setDescription(parsed.description ?? "");
+        } catch {
+          setName("");
+          setDescription("");
+        }
+        setStep("review");
+      });
+      const unsub3 = transport.subscribe("claude:error", (params) => {
+        if (params.requestId !== requestId) return;
+        cleanupSubs();
+        setClaudeError(params.error);
+        setName("");
+        setDescription("");
+        setStep("review");
+      });
+      unsubscribesRef.current = [unsub1, unsub2, unsub3];
     } catch (err) {
       setClaudeError(err instanceof Error ? err.message : String(err));
       setName("");
@@ -286,9 +325,18 @@ export function CreateProjectDialog({ open, onClose }: CreateProjectDialogProps)
 
         {/* Step 3: Loading */}
         {step === "loading" && (
-          <div className="flex items-center gap-2 py-8 text-sm text-zinc-400">
-            <Loader2 size={14} className="shrink-0 animate-spin text-blue-400" />
-            <span>Claude is analyzing...</span>
+          <div className="space-y-2 py-4">
+            <div className="flex items-center gap-2 text-sm text-zinc-400">
+              <Loader2 size={14} className="shrink-0 animate-spin text-blue-400" />
+              <span>Claude is analyzing...</span>
+            </div>
+            {claudeMessages.length > 0 && (
+              <div className="max-h-32 space-y-1 overflow-y-auto rounded-md border border-zinc-800 bg-zinc-900/50 px-3 py-2">
+                {claudeMessages.map((msg, i) => (
+                  <ClaudeProgressLine key={i} progress={msg} />
+                ))}
+              </div>
+            )}
           </div>
         )}
 

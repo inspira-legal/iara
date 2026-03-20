@@ -8,12 +8,7 @@ import { registerMethod } from "../router.js";
 import type { SessionWatcher } from "../services/session-watcher.js";
 import { listTasks, getTask, createTask, deleteTask, getTaskDir } from "../services/tasks.js";
 import { getProject, getProjectDir, discoverRepos } from "../services/projects.js";
-import {
-  runClaude,
-  runClaudeToFile,
-  activeRuns,
-  streamClaudeRun,
-} from "../services/claude-runner.js";
+import { runClaude, activeRuns, streamClaudeRun } from "../services/claude-runner.js";
 import { loadPrompt } from "../prompts/index.js";
 
 // Quick schema — metadata only, no code exploration needed
@@ -67,7 +62,6 @@ export function registerTaskHandlers(
     sessionWatcher.refresh();
   });
 
-  // Fast synchronous suggest — metadata only, no code exploration, maxTurns: 3
   registerMethod("tasks.suggest", async (params) => {
     const { projectId, userGoal } = params;
     const project = getProject(projectId);
@@ -95,16 +89,14 @@ NÃO explore arquivos. Responda apenas com base nas informações acima.`;
 
     const prompt = loadPrompt("task-suggest", { userGoal });
 
+    const requestId = crypto.randomUUID();
     const run = runClaude(
       { cwd: defaultDir, prompt, systemPrompt, maxTurns: 3 },
       TaskMetadataSchema,
     );
-    try {
-      return await run.result;
-    } catch (err) {
-      console.error("[tasks.suggest] failed:", err);
-      throw err;
-    }
+    activeRuns.set(requestId, run);
+    streamClaudeRun(run, requestId, null, pushFn);
+    return { requestId };
   });
 
   registerMethod("tasks.regenerate", async (params) => {
@@ -134,12 +126,12 @@ Descrição: ${task.description}
 Branch: ${task.branch}`;
 
     const taskMdPath = path.join(taskDir, "TASK.md");
-    const prompt = loadPrompt("task-regenerate", { outputPath: taskMdPath });
+    const prompt = loadPrompt("task-regenerate");
 
     const requestId = crypto.randomUUID();
-    const run = runClaudeToFile({ cwd: taskDir, prompt, systemPrompt, outputPath: taskMdPath });
+    const run = runClaude({ cwd: taskDir, prompt, systemPrompt });
     activeRuns.set(requestId, run);
-    streamClaudeRun(run, requestId, null, pushFn);
+    streamClaudeRun(run, requestId, taskMdPath, pushFn);
 
     return { requestId };
   });

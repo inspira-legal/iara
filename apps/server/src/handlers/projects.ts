@@ -4,12 +4,7 @@ import type { WsPushEvents } from "@iara/contracts";
 import { eq } from "drizzle-orm";
 import { registerMethod } from "../router.js";
 import { z } from "zod";
-import {
-  runClaude,
-  runClaudeToFile,
-  activeRuns,
-  streamClaudeRun,
-} from "../services/claude-runner.js";
+import { runClaude, activeRuns, streamClaudeRun } from "../services/claude-runner.js";
 
 const ProjectMetadataSchema = z.object({
   name: z.string().min(1).describe("nome curto e descritivo do projeto"),
@@ -70,16 +65,17 @@ export function registerProjectHandlers(
     await fetchRepos(project.slug);
   });
 
-  // Fast synchronous suggest — metadata only, maxTurns: 3
   registerMethod("projects.suggest", async (params) => {
     const { userGoal } = params;
     const prompt = loadPrompt("project-suggest", { userGoal });
+    const requestId = crypto.randomUUID();
     const run = runClaude({ cwd: process.cwd(), prompt, maxTurns: 3 }, ProjectMetadataSchema);
-    return await run.result;
+    activeRuns.set(requestId, run);
+    streamClaudeRun(run, requestId, null, pushFn);
+    return { requestId };
   });
 
   registerMethod("projects.analyze", async (params) => {
-    console.log("[projects.analyze] called with", params);
     const { projectId, description } = params;
     const project = getProject(projectId);
     if (!project) throw new Error(`Project not found: ${projectId}`);
@@ -96,16 +92,11 @@ export function registerProjectHandlers(
     const systemPrompt = `O usuário descreveu este projeto como: "${description}"`;
 
     const projectMdPath = path.join(getProjectDir(project.slug), "PROJECT.md");
-    const prompt = loadPrompt("project-analyze", { outputPath: projectMdPath });
+    const prompt = loadPrompt("project-analyze");
 
-    const run = runClaudeToFile({
-      cwd: defaultDir,
-      prompt,
-      systemPrompt,
-      outputPath: projectMdPath,
-    });
+    const run = runClaude({ cwd: defaultDir, prompt, systemPrompt });
     activeRuns.set(requestId, run);
-    streamClaudeRun(run, requestId, null, pushFn);
+    streamClaudeRun(run, requestId, projectMdPath, pushFn);
 
     return { requestId };
   });
