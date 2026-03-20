@@ -91,6 +91,7 @@ export class TerminalManager {
       LANG: process.env.LANG ?? "en_US.UTF-8",
       LC_ALL: process.env.LC_ALL ?? "en_US.UTF-8",
       TERM: "xterm-256color",
+      COLORTERM: "truecolor",
     } as Record<string, string>;
 
     console.log("[terminal] spawn claude", { cwd: config.taskDir, args });
