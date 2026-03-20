@@ -8,6 +8,7 @@
         "@types/node": "catalog:",
         "oxfmt": "^0.40.0",
         "oxlint": "^1.55.0",
+        "tsdown": "catalog:",
         "turbo": "^2.8.19",
         "vitest": "catalog:",
       },
@@ -111,6 +112,7 @@
       },
       "devDependencies": {
         "@iara/contracts": "workspace:*",
+        "@iara/shared": "workspace:*",
         "tsdown": "catalog:",
         "typescript": "catalog:",
         "vitest": "catalog:",

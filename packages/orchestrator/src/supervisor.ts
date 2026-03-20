@@ -7,6 +7,7 @@ import type {
   ScriptStatus,
   WsPushEvents,
 } from "@iara/contracts";
+import { cleanEnv } from "@iara/shared/env";
 import { interpolate } from "./interpolation.js";
 
 type PushFn = <E extends keyof WsPushEvents>(event: E, params: WsPushEvents[E]) => void;
@@ -96,7 +97,7 @@ export class ScriptSupervisor {
 
     const child = spawn(fullCommand, {
       cwd: opts.cwd,
-      env: { ...process.env, ...opts.env },
+      env: { ...cleanEnv(), ...opts.env },
       shell: true,
       stdio: ["ignore", "pipe", "pipe"],
       detached: true,
@@ -332,7 +333,8 @@ export class ScriptSupervisor {
           logs: [`[iara] Detected service running on port ${attachedPort}`],
           kill: () => {
             try {
-              const { execSync } = require("node:child_process") as typeof import("node:child_process");
+              const { execSync } =
+                require("node:child_process") as typeof import("node:child_process");
               const result = execSync(`lsof -ti:${attachedPort}`, { encoding: "utf-8" }).trim();
               for (const pid of result.split("\n").filter(Boolean)) {
                 try {
@@ -462,7 +464,12 @@ export class ScriptSupervisor {
     });
   }
 
-  private waitForHealth(port: number, service: string, script: string, timeoutSec: number): Promise<void> {
+  private waitForHealth(
+    port: number,
+    service: string,
+    script: string,
+    timeoutSec: number,
+  ): Promise<void> {
     return new Promise((resolve, reject) => {
       const key = this.key(port, service, script);
       const timeout = timeoutSec * 1000;
@@ -488,7 +495,12 @@ export class ScriptSupervisor {
     });
   }
 
-  private waitForExit(port: number, service: string, script: string, timeoutSec: number): Promise<void> {
+  private waitForExit(
+    port: number,
+    service: string,
+    script: string,
+    timeoutSec: number,
+  ): Promise<void> {
     return new Promise((resolve, reject) => {
       const key = this.key(port, service, script);
       const timeout = timeoutSec * 1000;

@@ -34,7 +34,7 @@
     }
   },
   "scripts": {
-    "build": "tsdown src/supervisor.ts src/parser.ts src/ports.ts src/discovery.ts src/interpolation.ts --format esm,cjs --dts --clean",
+    "build": "tsdown",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
   },
@@ -43,6 +43,7 @@
   },
   "devDependencies": {
     "@iara/contracts": "workspace:*",
+    "@iara/shared": "workspace:*",
     "tsdown": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:"

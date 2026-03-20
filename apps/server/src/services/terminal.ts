@@ -3,6 +3,7 @@ import * as fs from "node:fs/promises";
 import { promisify } from "node:util";
 import type { WsPushEvents } from "@iara/contracts";
 import * as pty from "node-pty";
+import { cleanEnv } from "@iara/shared/env";
 import {
   buildClaudeArgs,
   buildSystemPrompt,
@@ -10,17 +11,6 @@ import {
   type LaunchConfig,
   type TaskContext,
 } from "./launcher.js";
-
-/** Pass through all env vars except IARA_ and ELECTRON_ prefixed ones. */
-function cleanEnv(env: NodeJS.ProcessEnv): Record<string, string> {
-  const picked: Record<string, string> = {};
-  for (const [key, value] of Object.entries(env)) {
-    if (value !== undefined && !key.startsWith("IARA_") && !key.startsWith("ELECTRON_")) {
-      picked[key] = value;
-    }
-  }
-  return picked;
-}
 
 export interface TerminalCreateConfig {
   taskId: string;

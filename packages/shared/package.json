@@ -12,6 +12,10 @@
       "types": "./src/logging.ts",
       "import": "./src/logging.ts"
     },
+    "./env": {
+      "types": "./src/env.ts",
+      "import": "./src/env.ts"
+    },
     "./fs": {
       "types": "./src/fs.ts",
       "import": "./src/fs.ts"
