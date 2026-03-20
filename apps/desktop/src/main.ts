@@ -316,10 +316,22 @@ function createWindow(): BrowserWindow {
   // re-dispatch so the renderer (xterm.js) receives them.
   const ZOOM_STEP = 0.5;
   const zoomKeys: Record<string, (wc: Electron.WebContents) => void> = {
-    "=": (wc) => { wc.setZoomLevel(wc.getZoomLevel() + ZOOM_STEP); debouncedSave(); },
-    "+": (wc) => { wc.setZoomLevel(wc.getZoomLevel() + ZOOM_STEP); debouncedSave(); },
-    "-": (wc) => { wc.setZoomLevel(wc.getZoomLevel() - ZOOM_STEP); debouncedSave(); },
-    "0": (wc) => { wc.setZoomLevel(0); debouncedSave(); },
+    "=": (wc) => {
+      wc.setZoomLevel(wc.getZoomLevel() + ZOOM_STEP);
+      debouncedSave();
+    },
+    "+": (wc) => {
+      wc.setZoomLevel(wc.getZoomLevel() + ZOOM_STEP);
+      debouncedSave();
+    },
+    "-": (wc) => {
+      wc.setZoomLevel(wc.getZoomLevel() - ZOOM_STEP);
+      debouncedSave();
+    },
+    "0": (wc) => {
+      wc.setZoomLevel(0);
+      debouncedSave();
+    },
   };
 
   let redispatching = false;

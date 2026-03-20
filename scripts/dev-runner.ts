@@ -4,8 +4,11 @@ import { resolve } from "node:path";
 const root = resolve(import.meta.dirname, "..");
 const port = Number(process.env.PORT ?? 5173);
 
-// Build contracts first (sync — fast, cached)
-execSync("turbo run build --filter=@iara/contracts", { cwd: root, stdio: "inherit" });
+// Build contracts + orchestrator first (sync — fast, cached)
+execSync("turbo run build --filter=@iara/contracts --filter=@iara/orchestrator", {
+  cwd: root,
+  stdio: "inherit",
+});
 
 const env = { ...process.env, PORT: String(port), ELECTRON_RENDERER_PORT: String(port) };
 const children: ChildProcess[] = [];

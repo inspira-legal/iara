@@ -1,7 +1,9 @@
 import { useState, useCallback } from "react";
-import { GitBranch, Pencil, Copy, Trash2 } from "lucide-react";
+import { GitBranch, Pencil, Copy, Trash2, Circle } from "lucide-react";
 import type { Task } from "@iara/contracts";
 import { SidebarContextMenu, type ContextMenuItem } from "./SidebarContextMenu";
+import { isScriptActive, isScriptUnhealthy } from "~/lib/script-status";
+import { useScriptsStore } from "~/stores/scripts";
 import { formatRelativeTime, formatAbsoluteTime } from "~/lib/format-relative-time";
 import { writeClipboard } from "~/lib/clipboard";
 
@@ -22,6 +24,12 @@ export function TaskNode({
   onDelete,
   onRename,
 }: TaskNodeProps) {
+  const runningInTask = useScriptsStore(
+    (s) => s.config?.statuses.filter((st) => st.workspace === task.slug && isScriptActive(st)).length ?? 0,
+  );
+  const hasUnhealthy = useScriptsStore(
+    (s) => s.config?.statuses.some((st) => st.workspace === task.slug && isScriptUnhealthy(st)) ?? false,
+  );
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(task.name);
@@ -87,26 +95,34 @@ export function TaskNode({
       >
         {/* Content */}
         <div className="min-w-0 flex-1">
-          {editing ? (
-            <input
-              type="text"
-              value={draft}
-              onChange={(e) => setDraft(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  e.preventDefault();
-                  void handleSaveRename();
-                } else if (e.key === "Escape") {
-                  setEditing(false);
-                }
-              }}
-              onBlur={() => void handleSaveRename()}
-              autoFocus
-              className="w-full rounded border border-zinc-600 bg-zinc-800 px-1 py-0 text-sm text-zinc-100 outline-none focus:border-blue-500"
-            />
-          ) : (
-            <span className="block truncate text-sm">{task.name}</span>
-          )}
+          <div className="flex items-center gap-1.5">
+            {runningInTask > 0 && (
+              <Circle
+                size={6}
+                className={`shrink-0 fill-current ${hasUnhealthy ? "text-red-500" : "text-green-500"}`}
+              />
+            )}
+            {editing ? (
+              <input
+                type="text"
+                value={draft}
+                onChange={(e) => setDraft(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    void handleSaveRename();
+                  } else if (e.key === "Escape") {
+                    setEditing(false);
+                  }
+                }}
+                onBlur={() => void handleSaveRename()}
+                autoFocus
+                className="w-full rounded border border-zinc-600 bg-zinc-800 px-1 py-0 text-sm text-zinc-100 outline-none focus:border-blue-500"
+              />
+            ) : (
+              <span className="block truncate text-sm">{task.name}</span>
+            )}
+          </div>
           <div className="flex items-center gap-1">
             <GitBranch size={10} className="shrink-0 text-zinc-600" />
             <span className="truncate text-xs text-zinc-600">{task.branch}</span>

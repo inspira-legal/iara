@@ -3,12 +3,10 @@ import { Plus, Settings } from "lucide-react";
 import { useNavigate } from "@tanstack/react-router";
 import { useProjectStore } from "~/stores/projects";
 import { useTaskStore } from "~/stores/tasks";
-import { useDevServerStore } from "~/stores/devservers";
 import { useSidebarStore } from "~/stores/sidebar";
 import { ProjectTree } from "./ProjectTree";
 import { CreateProjectDialog } from "./CreateProjectDialog";
 import { CreateTaskDialog } from "./CreateTaskDialog";
-import { DevServerPanel } from "./DevServerPanel";
 import { BrowserToggle } from "./BrowserToggle";
 import { NotificationBell } from "./NotificationBell";
 import { ConfirmDialog } from "./ConfirmDialog";
@@ -20,7 +18,6 @@ export function Sidebar() {
   const { projects, selectedProjectId, loading, loadProjects, updateProject, deleteProject } =
     useProjectStore();
   const { selectedTaskId } = useTaskStore();
-  const { discoverCommands } = useDevServerStore();
   const { sidebarWidth, setSidebarWidth, hydrateFromStorage } = useSidebarStore();
 
   const [showCreateProject, setShowCreateProject] = useState(false);
@@ -70,18 +67,6 @@ export function Sidebar() {
     void loadProjects();
   }, [loadProjects]);
 
-  // Discover dev commands when task changes
-  useEffect(() => {
-    if (selectedProjectId && selectedTaskId) {
-      const project = projects.find((p) => p.id === selectedProjectId);
-      if (project) {
-        for (const repo of project.repoSources) {
-          void discoverCommands(repo);
-        }
-      }
-    }
-  }, [selectedProjectId, selectedTaskId, projects, discoverCommands]);
-
   const deleteTargetProject = deleteProjectId
     ? projects.find((p) => p.id === deleteProjectId)
     : null;
@@ -109,6 +94,14 @@ export function Sidebar() {
             </button>
             <NotificationBell />
             <BrowserToggle />
+            <button
+              type="button"
+              onClick={() => void navigate({ to: "/settings" })}
+              className="rounded p-1 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-300"
+              title="Configurações"
+            >
+              <Settings size={14} />
+            </button>
           </div>
         </div>
 
@@ -126,22 +119,6 @@ export function Sidebar() {
           />
         </div>
 
-        {/* Dev servers — sticky bottom */}
-        <div className="border-t border-zinc-800">
-          <DevServerPanel />
-        </div>
-
-        {/* Settings button — footer */}
-        <div className="border-t border-zinc-800 px-3 py-2">
-          <button
-            type="button"
-            onClick={() => void navigate({ to: "/settings" })}
-            className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-xs text-zinc-500 hover:bg-zinc-800 hover:text-zinc-300"
-          >
-            <Settings size={14} />
-            Configurações
-          </button>
-        </div>
         {/* Resize handle */}
         <div
           role="separator"

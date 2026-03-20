@@ -3,6 +3,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { execFileSync } from "node:child_process";
 import type { WsPushEvents } from "@iara/contracts";
+import type { PortAllocator } from "@iara/orchestrator/ports";
 import { z } from "zod";
 import { registerMethod } from "../router.js";
 import type { SessionWatcher } from "../services/session-watcher.js";
@@ -41,6 +42,7 @@ function listRepoBranches(repoDir: string): string[] {
 export function registerTaskHandlers(
   sessionWatcher: SessionWatcher,
   pushFn: <E extends keyof WsPushEvents>(event: E, params: WsPushEvents[E]) => void,
+  portAllocator: PortAllocator,
 ): void {
   registerMethod("tasks.list", async (params) => {
     return listTasks(params.projectId);
@@ -58,7 +60,12 @@ export function registerTaskHandlers(
   });
 
   registerMethod("tasks.delete", async (params) => {
+    const task = getTask(params.id);
     await deleteTask(params.id);
+    // Release port allocation for the deleted task's workspace
+    if (task) {
+      portAllocator.release(task.projectId, task.slug);
+    }
     sessionWatcher.refresh();
   });
 

@@ -4,13 +4,13 @@
 
 - All of `bun fmt`, `bun lint`, and `bun typecheck` must pass before considering tasks completed.
 - NEVER run `bun test`. Always use `bun run test` (runs Vitest).
-- Build must pass: `bun build:desktop` (builds contracts → server → web → desktop).
+- Build must pass: `bun build:desktop` (builds contracts → orchestrator → server → web → desktop).
 
 ## Project Snapshot
 
-iara-desktop is a workspace manager for builders who use Claude Code. It's a full rewrite of the iara Go CLI in TypeScript/Electron — visual project/task management, Claude Code launcher, browser panel for agents, and dev server integration.
+iara-desktop is a workspace manager for builders who use Claude Code. It's a full rewrite of the iara Go CLI in TypeScript/Electron — visual project/task management, Claude Code launcher, browser panel for agents, and scripts/service orchestration.
 
-MVP scaffold complete (M1-M4). All milestones implemented.
+MVP scaffold complete (M1-M4). Scripts system (iara-scripts) replacing dev servers.
 
 ## Core Priorities
 
@@ -25,9 +25,10 @@ Extract shared logic to separate modules. Don't duplicate across files. Don't be
 ## Package Roles
 
 - `apps/desktop`: Electron 40 thin client. Owns window management and spawns the server as a child process. Build: tsdown → CJS in dist-electron/.
-- `apps/server`: Node.js standalone server (Hono + WebSocket). Owns SQLite+Drizzle database, all business services (projects, tasks, sessions, launcher, terminal, env, hooks, devservers, notifications), and git operations. Build: tsdown → ESM in dist/.
+- `apps/server`: Node.js standalone server (Hono + WebSocket). Owns SQLite+Drizzle database, all business services (projects, tasks, sessions, launcher, terminal, env, hooks, scripts, notifications), and git operations. Build: tsdown → ESM in dist/.
 - `apps/web`: React 19 + Vite 8 renderer. Owns UI layout, routing (TanStack Router), client state (Zustand), and Tailwind CSS 4 styling. Communicates with server via WebSocket transport. Build: Vite → ESM in dist/.
 - `packages/contracts`: Shared TypeScript types for IPC bridge, WebSocket protocol, and data models. Schema-only — no runtime logic. Build: tsdown → dual ESM+CJS+DTS.
+- `packages/orchestrator`: Script/service orchestration — YAML parser, port allocator, process supervisor, dependency ordering, Claude discovery prompt. Explicit subpath exports (`@iara/orchestrator/supervisor`, `@iara/orchestrator/parser`, `@iara/orchestrator/ports`, `@iara/orchestrator/discovery`, `@iara/orchestrator/interpolation`). No DB dependency — persistence injected. Build: tsdown → dual ESM+CJS+DTS.
 - `packages/shared`: Shared runtime utilities (git, logging, fs). Explicit subpath exports (`@iara/shared/git`, `@iara/shared/fs`) — no barrel index.
 
 ## Architecture Notes
@@ -64,6 +65,10 @@ bun run smoke-test       # Electron smoke test
 
 ## Scope Boundaries
 
-**In scope (v1):** Project/task management, Claude Code launcher, browser panel, dev servers, env management, hooks, socket server.
+**In scope (v1):** Project/task management, Claude Code launcher, browser panel, scripts/service orchestration (scripts.yaml), env management, hooks, socket server.
 
 **Out of scope:** Chat rendering, terminal embutido, split panes complexos, auto-updater, plugin system for third parties.
+
+## Scripts System
+
+Services are defined in `<project-dir>/scripts.yaml`. Each top-level key is a service (repos, databases, caches — all equal). Claude discovers scripts automatically on project creation. Ports are auto-assigned per workspace (default or task) with 20-port spacing. `{service.PORT}` syntax for port references (always explicit prefix). See `.specs/features/iara-scripts/` for full spec and design.

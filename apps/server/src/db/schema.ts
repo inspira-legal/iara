@@ -1,4 +1,4 @@
-import { sqliteTable, text } from "drizzle-orm/sqlite-core";
+import { integer, sqliteTable, text, unique } from "drizzle-orm/sqlite-core";
 
 export const settings = sqliteTable("settings", {
   key: text("key").primaryKey(),
@@ -15,6 +15,20 @@ export const projects = sqliteTable("projects", {
   createdAt: text("created_at").notNull(),
   updatedAt: text("updated_at").notNull(),
 });
+
+export const portAllocations = sqliteTable(
+  "port_allocations",
+  {
+    id: text("id").primaryKey(),
+    projectId: text("project_id")
+      .notNull()
+      .references(() => projects.id),
+    workspace: text("workspace").notNull(),
+    basePort: integer("base_port").notNull(),
+    createdAt: text("created_at").notNull(),
+  },
+  (table) => [unique().on(table.projectId, table.workspace)],
+);
 
 export const tasks = sqliteTable("tasks", {
   id: text("id").primaryKey(),

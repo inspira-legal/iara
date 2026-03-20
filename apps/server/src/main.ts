@@ -2,7 +2,9 @@ import * as crypto from "node:crypto";
 import * as path from "node:path";
 import { createServer, pushAll } from "./ws.js";
 import { registerAllHandlers } from "./handlers/index.js";
-import { DevServerSupervisor } from "./services/devservers.js";
+import { ScriptSupervisor } from "@iara/orchestrator/supervisor";
+import { PortAllocator } from "@iara/orchestrator/ports";
+import { createPortStore } from "./services/port-store.js";
 import { NotificationService } from "./services/notifications.js";
 import { TerminalManager, TERMINAL_KILL_GRACE_MS } from "./services/terminal.js";
 import { SocketServer, registerSocketHandlers } from "./socket.js";
@@ -27,7 +29,8 @@ const webDir =
   process.env.IARA_WEB_DIR ?? process.argv.find((_, i, a) => a[i - 1] === "--web-dir") ?? undefined;
 
 // Services
-const devSupervisor = new DevServerSupervisor(pushAll);
+const scriptSupervisor = new ScriptSupervisor(pushAll);
+const portAllocator = new PortAllocator(createPortStore());
 const notificationService = new NotificationService(pushAll);
 const terminalManager = new TerminalManager(pushAll);
 const socketServer = new SocketServer();
@@ -36,20 +39,12 @@ const sessionWatcher = new SessionWatcher(pushAll);
 
 // Register all WS handlers
 registerAllHandlers({
-  devSupervisor,
+  scriptSupervisor,
+  portAllocator,
   notificationService,
   terminalManager,
   sessionWatcher,
   pushFn: pushAll,
-});
-
-// Auto-open browser panel when frontend dev server is healthy
-devSupervisor.on("healthy", (_name: string, port: number) => {
-  const status = devSupervisor.status();
-  const server = status.find((s) => s.port === port);
-  if (server?.type === "frontend") {
-    pushAll("dev:healthy", { name: server.name, port });
-  }
 });
 
 // Start session file watcher
@@ -97,7 +92,7 @@ function shutdown() {
     terminalManager.destroyAll();
   } catch {}
   try {
-    devSupervisor.stopAll();
+    scriptSupervisor.stopAll();
   } catch {}
   try {
     void socketServer.stop();

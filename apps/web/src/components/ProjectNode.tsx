@@ -8,11 +8,14 @@ import {
   Pencil,
   Trash2,
   RefreshCw,
+  Circle,
 } from "lucide-react";
 import type { Project, Task } from "@iara/contracts";
 import { TaskNode } from "./TaskNode";
 import { SidebarContextMenu, type ContextMenuItem } from "./SidebarContextMenu";
+import { isScriptActive, isScriptUnhealthy } from "~/lib/script-status";
 import { useTaskStore } from "~/stores/tasks";
+import { useScriptsStore } from "~/stores/scripts";
 import { ConfirmDialog } from "./ConfirmDialog";
 
 const MAX_VISIBLE_TASKS = 6;
@@ -43,6 +46,8 @@ export function ProjectNode({
   onAddRepo,
 }: ProjectNodeProps) {
   const { loadTasks, getTasksForProject, deleteTask, loading, error } = useTaskStore();
+  const hasRunning = useScriptsStore((s) => s.config?.statuses.some(isScriptActive) ?? false);
+  const hasUnhealthy = useScriptsStore((s) => s.config?.statuses.some(isScriptUnhealthy) ?? false);
 
   const tasks = getTasksForProject(project.id);
   const [showAll, setShowAll] = useState(false);
@@ -113,6 +118,13 @@ export function ProjectNode({
           </button>
 
           <FolderOpen size={14} className="shrink-0 text-zinc-500" />
+
+          {hasRunning && (
+            <Circle
+              size={6}
+              className={`shrink-0 fill-current ${hasUnhealthy ? "text-red-500" : "text-green-500"}`}
+            />
+          )}
 
           {editing ? (
             <input

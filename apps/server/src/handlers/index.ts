@@ -1,10 +1,11 @@
 import type { WsPushEvents } from "@iara/contracts";
-import type { DevServerSupervisor } from "../services/devservers.js";
+import type { ScriptSupervisor } from "@iara/orchestrator/supervisor";
+import type { PortAllocator } from "@iara/orchestrator/ports";
 import type { NotificationService } from "../services/notifications.js";
 import type { SessionWatcher } from "../services/session-watcher.js";
 import type { TerminalManager } from "../services/terminal.js";
 import { registerAppHandlers } from "./app.js";
-import { registerDevHandlers } from "./devservers.js";
+import { registerScriptHandlers } from "./scripts.js";
 import { registerEnvHandlers } from "./env.js";
 import { registerGitHandlers } from "./git.js";
 import { registerLauncherHandlers } from "./launcher.js";
@@ -18,7 +19,8 @@ import { registerFileHandlers } from "./files.js";
 import { registerTerminalHandlers } from "./terminal.js";
 
 export interface HandlerDeps {
-  devSupervisor: DevServerSupervisor;
+  scriptSupervisor: ScriptSupervisor;
+  portAllocator: PortAllocator;
   notificationService: NotificationService;
   terminalManager: TerminalManager;
   sessionWatcher: SessionWatcher;
@@ -27,12 +29,12 @@ export interface HandlerDeps {
 
 export function registerAllHandlers(deps: HandlerDeps): void {
   registerAppHandlers();
-  registerProjectHandlers(deps.pushFn);
-  registerTaskHandlers(deps.sessionWatcher, deps.pushFn);
+  registerProjectHandlers(deps.pushFn, deps.portAllocator, deps.scriptSupervisor);
+  registerTaskHandlers(deps.sessionWatcher, deps.pushFn, deps.portAllocator);
   registerLauncherHandlers();
   registerSessionHandlers();
   registerPromptHandlers();
-  registerDevHandlers(deps.devSupervisor);
+  registerScriptHandlers(deps.scriptSupervisor, deps.portAllocator, deps.pushFn);
   registerEnvHandlers();
   registerGitHandlers();
   registerNotificationHandlers(deps.notificationService);

@@ -4,11 +4,12 @@ import type {
   AppNotification,
   CreateProjectInput,
   CreateTaskInput,
-  DevCommand,
-  DevServerStatus,
+  EssencialKey,
   GitStatusResult,
   LaunchClaudeInput,
   LaunchResult,
+  ScriptStatus,
+  ScriptsConfig,
   SessionInfo,
   UpdateProjectInput,
 } from "./ipc.js";
@@ -85,12 +86,21 @@ export type WsMethods = {
     result: { exists: boolean; empty: boolean };
   };
 
-  // Dev Servers
-  "dev.start": { params: DevCommand; result: void };
-  "dev.stop": { params: { name: string }; result: void };
-  "dev.status": { params: Record<string, never>; result: DevServerStatus[] };
-  "dev.logs": { params: { name: string; limit?: number }; result: string[] };
-  "dev.discover": { params: { dir: string }; result: DevCommand[] };
+  // Scripts
+  "scripts.load": { params: { projectId: string; workspace: string }; result: ScriptsConfig };
+  "scripts.run": {
+    params: { projectId: string; workspace: string; service: string; script: string };
+    result: void;
+  };
+  "scripts.stop": { params: { scriptId: string }; result: void };
+  "scripts.runAll": {
+    params: { projectId: string; workspace: string; category: EssencialKey };
+    result: void;
+  };
+  "scripts.stopAll": { params: Record<string, never>; result: void };
+  "scripts.status": { params: { projectId: string; workspace: string }; result: ScriptStatus[] };
+  "scripts.logs": { params: { scriptId: string; limit?: number }; result: string[] };
+  "scripts.discover": { params: { projectId: string }; result: { requestId: string } };
 
   // Env
   "env.list": { params: { projectId: string; workspace: string }; result: EnvRepoEntries[] };
@@ -159,8 +169,9 @@ export type WsMethods = {
 export type WsPushEvents = {
   "terminal:data": { terminalId: string; data: string };
   "terminal:exit": { terminalId: string; exitCode: number };
-  "dev:healthy": { name: string; port: number };
-  "dev:log": { name: string; line: string };
+  "scripts:status": { service: string; script: string; status: ScriptStatus };
+  "scripts:log": { scriptId: string; service: string; script: string; line: string };
+  "scripts:reload": Record<string, never>;
   notification: { title: string; body: string; type?: string };
   "clone:progress": CloneProgress;
   "session:changed": { taskId: string };

@@ -23,6 +23,7 @@
   },
   "devDependencies": {
     "@iara/contracts": "workspace:*",
+    "@iara/orchestrator": "workspace:*",
     "@iara/shared": "workspace:*",
     "@types/better-sqlite3": "^7.6.13",
     "@types/node": "catalog:",

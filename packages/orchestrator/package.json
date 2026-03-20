@@ -1,0 +1,50 @@
+{
+  "name": "@iara/orchestrator",
+  "version": "0.0.1",
+  "private": true,
+  "files": [
+    "dist"
+  ],
+  "type": "module",
+  "exports": {
+    "./supervisor": {
+      "types": "./src/supervisor.ts",
+      "import": "./src/supervisor.ts",
+      "require": "./dist/supervisor.cjs"
+    },
+    "./parser": {
+      "types": "./src/parser.ts",
+      "import": "./src/parser.ts",
+      "require": "./dist/parser.cjs"
+    },
+    "./ports": {
+      "types": "./src/ports.ts",
+      "import": "./src/ports.ts",
+      "require": "./dist/ports.cjs"
+    },
+    "./discovery": {
+      "types": "./src/discovery.ts",
+      "import": "./src/discovery.ts",
+      "require": "./dist/discovery.cjs"
+    },
+    "./interpolation": {
+      "types": "./src/interpolation.ts",
+      "import": "./src/interpolation.ts",
+      "require": "./dist/interpolation.cjs"
+    }
+  },
+  "scripts": {
+    "build": "tsdown src/supervisor.ts src/parser.ts src/ports.ts src/discovery.ts src/interpolation.ts --format esm,cjs --dts --clean",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "yaml": "^2.7.1"
+  },
+  "devDependencies": {
+    "@iara/contracts": "workspace:*",
+    "tsdown": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}

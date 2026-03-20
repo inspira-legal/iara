@@ -1,11 +1,10 @@
 import { create } from "zustand";
 
-const STORAGE_KEY = "iara:sidebar-state:v1";
+const STORAGE_KEY = "iara:sidebar-state:v2";
 
 interface SidebarState {
   expandedProjectIds: Set<string>;
   projectOrder: string[];
-  devServerPanelOpen: boolean;
   sidebarWidth: number;
 }
 
@@ -14,7 +13,6 @@ interface SidebarActions {
   expandProject(id: string): void;
   collapseProject(id: string): void;
   setProjectOrder(ids: string[]): void;
-  toggleDevServerPanel(): void;
   setSidebarWidth(width: number): void;
   hydrateFromStorage(): void;
   removeProject(id: string): void;
@@ -28,7 +26,6 @@ function loadFromStorage(): Partial<SidebarState> {
     return {
       expandedProjectIds: new Set(parsed.expandedProjectIds ?? []),
       projectOrder: parsed.projectOrder ?? [],
-      devServerPanelOpen: parsed.devServerPanelOpen ?? true,
       sidebarWidth: parsed.sidebarWidth ?? 256,
     };
   } catch {
@@ -43,7 +40,6 @@ function saveToStorage(state: SidebarState) {
       JSON.stringify({
         expandedProjectIds: [...state.expandedProjectIds],
         projectOrder: state.projectOrder,
-        devServerPanelOpen: state.devServerPanelOpen,
         sidebarWidth: state.sidebarWidth,
       }),
     );
@@ -55,7 +51,6 @@ function saveToStorage(state: SidebarState) {
 export const useSidebarStore = create<SidebarState & SidebarActions>((set) => ({
   expandedProjectIds: new Set<string>(),
   projectOrder: [],
-  devServerPanelOpen: true,
   sidebarWidth: 256,
 
   toggleProject: (id) => {
@@ -108,15 +103,6 @@ export const useSidebarStore = create<SidebarState & SidebarActions>((set) => ({
       const newState = { ...state, sidebarWidth: clamped };
       saveToStorage(newState);
       return { sidebarWidth: clamped };
-    });
-  },
-
-  toggleDevServerPanel: () => {
-    set((state) => {
-      const next = !state.devServerPanelOpen;
-      const newState = { ...state, devServerPanelOpen: next };
-      saveToStorage(newState);
-      return { devServerPanelOpen: next };
     });
   },
 

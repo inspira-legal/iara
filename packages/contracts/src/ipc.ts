@@ -58,21 +58,59 @@ export interface SessionInfo {
   messageCount: number;
 }
 
-export interface DevCommand {
-  name: string;
-  command: string;
-  args: string[];
-  cwd: string;
-  type: "frontend" | "backend" | "unknown";
-  port?: number;
+// ---------------------------------------------------------------------------
+// Scripts / Orchestrator
+// ---------------------------------------------------------------------------
+
+/** Output visibility for a script */
+export type ScriptOutputLevel = "always" | "on-error" | "silent";
+
+/** Well-known essencial script keys */
+export type EssencialKey = "setup" | "dev" | "build" | "check" | "test" | "codegen";
+
+/** A single script entry (normalized from short/long forms) */
+export interface ScriptEntry {
+  run: string[];
+  output: ScriptOutputLevel;
 }
 
-export interface DevServerStatus {
+/** A service definition parsed from scripts.yaml */
+export interface ServiceDef {
   name: string;
-  pid: number | null;
+  dependsOn: string[];
   port: number | null;
-  health: "starting" | "healthy" | "unhealthy" | "stopped";
-  type: "frontend" | "backend" | "unknown";
+  timeout: number;
+  env: Record<string, string>;
+  essencial: Partial<Record<EssencialKey, ScriptEntry>>;
+  advanced: Record<string, ScriptEntry>;
+  isRepo: boolean;
+}
+
+/** Resolved config with ports interpolated */
+export interface ResolvedServiceDef extends ServiceDef {
+  resolvedPort: number;
+  resolvedEnv: Record<string, string>;
+}
+
+/** Runtime status of a running script */
+export interface ScriptStatus {
+  /** Unique key: "port:service:script" */
+  scriptId: string;
+  projectId: string;
+  workspace: string;
+  service: string;
+  script: string;
+  pid: number | null;
+  health: "starting" | "healthy" | "unhealthy" | "stopped" | "running" | "success" | "failed";
+  exitCode: number | null;
+}
+
+/** Full scripts config sent to the UI */
+export interface ScriptsConfig {
+  services: ResolvedServiceDef[];
+  statuses: ScriptStatus[];
+  hasFile: boolean;
+  filePath: string;
 }
 
 export interface AppNotification {
@@ -115,12 +153,15 @@ export interface DesktopBridge {
   readPrompt(filePath: string): Promise<string>;
   writePrompt(filePath: string, content: string): Promise<void>;
 
-  // Dev Servers
-  devStart(cmd: DevCommand): Promise<void>;
-  devStop(name: string): Promise<void>;
-  devStatus(): Promise<DevServerStatus[]>;
-  devLogs(name: string, limit?: number): Promise<string[]>;
-  devDiscover(dir: string): Promise<DevCommand[]>;
+  // Scripts
+  scriptsLoad(projectId: string, workspace: string): Promise<ScriptsConfig>;
+  scriptsRun(projectId: string, workspace: string, service: string, script: string): Promise<void>;
+  scriptsStop(service: string, script: string): Promise<void>;
+  scriptsRunAll(projectId: string, workspace: string, category: EssencialKey): Promise<void>;
+  scriptsStopAll(): Promise<void>;
+  scriptsStatus(): Promise<ScriptStatus[]>;
+  scriptsLogs(service: string, script: string, limit?: number): Promise<string[]>;
+  scriptsDiscover(projectId: string): Promise<{ requestId: string }>;
 
   // Browser Panel
   browserNavigate(url: string): Promise<void>;

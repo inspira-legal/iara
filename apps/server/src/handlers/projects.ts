@@ -1,10 +1,13 @@
 import * as crypto from "node:crypto";
 import * as path from "node:path";
 import type { WsPushEvents } from "@iara/contracts";
+import type { PortAllocator } from "@iara/orchestrator/ports";
+import type { ScriptSupervisor } from "@iara/orchestrator/supervisor";
 import { eq } from "drizzle-orm";
 import { registerMethod } from "../router.js";
 import { z } from "zod";
 import { runClaude, activeRuns, streamClaudeRun } from "../services/claude-runner.js";
+import { triggerDiscovery } from "./scripts.js";
 
 const ProjectMetadataSchema = z.object({
   name: z.string().min(1).describe("nome curto e descritivo do projeto"),
@@ -24,6 +27,8 @@ import { db, schema } from "../db.js";
 
 export function registerProjectHandlers(
   pushFn: <E extends keyof WsPushEvents>(event: E, params: WsPushEvents[E]) => void,
+  portAllocator: PortAllocator,
+  scriptSupervisor: ScriptSupervisor,
 ): void {
   registerMethod("projects.list", async () => {
     return listProjects();
@@ -34,7 +39,17 @@ export function registerProjectHandlers(
   });
 
   registerMethod("projects.create", async (params) => {
-    return createProject(params);
+    const project = await createProject(params);
+
+    // Auto-discover scripts after repos are cloned (async, non-blocking)
+    // triggerDiscovery handles repo/build-file checks internally
+    try {
+      triggerDiscovery(project.slug, pushFn);
+    } catch (err) {
+      console.error("Auto-discovery failed:", err);
+    }
+
+    return project;
   });
 
   registerMethod("projects.update", async (params) => {
