@@ -27,7 +27,7 @@ interface ProjectNodeProps {
   onCreateTask: () => void;
   onDeleteProject: () => void;
   onRenameProject: (newName: string) => Promise<void> | void;
-  onAddRepo?: () => void;
+  onAddRepo?: (() => void) | undefined;
 }
 
 export function ProjectNode({

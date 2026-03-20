@@ -29,7 +29,6 @@
     "smoke-test": "turbo run smoke-test --filter=@iara/desktop",
     "package": "bun build:desktop && cd apps/desktop && npx electron-builder --config electron-builder.yml",
     "package:server": "bun build:server",
-    "install:desktop": "bun scripts/install-desktop.ts",
     "postinstall": "npx electron-rebuild -v 40.6.0 -m apps/server -o better-sqlite3,node-pty",
     "clean": "rm -rf node_modules apps/*/node_modules packages/*/node_modules apps/*/dist apps/*/dist-electron packages/*/dist .turbo apps/*/.turbo packages/*/.turbo"
   },

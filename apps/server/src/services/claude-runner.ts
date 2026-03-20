@@ -1,5 +1,5 @@
 import * as fs from "node:fs";
-import { query } from "@anthropic-ai/claude-agent-sdk";
+import { query, type CanUseTool } from "@anthropic-ai/claude-agent-sdk";
 import { z } from "zod";
 import { jsonrepair } from "jsonrepair";
 import type { ClaudeProgress } from "@iara/contracts";
@@ -27,17 +27,15 @@ export interface ClaudeRun<T> {
 interface RunCoreConfig {
   cwd: string;
   prompt: string;
-  systemPrompt?: string;
-  maxTurns?: number;
-  signal?: AbortSignal;
+  systemPrompt?: string | undefined;
+  maxTurns?: number | undefined;
+  signal?: AbortSignal | undefined;
   allowedTools: string[];
   disallowedTools: string[];
-  canUseTool?: (
-    tool: string,
-    input: Record<string, unknown>,
-  ) => Promise<{ behavior: string; message?: string }>;
+  canUseTool?: CanUseTool | undefined;
   describeToolUse: (tool: string, input: Record<string, unknown>) => string;
   handleResult: (message: { subtype: string; result?: string; errors?: string[] }) => void;
+  onError: (err: Error) => void;
 }
 
 interface RunCoreReturn {
@@ -69,7 +67,7 @@ function createRunCore(config: RunCoreConfig): RunCoreReturn {
   // Start the async query loop
   void (async () => {
     try {
-      const options: Parameters<typeof query>[0]["options"] = {
+      const options: NonNullable<Parameters<typeof query>[0]["options"]> = {
         cwd: config.cwd,
         allowedTools: config.allowedTools,
         disallowedTools: config.disallowedTools,
@@ -77,6 +75,7 @@ function createRunCore(config: RunCoreConfig): RunCoreReturn {
         maxTurns: config.maxTurns ?? 20,
         persistSession: false,
         abortController,
+        stderr: (data: string) => console.error("[claude-sdk]", data),
       };
 
       if (config.canUseTool) {
@@ -120,10 +119,7 @@ function createRunCore(config: RunCoreConfig): RunCoreReturn {
         }
       }
     } catch (err) {
-      // Propagated via handleResult's reject path — but we still need to catch here
-      // to avoid unhandled promise rejection if the error happens outside the result handler.
-      // The caller's resultReject should be invoked from the catch in the outer scope.
-      throw err;
+      config.onError(err instanceof Error ? err : new Error(String(err)));
     } finally {
       state.done = true;
       if (state.progressResolve) {
@@ -246,6 +242,7 @@ export function runClaude<T>(
         resultReject(new Error(`Claude query failed: ${errors}`));
       }
     },
+    onError: resultReject,
   });
 
   return {
@@ -295,6 +292,7 @@ export function runClaudeToFile(
         resultReject(new Error(`Claude query failed: ${errors}`));
       }
     },
+    onError: resultReject,
   });
 
   return {
@@ -376,7 +374,8 @@ export function streamClaudeRun<T>(
   run: ClaudeRun<T>,
   requestId: string,
   outputPath: string | null,
-  pushFn: (event: string, params: unknown) => void,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  pushFn: (event: any, params: any) => void,
   transform?: (data: T) => string,
 ): void {
   console.log("[streamClaudeRun] starting for requestId:", requestId);

@@ -89,8 +89,9 @@ export function registerTerminalHandlers(manager: TerminalManager): void {
     }
 
     // Task mode (existing behavior)
-    const task = getTask(params.taskId);
-    if (!task) throw new Error(`Task not found: ${params.taskId}`);
+    const taskParams = params as { taskId: string; resumeSessionId?: string; sessionCwd?: string };
+    const task = getTask(taskParams.taskId);
+    if (!task) throw new Error(`Task not found: ${taskParams.taskId}`);
 
     const project = getProject(task.projectId);
     if (!project) throw new Error(`Project not found: ${task.projectId}`);
@@ -128,10 +129,10 @@ export function registerTerminalHandlers(manager: TerminalManager): void {
     const envVars = mergeEnvForContext(project.slug, task.slug, repoNames);
 
     // When resuming a session, honour sessionCwd so the hash matches the original
-    const effectiveCwd = params.resumeSessionId && params.sessionCwd ? params.sessionCwd : taskDir;
+    const effectiveCwd = taskParams.resumeSessionId && taskParams.sessionCwd ? taskParams.sessionCwd : taskDir;
 
     return manager.create({
-      taskId: params.taskId,
+      taskId: taskParams.taskId,
       taskDir: effectiveCwd,
       repoDirs,
       taskContext: {

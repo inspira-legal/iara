@@ -99,8 +99,12 @@ NÃO explore arquivos. Responda apenas com base nas informações acima.`;
       { cwd: defaultDir, prompt, systemPrompt, maxTurns: 3 },
       TaskMetadataSchema,
     );
-    const result = await run.result;
-    return result;
+    try {
+      return await run.result;
+    } catch (err) {
+      console.error("[tasks.suggest] failed:", err);
+      throw err;
+    }
   });
 
   registerMethod("tasks.regenerate", async (params) => {

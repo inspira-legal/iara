@@ -47,7 +47,7 @@ Extract shared logic to separate modules. Don't duplicate across files. Don't be
 bun install              # Install all deps
 bun dev:desktop          # Launch Electron + Server + Vite dev (hot-reload + hot-restart)
 bun build:desktop        # Production build (contracts → server → web → desktop)
-bun install:desktop      # Build + package AppImage + install to ~/.local/bin/
+bun package              # Build + package AppImage/DMG/NSIS into release/
 bun typecheck            # TypeScript check all packages
 bun lint                 # oxlint
 bun fmt                  # oxfmt (auto-fix)

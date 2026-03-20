@@ -8,8 +8,8 @@ export default defineConfig({
   outDir: "dist",
   sourcemap: true,
   clean: true,
-  external: ["better-sqlite3", "node-pty"],
-  noExternal: (id) => id.startsWith("@iara/"),
+  external: ["better-sqlite3", "node-pty", "@anthropic-ai/claude-agent-sdk"],
+  noExternal: (id) => !id.startsWith("node:") && id !== "better-sqlite3" && id !== "node-pty" && id !== "@anthropic-ai/claude-agent-sdk",
   onSuccess: async () => {
     // Copy prompt .md files to dist
     mkdirSync("dist/prompts", { recursive: true });

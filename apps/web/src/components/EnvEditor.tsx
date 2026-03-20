@@ -45,7 +45,7 @@ export function EnvEditor({ projectId, context, repos, hasActiveTerminal }: EnvE
   // Set active repo when repos change
   useEffect(() => {
     if (repos.length > 0 && !repos.includes(activeRepo)) {
-      setActiveRepo(repos[0]);
+      setActiveRepo(repos[0] ?? "");
     }
   }, [repos, activeRepo]);
 
@@ -75,7 +75,8 @@ export function EnvEditor({ projectId, context, repos, hasActiveTerminal }: EnvE
       prev.map((d) => {
         if (d.repo !== activeRepo) return d;
         const entries = [...d[level]];
-        entries[index] = { ...entries[index], [field]: newValue };
+        const prev = entries[index] ?? { key: "", value: "" };
+        entries[index] = { ...prev, [field]: newValue };
         save(activeRepo, level, entries);
         return { ...d, [level]: entries };
       }),
@@ -266,7 +267,7 @@ function EnvSection({
                   <ArrowUpDown
                     size={11}
                     className="shrink-0 text-amber-500"
-                    title="Overrides global"
+                    aria-label="Overrides global"
                   />
                 )}
                 <button

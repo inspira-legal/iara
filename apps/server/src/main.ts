@@ -61,6 +61,7 @@ let pluginDir: string | null = null;
 
 httpServer.on("listening", async () => {
   console.log(`iara-server listening on http://127.0.0.1:${port}`);
+  console.log(`[server] PATH: ${process.env.PATH}`);
   if (!process.env.IARA_AUTH_TOKEN && !process.argv.includes("--auth-token")) {
     console.log(`Auth token: ${authToken}`);
   }
