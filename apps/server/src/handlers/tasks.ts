@@ -127,9 +127,7 @@ NÃO explore arquivos. Responda apenas com base nas informações acima.`;
 
 Task: ${task.name}
 Descrição: ${task.description}
-Branch: ${task.branch}
-
-Você pode explorar e escrever no arquivo de saída.`;
+Branch: ${task.branch}`;
 
     const taskMdPath = path.join(taskDir, "TASK.md");
     const prompt = loadPrompt("task-regenerate", { outputPath: taskMdPath });

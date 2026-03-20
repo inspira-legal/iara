@@ -1,3 +1,2 @@
-Explore o código nas worktrees desta task.
-Identifique o objetivo, arquivos-chave e estado atual.
-Escreva o resultado conciso (máximo 15 linhas) no arquivo {{outputPath}}
+Escreva o objetivo da task em 1-3 frases no arquivo {{outputPath}}
+Formato: título (# Task: <slug>) seguido do objetivo.

@@ -1,3 +1,4 @@
 Explore os repositórios do projeto.
-Identifique o que cada repo faz e como se relacionam.
-Escreva o resultado conciso (máximo 15 linhas) no arquivo {{outputPath}}
+Para cada repo, escreva UMA linha: **nome** (linguagem): descrição curta do que faz.
+Depois, UMA linha de stack compartilhada (tooling, frameworks, padrões).
+Máximo 8 linhas total. Escreva no arquivo {{outputPath}}
