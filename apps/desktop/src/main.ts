@@ -30,6 +30,7 @@ let restartAttempt = 0;
 let restartTimer: ReturnType<typeof setTimeout> | null = null;
 let ws: WebSocket | null = null;
 let quitting = false;
+let osNotificationsEnabled = true;
 
 const browserPanel = new BrowserPanel();
 
@@ -134,15 +135,51 @@ function scheduleRestart(): void {
 // WebSocket connection to server (for push notifications)
 // ---------------------------------------------------------------------------
 
+let wsRequestId = 0;
+
 function connectWs(): void {
   const url = `ws://127.0.0.1:${serverPort}/?token=${authToken}`;
   ws = new WebSocket(url);
 
+  ws.on("open", () => {
+    // Load initial notification setting
+    const id = String(++wsRequestId);
+    const settingsRequestId = id;
+    ws!.send(
+      JSON.stringify({ id, method: "settings.get", params: { key: "notifications.os_enabled" } }),
+    );
+
+    // Handle the response for the initial setting load
+    const onInitialResponse = (data: WebSocket.Data) => {
+      try {
+        const msg = JSON.parse(String(data));
+        if (msg.id === settingsRequestId && "result" in msg) {
+          // result is string | null; null means not set (default: true)
+          if (msg.result === "false") {
+            osNotificationsEnabled = false;
+          }
+          ws?.off("message", onInitialResponse);
+        }
+      } catch {
+        // ignore
+      }
+    };
+    ws!.on("message", onInitialResponse);
+  });
+
   ws.on("message", (data) => {
     try {
       const msg = JSON.parse(String(data));
+
+      // Track settings changes for OS notification gating
+      if (msg.push === "settings:changed" && msg.params?.key === "notifications.os_enabled") {
+        osNotificationsEnabled = msg.params.value !== "false";
+      }
+
       if (msg.push === "notification" && msg.params) {
-        new Notification({ title: msg.params.title, body: msg.params.body ?? "" }).show();
+        if (osNotificationsEnabled) {
+          new Notification({ title: msg.params.title, body: msg.params.body ?? "" }).show();
+        }
       }
     } catch {
       // ignore non-JSON messages

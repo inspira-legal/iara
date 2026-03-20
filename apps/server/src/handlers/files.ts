@@ -2,6 +2,8 @@ import { execFileSync, spawn as nodeSpawn } from "node:child_process";
 import * as os from "node:os";
 import * as path from "node:path";
 import { registerMethod } from "../router.js";
+import { getProject, getProjectDir } from "../services/projects.js";
+import { getTask, getTaskDir } from "../services/tasks.js";
 
 const GUI_EDITORS = ["cursor", "code", "zed", "subl", "atom"] as const;
 
@@ -68,4 +70,44 @@ export function registerFileHandlers(): void {
     });
     child.unref();
   });
+
+  registerMethod("files.openInEditor", async (params) => {
+    const dir = resolveContextDir(params.projectId, params.taskId);
+    for (const editor of GUI_EDITORS) {
+      if (commandExists(editor)) {
+        const child = nodeSpawn(editor, [dir], {
+          detached: true,
+          stdio: "ignore",
+          env: getCleanEnv(),
+        });
+        child.unref();
+        return;
+      }
+    }
+  });
+
+  registerMethod("files.openInExplorer", async (params) => {
+    const dir = resolveContextDir(params.projectId, params.taskId);
+    const platform = os.platform();
+    const cmd = platform === "darwin" ? "open" : platform === "win32" ? "explorer" : "xdg-open";
+    const child = nodeSpawn(cmd, [dir], {
+      detached: true,
+      stdio: "ignore",
+      env: getCleanEnv(),
+    });
+    child.unref();
+  });
+}
+
+function resolveContextDir(projectId: string, taskId?: string): string {
+  if (taskId) {
+    const task = getTask(taskId);
+    if (!task) throw new Error(`Task not found: ${taskId}`);
+    const project = getProject(task.projectId);
+    if (!project) throw new Error(`Project not found: ${task.projectId}`);
+    return getTaskDir(project.slug, task.slug);
+  }
+  const project = getProject(projectId);
+  if (!project) throw new Error(`Project not found: ${projectId}`);
+  return path.join(getProjectDir(project.slug), "default");
 }

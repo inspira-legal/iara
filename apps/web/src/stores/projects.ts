@@ -3,6 +3,7 @@ import type { CreateProjectInput, Project, UpdateProjectInput } from "@iara/cont
 import { transport } from "../lib/ws-transport.js";
 import { useTaskStore } from "./tasks.js";
 import { useSidebarStore } from "./sidebar.js";
+import { useRegenerateStore } from "./regenerate.js";
 
 interface ProjectState {
   projects: Project[];
@@ -61,6 +62,8 @@ export const useProjectStore = create<ProjectState & ProjectActions>((set) => ({
   },
 
   deleteProject: async (id) => {
+    // Cancel any active regeneration for this project
+    useRegenerateStore.getState().cancel(id);
     await transport.request("projects.delete", { id });
     // Clean up related state in other stores
     useTaskStore.getState().clearTasksForProject(id);

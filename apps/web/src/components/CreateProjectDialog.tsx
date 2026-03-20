@@ -1,10 +1,21 @@
 import { useState } from "react";
-import { X, Plus, ArrowLeft, Loader2, GitBranch, FolderOpen, FileText } from "lucide-react";
+import {
+  X,
+  Plus,
+  ArrowLeft,
+  Loader2,
+  Sparkles,
+  AlertTriangle,
+  GitBranch,
+  FolderOpen,
+  FileText,
+} from "lucide-react";
 import type { AddRepoInput } from "@iara/contracts";
 import { useProjectStore } from "~/stores/projects";
 import { useSidebarStore } from "~/stores/sidebar";
+import { useRegenerateStore } from "~/stores/regenerate";
 import { transport } from "~/lib/ws-transport.js";
-import { cn } from "~/lib/utils";
+import { toSlug } from "~/lib/utils";
 import { useToast } from "./Toast";
 import { AddRepoDialog } from "./AddRepoDialog";
 
@@ -13,7 +24,7 @@ interface CreateProjectDialogProps {
   onClose: () => void;
 }
 
-type WizardStep = "info" | "repos";
+type WizardStep = "repos" | "input" | "loading" | "review" | "creating";
 
 interface PendingRepo {
   input: AddRepoInput;
@@ -32,61 +43,44 @@ const METHOD_LABELS: Record<string, string> = {
 };
 
 export function CreateProjectDialog({ open, onClose }: CreateProjectDialogProps) {
-  const [step, setStep] = useState<WizardStep>("info");
-  const [name, setName] = useState("");
-  const [slug, setSlug] = useState("");
-  const [slugManual, setSlugManual] = useState(false);
+  const [step, setStep] = useState<WizardStep>("repos");
   const [pendingRepos, setPendingRepos] = useState<PendingRepo[]>([]);
   const [showAddRepo, setShowAddRepo] = useState(false);
+  const [userGoal, setUserGoal] = useState("");
+
+  // Review fields (from Claude suggestion)
+  const [name, setName] = useState("");
+  const [description, setDescription] = useState("");
+
   const [submitting, setSubmitting] = useState(false);
   const [progress, setProgress] = useState("");
+  const [claudeError, setClaudeError] = useState<string | null>(null);
+
   const { projects, createProject, loadProjects } = useProjectStore();
   const { expandProject } = useSidebarStore();
   const { toast } = useToast();
 
+  const computedSlug = toSlug(name);
+  const slugTaken = computedSlug !== "" && projects.some((p) => p.slug === computedSlug);
+
   if (!open) return null;
 
-  const computedSlug = slugManual ? slug : toSlug(name);
-  const slugTaken = computedSlug !== "" && projects.some((p) => p.slug === computedSlug);
-  const canGoToRepos = name.trim() !== "" && computedSlug !== "" && !slugTaken;
-  const canCreate = pendingRepos.length > 0 && !submitting;
-
   const resetForm = () => {
-    setStep("info");
-    setName("");
-    setSlug("");
-    setSlugManual(false);
+    setStep("repos");
     setPendingRepos([]);
     setShowAddRepo(false);
+    setUserGoal("");
+    setName("");
+    setDescription("");
     setSubmitting(false);
     setProgress("");
+    setClaudeError(null);
   };
 
   const handleClose = () => {
     if (submitting) return;
     resetForm();
     onClose();
-  };
-
-  const handleNameChange = (value: string) => {
-    setName(value);
-    if (!slugManual) {
-      setSlug(toSlug(value));
-    }
-  };
-
-  const handleSlugChange = (value: string) => {
-    setSlugManual(true);
-    setSlug(toSlug(value));
-  };
-
-  const handleNext = () => {
-    if (!canGoToRepos) return;
-    setStep("repos");
-  };
-
-  const handleBack = () => {
-    setStep("info");
   };
 
   const handleAddPendingRepo = async (input: AddRepoInput): Promise<void> => {
@@ -100,13 +94,37 @@ export function CreateProjectDialog({ open, onClose }: CreateProjectDialogProps)
     setPendingRepos((prev) => prev.filter((r) => r.input.name !== repoName));
   };
 
+  const handleAskClaude = async () => {
+    if (!userGoal.trim()) return;
+    setStep("loading");
+    setClaudeError(null);
+
+    try {
+      const result = await transport.request("projects.suggest", {
+        userGoal: userGoal.trim(),
+      });
+      setName(result.name);
+      setDescription(result.description);
+      setStep("review");
+    } catch (err) {
+      setClaudeError(err instanceof Error ? err.message : String(err));
+      setName("");
+      setDescription("");
+      setStep("review");
+    }
+  };
+
   const handleCreate = async () => {
+    if (!name.trim() || !computedSlug || slugTaken) return;
     setSubmitting(true);
+    setStep("creating");
+
     try {
       setProgress("Creating project...");
       const project = await createProject({
         name: name.trim(),
         slug: computedSlug,
+        description: description.trim(),
         repoSources: [],
       });
 
@@ -116,18 +134,33 @@ export function CreateProjectDialog({ open, onClose }: CreateProjectDialogProps)
         await transport.request("repos.add", { projectId: project.id, ...repo.input });
       }
 
-      // Reload projects to reflect added repos
       await loadProjects();
       expandProject(project.id);
+
+      // Start analysis via regenerate store — workspace will show progress
+      void useRegenerateStore
+        .getState()
+        .startRegenerate(project.id, `${computedSlug}/PROJECT.md`, () =>
+          transport.request("projects.analyze", {
+            projectId: project.id,
+            description: description.trim(),
+          }),
+        );
 
       toast("Project created", "success");
       resetForm();
       onClose();
     } catch (err) {
       toast(`Failed: ${err instanceof Error ? err.message : String(err)}`, "error");
-    } finally {
       setSubmitting(false);
-      setProgress("");
+      setStep("review");
+    }
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter" && !e.shiftKey && userGoal.trim()) {
+      e.preventDefault();
+      void handleAskClaude();
     }
   };
 
@@ -137,10 +170,19 @@ export function CreateProjectDialog({ open, onClose }: CreateProjectDialogProps)
         {/* Header */}
         <div className="mb-4 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            {step === "repos" && !submitting && (
+            {step === "input" && (
               <button
                 type="button"
-                onClick={handleBack}
+                onClick={() => setStep("repos")}
+                className="text-zinc-500 hover:text-zinc-300"
+              >
+                <ArrowLeft size={18} />
+              </button>
+            )}
+            {step === "review" && (
+              <button
+                type="button"
+                onClick={() => setStep("input")}
                 className="text-zinc-500 hover:text-zinc-300"
               >
                 <ArrowLeft size={18} />
@@ -158,51 +200,53 @@ export function CreateProjectDialog({ open, onClose }: CreateProjectDialogProps)
           </button>
         </div>
 
-        {/* Step indicator */}
-        <div className="mb-4 flex gap-2">
-          <StepIndicator label="1. Info" active={step === "info"} completed={step === "repos"} />
-          <StepIndicator label="2. Repos" active={step === "repos"} completed={false} />
-        </div>
-
-        {/* Step 1: Project Info */}
-        {step === "info" && (
+        {/* Step 1: Add Repos */}
+        {step === "repos" && (
           <div className="space-y-4">
-            <div>
-              <label className="mb-1 block text-sm text-zinc-400">Name</label>
-              <input
-                type="text"
-                value={name}
-                onChange={(e) => handleNameChange(e.target.value)}
-                placeholder="My SaaS"
-                autoFocus
-                className="w-full rounded-md border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-zinc-100 placeholder-zinc-600 outline-none focus:border-blue-500"
-              />
-            </div>
-
-            <div>
-              <label className="mb-1 block text-sm text-zinc-400">Slug</label>
-              <input
-                type="text"
-                value={computedSlug}
-                onChange={(e) => handleSlugChange(e.target.value)}
-                placeholder="my-saas"
-                className={cn(
-                  "w-full rounded-md border bg-zinc-800 px-3 py-2 text-sm text-zinc-100 placeholder-zinc-600 outline-none focus:border-blue-500",
-                  slugTaken ? "border-red-500" : "border-zinc-700",
-                )}
-              />
-              {slugTaken && (
-                <p className="mt-1 text-xs text-red-400">A project with this slug already exists</p>
-              )}
-              {!slugManual && computedSlug !== "" && (
-                <p className="mt-1 text-xs text-zinc-600">Auto-generated from name</p>
-              )}
-            </div>
+            {pendingRepos.length === 0 ? (
+              <p className="text-sm text-zinc-500">Add at least one repo to get started.</p>
+            ) : (
+              <ul className="space-y-2">
+                {pendingRepos.map((repo) => {
+                  const Icon = METHOD_ICONS[repo.input.method] ?? GitBranch;
+                  return (
+                    <li
+                      key={repo.input.name}
+                      className="flex items-center justify-between rounded-md border border-zinc-700 bg-zinc-800/50 px-3 py-2"
+                    >
+                      <div className="flex items-center gap-2">
+                        <Icon size={14} className="text-zinc-500" />
+                        <span className="text-sm text-zinc-200">{repo.input.name}</span>
+                        <span className="text-xs text-zinc-500">
+                          {METHOD_LABELS[repo.input.method]}
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveRepo(repo.input.name)}
+                        className="text-zinc-500 hover:text-red-400"
+                      >
+                        <X size={14} />
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
 
             <button
               type="button"
-              onClick={handleNext}
-              disabled={!canGoToRepos}
+              onClick={() => setShowAddRepo(true)}
+              className="flex w-full items-center justify-center gap-2 rounded-md border border-dashed border-zinc-700 px-4 py-2 text-sm text-zinc-400 hover:border-zinc-500 hover:text-zinc-300"
+            >
+              <Plus size={14} />
+              Add Repo
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setStep("input")}
+              disabled={pendingRepos.length === 0}
               className="w-full rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-500 disabled:opacity-50"
             >
               Next
@@ -210,112 +254,124 @@ export function CreateProjectDialog({ open, onClose }: CreateProjectDialogProps)
           </div>
         )}
 
-        {/* Step 2: Add Repos */}
-        {step === "repos" && (
+        {/* Step 2: Free text input */}
+        {step === "input" && (
           <div className="space-y-4">
-            {/* Pending repos list */}
-            {pendingRepos.length > 0 ? (
-              <div className="space-y-1">
-                {pendingRepos.map((repo) => {
-                  const Icon = METHOD_ICONS[repo.input.method] ?? FileText;
-                  const methodLabel = METHOD_LABELS[repo.input.method] ?? repo.input.method;
-                  return (
-                    <div
-                      key={repo.input.name}
-                      className="flex items-center gap-2 rounded-md border border-zinc-700 bg-zinc-800 px-3 py-2"
-                    >
-                      <Icon size={14} className="shrink-0 text-zinc-500" />
-                      <span className="min-w-0 flex-1 truncate text-sm text-zinc-100">
-                        {repo.input.name}
-                      </span>
-                      <span className="shrink-0 text-xs text-zinc-600">{methodLabel}</span>
-                      <button
-                        type="button"
-                        onClick={() => handleRemoveRepo(repo.input.name)}
-                        disabled={submitting}
-                        className="shrink-0 rounded-md p-1 text-zinc-600 hover:bg-zinc-700 hover:text-zinc-300 disabled:opacity-30"
-                      >
-                        <X size={14} />
-                      </button>
-                    </div>
-                  );
-                })}
-              </div>
-            ) : (
-              <div className="rounded-md border border-dashed border-zinc-700 px-4 py-6 text-center text-sm text-zinc-600">
-                No repos added yet. Add at least one to continue.
-              </div>
-            )}
+            <div>
+              <label className="mb-1 block text-sm text-zinc-400">
+                What&apos;s this project about?
+              </label>
+              <textarea
+                value={userGoal}
+                onChange={(e) => setUserGoal(e.target.value)}
+                onKeyDown={handleKeyDown}
+                placeholder="ex: workspace manager for Claude Code users"
+                rows={3}
+                autoFocus
+                className="w-full rounded-md border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-zinc-100 placeholder-zinc-600 outline-none focus:border-blue-500"
+              />
+            </div>
 
-            {/* Add repo button */}
             <button
               type="button"
-              onClick={() => setShowAddRepo(true)}
-              disabled={submitting}
-              className="flex w-full items-center justify-center gap-2 rounded-md border border-zinc-700 bg-zinc-800 px-4 py-2 text-sm text-zinc-300 hover:bg-zinc-700 disabled:opacity-30"
-            >
-              <Plus size={14} />
-              Add Repo
-            </button>
-
-            {/* Progress indicator */}
-            {submitting && progress && (
-              <div className="flex items-center gap-2 text-sm text-zinc-400">
-                <Loader2 size={14} className="shrink-0 animate-spin text-blue-400" />
-                <span>{progress}</span>
-              </div>
-            )}
-
-            {/* Create button */}
-            <button
-              type="button"
-              onClick={() => void handleCreate()}
-              disabled={!canCreate}
+              onClick={() => void handleAskClaude()}
+              disabled={!userGoal.trim()}
               className="flex w-full items-center justify-center gap-2 rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-500 disabled:opacity-50"
             >
-              {submitting && <Loader2 size={14} className="animate-spin" />}
-              {submitting ? "Creating..." : "Create Project"}
+              <Sparkles size={14} />
+              Ask Claude
             </button>
           </div>
         )}
+
+        {/* Step 3: Loading */}
+        {step === "loading" && (
+          <div className="flex items-center gap-2 py-8 text-sm text-zinc-400">
+            <Loader2 size={14} className="shrink-0 animate-spin text-blue-400" />
+            <span>Claude is analyzing...</span>
+          </div>
+        )}
+
+        {/* Step 4: Review & Edit */}
+        {step === "review" && (
+          <div className="space-y-4">
+            {claudeError && (
+              <div className="flex items-start gap-2 rounded-md border border-yellow-700/50 bg-yellow-900/20 px-3 py-2">
+                <AlertTriangle size={14} className="mt-0.5 shrink-0 text-yellow-400" />
+                <div>
+                  <p className="text-sm text-yellow-300">
+                    Claude could not generate a suggestion. Fill the fields manually.
+                  </p>
+                  <p className="mt-1 text-xs text-yellow-400/70">{claudeError}</p>
+                </div>
+              </div>
+            )}
+
+            <div>
+              <label className="mb-1 block text-sm text-zinc-400">Name</label>
+              <input
+                type="text"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="My Project"
+                autoFocus
+                className="w-full rounded-md border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-zinc-100 placeholder-zinc-600 outline-none focus:border-blue-500"
+              />
+            </div>
+
+            {slugTaken && (
+              <p className="text-xs text-red-400">A project with this name already exists</p>
+            )}
+
+            <div>
+              <label className="mb-1 block text-sm text-zinc-400">Description</label>
+              <textarea
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                placeholder="What this project does..."
+                rows={2}
+                className="w-full rounded-md border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-zinc-100 placeholder-zinc-600 outline-none focus:border-blue-500"
+              />
+            </div>
+
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => void handleAskClaude()}
+                className="flex flex-1 items-center justify-center gap-2 rounded-md border border-zinc-700 bg-zinc-800 px-4 py-2 text-sm text-zinc-300 hover:bg-zinc-700"
+              >
+                <Sparkles size={14} />
+                Re-generate
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleCreate()}
+                disabled={!name.trim() || !computedSlug || slugTaken}
+                className="flex flex-1 items-center justify-center gap-2 rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-500 disabled:opacity-50"
+              >
+                Create Project
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Step 5: Creating */}
+        {step === "creating" && (
+          <div className="flex items-center gap-2 py-8 text-sm text-zinc-400">
+            <Loader2 size={14} className="shrink-0 animate-spin text-blue-400" />
+            <span>{progress}</span>
+          </div>
+        )}
+
+        {/* Add Repo Dialog */}
+        {showAddRepo && (
+          <AddRepoDialog
+            open={showAddRepo}
+            onClose={() => setShowAddRepo(false)}
+            onAdd={handleAddPendingRepo}
+          />
+        )}
       </div>
-
-      {/* Sub-dialog for adding repos */}
-      <AddRepoDialog
-        open={showAddRepo}
-        onClose={() => setShowAddRepo(false)}
-        onAdd={handleAddPendingRepo}
-      />
     </div>
   );
-}
-
-function StepIndicator({
-  label,
-  active,
-  completed,
-}: {
-  label: string;
-  active: boolean;
-  completed: boolean;
-}) {
-  return (
-    <div
-      className={cn(
-        "flex-1 rounded-md px-3 py-1.5 text-center text-xs font-medium",
-        active && "bg-blue-600/20 text-blue-400",
-        completed && "bg-zinc-700/50 text-zinc-400",
-        !active && !completed && "text-zinc-600",
-      )}
-    >
-      {label}
-    </div>
-  );
-}
-
-function toSlug(s: string): string {
-  return s
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-|-$/g, "");
 }

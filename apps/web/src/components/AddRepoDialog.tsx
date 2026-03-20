@@ -21,8 +21,24 @@ const METHODS: { key: Method; label: string }[] = [
 
 function repoNameFromUrl(url: string): string {
   const cleaned = url.replace(/\.git\/?$/, "").replace(/\/+$/, "");
+  // Handle SSH URLs like git@github.com:user/repo
+  const sshMatch = cleaned.match(/[:/]([^/]+)$/);
+  if (sshMatch) return sshMatch[1]!;
   const last = cleaned.split("/").pop();
   return last || "";
+}
+
+function isValidGitUrl(url: string): boolean {
+  const trimmed = url.trim();
+  if (!trimmed) return false;
+  // HTTPS: https://host/path or http://host/path
+  if (/^https?:\/\/.+\/.+/.test(trimmed)) return true;
+  // SSH: git@host:user/repo or ssh://git@host/path
+  if (/^git@[\w.-]+:.+\/.+/.test(trimmed)) return true;
+  if (/^ssh:\/\/.+\/.+/.test(trimmed)) return true;
+  // Git protocol: git://host/path
+  if (/^git:\/\/.+\/.+/.test(trimmed)) return true;
+  return false;
 }
 
 function repoNameFromPath(folderPath: string): string {
@@ -123,9 +139,11 @@ export function AddRepoDialog({ open, onClose, onAdd }: AddRepoDialogProps) {
     }
   };
 
+  const urlInvalid = method === "git-url" && url.trim() !== "" && !isValidGitUrl(url);
+
   const canSubmit = (() => {
     if (!name.trim()) return false;
-    if (method === "git-url" && !url.trim()) return false;
+    if (method === "git-url" && (!url.trim() || urlInvalid)) return false;
     if (method === "local-folder" && !folderPath) return false;
     return true;
   })();
@@ -168,10 +186,15 @@ export function AddRepoDialog({ open, onClose, onAdd }: AddRepoDialogProps) {
                 type="text"
                 value={url}
                 onChange={(e) => setUrl(e.target.value)}
-                placeholder="https://github.com/user/repo.git"
+                placeholder="https://github.com/user/repo.git or git@github.com:user/repo.git"
                 autoFocus
-                className="w-full rounded-md border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-zinc-100 placeholder-zinc-600 outline-none focus:border-blue-500"
+                className={`w-full rounded-md border bg-zinc-800 px-3 py-2 text-sm text-zinc-100 placeholder-zinc-600 outline-none ${urlInvalid ? "border-red-500" : "border-zinc-700 focus:border-blue-500"}`}
               />
+              {urlInvalid && (
+                <p className="mt-1 text-xs text-red-400">
+                  Invalid Git URL. Use HTTPS (https://...) or SSH (git@host:user/repo)
+                </p>
+              )}
             </div>
           )}
 

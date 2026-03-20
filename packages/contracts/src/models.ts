@@ -2,10 +2,16 @@ export interface Project {
   id: string;
   slug: string;
   name: string;
+  description: string;
   repoSources: string[];
   createdAt: string;
   updatedAt: string;
 }
+
+export type ClaudeProgress =
+  | { type: "status"; message: string }
+  | { type: "tool"; tool: string; input: unknown }
+  | { type: "text"; content: string };
 
 export interface RepoInfo {
   name: string;

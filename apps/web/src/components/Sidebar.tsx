@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Plus } from "lucide-react";
+import { Plus, Settings } from "lucide-react";
+import { useNavigate } from "@tanstack/react-router";
 import { useProjectStore } from "~/stores/projects";
 import { useTaskStore } from "~/stores/tasks";
 import { useDevServerStore } from "~/stores/devservers";
@@ -9,11 +10,13 @@ import { CreateProjectDialog } from "./CreateProjectDialog";
 import { CreateTaskDialog } from "./CreateTaskDialog";
 import { DevServerPanel } from "./DevServerPanel";
 import { BrowserToggle } from "./BrowserToggle";
+import { NotificationBell } from "./NotificationBell";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { AddRepoDialog } from "./AddRepoDialog";
 import { transport } from "~/lib/ws-transport";
 
 export function Sidebar() {
+  const navigate = useNavigate();
   const { projects, selectedProjectId, loading, loadProjects, updateProject, deleteProject } =
     useProjectStore();
   const { selectedTaskId } = useTaskStore();
@@ -104,6 +107,7 @@ export function Sidebar() {
             >
               <Plus size={14} />
             </button>
+            <NotificationBell />
             <BrowserToggle />
           </div>
         </div>
@@ -126,6 +130,18 @@ export function Sidebar() {
         <div className="border-t border-zinc-800">
           <DevServerPanel />
         </div>
+
+        {/* Settings button — footer */}
+        <div className="border-t border-zinc-800 px-3 py-2">
+          <button
+            type="button"
+            onClick={() => void navigate({ to: "/settings" })}
+            className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-xs text-zinc-500 hover:bg-zinc-800 hover:text-zinc-300"
+          >
+            <Settings size={14} />
+            Configurações
+          </button>
+        </div>
         {/* Resize handle */}
         <div
           role="separator"
@@ -147,6 +163,7 @@ export function Sidebar() {
           open={createTaskProjectId !== null}
           onClose={() => setCreateTaskProjectId(null)}
           projectId={createTaskProjectId}
+          project={projects.find((p) => p.id === createTaskProjectId)}
         />
       )}
 

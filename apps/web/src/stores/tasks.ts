@@ -2,6 +2,7 @@ import { create } from "zustand";
 import type { CreateTaskInput, Task } from "@iara/contracts";
 import { transport } from "../lib/ws-transport.js";
 import { useTerminalStore } from "./terminal.js";
+import { useRegenerateStore } from "./regenerate.js";
 
 interface TaskState {
   tasks: Task[];
@@ -63,6 +64,9 @@ export const useTaskStore = create<TaskState & TaskActions>((set, get) => ({
   },
 
   deleteTask: async (id) => {
+    // Cancel any active regeneration for this task
+    useRegenerateStore.getState().cancel(id);
+
     // Destroy any active terminal for this task
     await useTerminalStore.getState().destroy(id);
 

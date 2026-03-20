@@ -35,7 +35,13 @@ registerSocketHandlers(socketServer, pushAll);
 const sessionWatcher = new SessionWatcher(pushAll);
 
 // Register all WS handlers
-registerAllHandlers({ devSupervisor, notificationService, terminalManager, sessionWatcher });
+registerAllHandlers({
+  devSupervisor,
+  notificationService,
+  terminalManager,
+  sessionWatcher,
+  pushFn: pushAll,
+});
 
 // Auto-open browser panel when frontend dev server is healthy
 devSupervisor.on("healthy", (_name: string, port: number) => {

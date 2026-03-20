@@ -195,7 +195,7 @@ export function EnvEditor({ projectId, context, repos, hasActiveTerminal }: EnvE
           />
           <EnvSection
             label="Local"
-            sublabel={context === "root" ? "this project root only" : "this task only"}
+            sublabel={context === "root" ? "this Project Workspace only" : "this task only"}
             entries={repoData?.local ?? []}
             overriddenKeys={globalKeys}
             onUpdate={(i, f, v) => updateEntry("local", i, f, v)}

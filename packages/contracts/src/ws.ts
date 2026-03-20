@@ -12,7 +12,15 @@ import type {
   SessionInfo,
   UpdateProjectInput,
 } from "./ipc.js";
-import type { CloneProgress, EnvEntry, EnvRepoEntries, Project, RepoInfo, Task } from "./models.js";
+import type {
+  ClaudeProgress,
+  CloneProgress,
+  EnvEntry,
+  EnvRepoEntries,
+  Project,
+  RepoInfo,
+  Task,
+} from "./models.js";
 
 // ---------------------------------------------------------------------------
 // WS Methods — request/response map
@@ -28,6 +36,10 @@ export type WsMethods = {
   "projects.create": { params: CreateProjectInput; result: Project };
   "projects.update": { params: { id: string } & UpdateProjectInput; result: void };
   "projects.delete": { params: { id: string }; result: void };
+  "projects.suggest": {
+    params: { userGoal: string };
+    result: { name: string; description: string };
+  };
 
   // Repos
   "repos.getInfo": { params: { projectId: string }; result: RepoInfo[] };
@@ -38,8 +50,16 @@ export type WsMethods = {
   "tasks.list": { params: { projectId: string }; result: Task[] };
   "tasks.get": { params: { id: string }; result: Task | null };
   "tasks.create": { params: { projectId: string } & CreateTaskInput; result: Task };
-
+  "tasks.suggest": {
+    params: { projectId: string; userGoal: string };
+    result: { name: string; description: string; branches: Record<string, string> };
+  };
+  "tasks.regenerate": { params: { taskId: string }; result: { requestId: string } };
   "tasks.delete": { params: { id: string }; result: void };
+  "tasks.renameBranch": {
+    params: { taskId: string; repoName: string; newBranch: string };
+    result: void;
+  };
 
   // Launcher
   "launcher.launch": { params: LaunchClaudeInput; result: LaunchResult };
@@ -48,9 +68,22 @@ export type WsMethods = {
   "sessions.list": { params: { taskId: string }; result: SessionInfo[] };
   "sessions.listByProject": { params: { projectId: string }; result: SessionInfo[] };
 
+  // Projects - Claude
+  "projects.analyze": {
+    params: { projectId: string; description: string };
+    result: { requestId: string };
+  };
+
+  // Claude
+  "claude.cancel": { params: { requestId: string }; result: void };
+
   // Prompts
   "prompts.read": { params: { filePath: string }; result: string };
   "prompts.write": { params: { filePath: string; content: string }; result: void };
+  "prompts.check": {
+    params: { filePath: string };
+    result: { exists: boolean; empty: boolean };
+  };
 
   // Dev Servers
   "dev.start": { params: DevCommand; result: void };
@@ -83,6 +116,14 @@ export type WsMethods = {
 
   // Files
   "files.open": { params: { filePath: string; line?: number; col?: number }; result: void };
+  "files.openInEditor": {
+    params: { projectId: string; taskId?: string };
+    result: void;
+  };
+  "files.openInExplorer": {
+    params: { projectId: string; taskId?: string };
+    result: void;
+  };
 
   // Git
   "git.status": { params: { cwd: string }; result: GitStatusResult };
@@ -92,6 +133,11 @@ export type WsMethods = {
   "notifications.unreadCount": { params: Record<string, never>; result: number };
   "notifications.markRead": { params: { id: string }; result: void };
   "notifications.markAllRead": { params: Record<string, never>; result: void };
+
+  // Settings
+  "settings.getAll": { params: Record<string, never>; result: Record<string, string> };
+  "settings.get": { params: { key: string }; result: string | null };
+  "settings.set": { params: { key: string; value: string }; result: void };
 
   // Terminal
   "terminal.create": {
@@ -119,6 +165,10 @@ export type WsPushEvents = {
   "clone:progress": CloneProgress;
   "session:changed": { taskId: string };
   "env:changed": { repo: string; level: "global" | "local" };
+  "settings:changed": { key: string; value: string };
+  "claude:progress": { requestId: string; progress: ClaudeProgress };
+  "claude:result": { requestId: string; result: unknown };
+  "claude:error": { requestId: string; error: string };
 };
 
 // ---------------------------------------------------------------------------

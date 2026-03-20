@@ -147,7 +147,7 @@ export function ProjectNode({
         {/* Expanded: tasks */}
         {isExpanded && (
           <div className="ml-3 flex flex-col gap-0.5 border-l border-zinc-800 pl-2">
-            {/* Project root item */}
+            {/* Project Workspace item */}
             <button
               type="button"
               onClick={() => onSelectTask(null)}
@@ -158,7 +158,7 @@ export function ProjectNode({
               } mb-1`}
             >
               <FolderGit2 size={12} className="shrink-0" />
-              <span className="truncate">project root</span>
+              <span className="truncate">Project Workspace</span>
             </button>
 
             {loading && tasks.length === 0 ? (

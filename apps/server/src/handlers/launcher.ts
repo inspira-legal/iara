@@ -4,6 +4,7 @@ import { mergeEnvForContext } from "../services/env.js";
 import { registerMethod } from "../router.js";
 import { launchClaude, type RepoContext } from "../services/launcher.js";
 import { getProject, getProjectDir } from "../services/projects.js";
+import { getSetting } from "../services/settings.js";
 import { getTask } from "../services/tasks.js";
 
 export function registerLauncherHandlers(): void {
@@ -46,12 +47,18 @@ export function registerLauncherHandlers(): void {
     const repoNames = repos.map((r) => r.name);
     const envVars = mergeEnvForContext(project.slug, task.slug, repoNames);
 
+    const autocompactPct = getSetting("claude.autocompact_pct");
+    const autocompactEnv = autocompactPct
+      ? { CLAUDE_AUTOCOMPACT_PCT_OVERRIDE: autocompactPct }
+      : {};
+
     return launchClaude({
       taskDir,
       repoDirs,
       resumeSessionId: params.resumeSessionId,
       env: {
         ...envVars,
+        ...autocompactEnv,
         IARA_TASK_ID: task.id,
         IARA_PROJECT_ID: project.id,
         IARA_PROJECT_DIR: projectDir,

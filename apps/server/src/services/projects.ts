@@ -53,6 +53,7 @@ export function syncProjects(): void {
           id: crypto.randomUUID(),
           slug,
           name: slug,
+          description: "",
           repoSources: JSON.stringify([]),
           createdAt: now,
           updatedAt: now,
@@ -126,6 +127,7 @@ export async function createProject(input: CreateProjectInput): Promise<Project>
     id,
     slug: input.slug,
     name: input.name,
+    description: input.description ?? "",
     repoSources: JSON.stringify(input.repoSources),
     createdAt: now,
     updatedAt: now,
@@ -280,6 +282,7 @@ export function discoverRepos(projectSlug: string): string[] {
 function deserializeProject(row: typeof schema.projects.$inferSelect): Project {
   return {
     ...row,
+    description: row.description ?? "",
     repoSources: JSON.parse(row.repoSources) as string[],
   };
 }

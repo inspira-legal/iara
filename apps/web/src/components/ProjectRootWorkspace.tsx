@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState, useEffect } from "react";
 import {
   GitBranch,
   ChevronLeft,
@@ -8,16 +8,22 @@ import {
   ArrowDown,
   Plus,
   X,
+  Sparkles,
+  Code,
+  FolderOpen,
 } from "lucide-react";
 import type { Project, RepoInfo } from "@iara/contracts";
 import { transport } from "~/lib/ws-transport.js";
 import { useProjectStore } from "~/stores/projects";
 import { useTerminalStore } from "~/stores/terminal";
+import { useRegenerate } from "~/hooks/useRegenerate";
 import { EnvEditor } from "./EnvEditor";
 import { TerminalView } from "./TerminalView";
 import { SessionList } from "./SessionList";
 import { AddRepoDialog } from "./AddRepoDialog";
+import { RegenerationBanner } from "./RegenerationBanner";
 import { ConfirmDialog } from "./ConfirmDialog";
+import { PromptPreview } from "./PromptPreview";
 
 const FETCH_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
 
@@ -102,6 +108,26 @@ export function ProjectRootWorkspace({ project }: ProjectRootWorkspaceProps) {
             <div className="text-sm font-medium text-zinc-100">{project.name}</div>
           </div>
         </div>
+        <div className="ml-auto flex items-center gap-1">
+          <button
+            type="button"
+            onClick={() => void transport.request("files.openInEditor", { projectId: project.id })}
+            className="rounded p-1.5 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-300"
+            title="Open in editor"
+          >
+            <Code size={14} />
+          </button>
+          <button
+            type="button"
+            onClick={() =>
+              void transport.request("files.openInExplorer", { projectId: project.id })
+            }
+            className="rounded p-1.5 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-300"
+            title="Open in file explorer"
+          >
+            <FolderOpen size={14} />
+          </button>
+        </div>
       </div>
 
       {/* Content */}
@@ -124,7 +150,7 @@ export function ProjectRootWorkspace({ project }: ProjectRootWorkspaceProps) {
 }
 
 // ---------------------------------------------------------------------------
-// Project Root Detail View (sessions screen)
+// Project Workspace Detail View (sessions screen)
 // ---------------------------------------------------------------------------
 
 function ProjectRootDetailView({
@@ -144,11 +170,64 @@ function ProjectRootDetailView({
   const [repoToDelete, setRepoToDelete] = useState<string | null>(null);
   const { updateProject } = useProjectStore();
 
+  const {
+    isRegenerating,
+    showEmptyBanner,
+    messages,
+    result,
+    error,
+    handleStartRegenerate,
+    cancel,
+  } = useRegenerate({
+    entityId: project.id,
+    filePath: `${project.slug}/PROJECT.md`,
+    regenerateFn: () =>
+      transport.request("projects.analyze", {
+        projectId: project.id,
+        description: project.description ?? "",
+      }),
+  });
+
   return (
     <div className="flex-1 overflow-y-auto p-6">
+      <RegenerationBanner
+        isRegenerating={isRegenerating}
+        showEmptyBanner={showEmptyBanner}
+        error={error}
+        messages={messages}
+        fileName="PROJECT.md"
+        onGenerate={() => void handleStartRegenerate()}
+        onCancel={cancel}
+      />
+
+      {/* System Prompts */}
+      {!showEmptyBanner && !isRegenerating && (
+        <div className="mb-6">
+          <h3 className="mb-3 text-sm font-medium text-zinc-300">System Prompts</h3>
+          <PromptPreview
+            filePath={`${project.slug}/PROJECT.md`}
+            label="PROJECT.md"
+            refreshKey={result ? 1 : 0}
+          />
+        </div>
+      )}
+
       {/* Repos */}
       <div className="mb-6">
-        <h3 className="mb-3 text-sm font-medium text-zinc-300">Repos</h3>
+        <div className="mb-3 flex items-center justify-between">
+          <h3 className="text-sm font-medium text-zinc-300">Repos</h3>
+          {!isRegenerating && !showEmptyBanner && (
+            <button
+              type="button"
+              onClick={() => void handleStartRegenerate()}
+              className="flex items-center gap-1.5 rounded-md border border-zinc-700 px-2 py-1 text-xs text-zinc-500 hover:border-zinc-500 hover:text-zinc-300"
+              title="Regenerate PROJECT.md"
+            >
+              <Sparkles size={12} />
+              Regenerate PROJECT.md
+            </button>
+          )}
+        </div>
         <div className="space-y-2">
           {repoLoading ? (
             Array.from({ length: project.repoSources.length || 1 }, (_, i) => (

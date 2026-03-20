@@ -221,7 +221,17 @@
 ## Future Considerations
 
 - Split panes (multiplos terminais visiveis ao mesmo tempo)
-- Plugin system para extensibilidade de terceiros
 - Dashboard com metricas de sessoes
 - Git visualization (branch graph)
 - Auto-updater
+- Auto-compactação: config `CLAUDE_AUTOCOMPACT_PCT_OVERRIDE` na UI de env/settings do iara — permite ao usuario definir o threshold de autocompact do Claude Code por projeto/task
+- Notificação/blink na tab quando Claude termina processamento — visual cue pra quem esta em outra task/aba (via hook ou socket event). Depende do terminal embutido (M5) pra detectar estado do Claude via PTY output
+- Notificação nativa do OS deve ser opcional — toggle na tela de configurações do iara
+- Separação visual na sidebar por estado da task: Processing (Claude respondendo, pulsing dot), Waiting (Claude idle esperando input, dot amarelo), Idle (sem terminal, atividade recente, sem indicador), Stale (sem atividade >24h, texto dimmed), Dirty (worktree com mudanças não commitadas, badge sutil). Detectar via terminal events + git status. Depende do terminal embutido (M5) pra Processing/Waiting
+- Setup project via claude -p: analisa codebase, sugere metadata → gera PROJECT.md com confirmação do usuário (PROJ-04 deferred M2.5)
+- New task via claude -p: analisa contexto, sugere nome/branch → gera TASK.md com confirmação do usuário (TASK-04 deferred M2.5)
+- Discovery de scripts via claude -p: analisa repo (package.json, Makefile, etc), descobre scripts disponíveis, salva num dev.json estruturado. UI permite lançar scripts diretamente. Complementa DevServerPanel existente
+- Tela de configurações do iara: necessária pra toggle de notificações, AUTOCOMPACT_PCT, e futuras preferências globais
+- Notification badge in-app: badge/contador na sidebar usando unreadCount do notification store (store já existe, falta componente visual)
+- Browser panel end-to-end: completar integração Claude → browser. Falta: socket server no desktop, handlers browser.\* no socket, plugin command /browser, CLI bridge funcional. BrowserPanel service e IPC existem mas Claude não consegue controlar
+- Browser inspect tool: modo inspeção tipo Figma no browser panel — clicar num elemento captura contexto (selector, texto, posição, screenshot recortado) e injeta no prompt do Claude como referência visual. Claude sabe exatamente do que o usuário está falando

@@ -21,6 +21,7 @@ export interface AddRepoInput {
 export interface CreateProjectInput {
   slug: string;
   name: string;
+  description?: string;
   repoSources: string[];
 }
 
@@ -34,6 +35,7 @@ export interface CreateTaskInput {
   name: string;
   description?: string;
   branch?: string;
+  branches?: Record<string, string>;
 }
 
 export type LaunchClaudeInput =

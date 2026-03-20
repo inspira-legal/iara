@@ -6,8 +6,17 @@ import type { RepoContext } from "../services/launcher.js";
 import { buildRootPrompt } from "../services/launcher.js";
 import { registerMethod } from "../router.js";
 import { getProject, getProjectDir } from "../services/projects.js";
+import { getSetting } from "../services/settings.js";
 import { getTask } from "../services/tasks.js";
 import type { TerminalManager } from "../services/terminal.js";
+
+function getAutocompactEnv(): Record<string, string> {
+  const pct = getSetting("claude.autocompact_pct");
+  if (pct) {
+    return { CLAUDE_AUTOCOMPACT_PCT_OVERRIDE: pct };
+  }
+  return {};
+}
 
 export function registerTerminalHandlers(manager: TerminalManager): void {
   registerMethod("terminal.create", async (params) => {
@@ -66,6 +75,7 @@ export function registerTerminalHandlers(manager: TerminalManager): void {
         ...(params.resumeSessionId != null ? { resumeSessionId: params.resumeSessionId } : {}),
         env: {
           ...envVars,
+          ...getAutocompactEnv(),
           IARA_ROOT: "1",
           IARA_PROJECT_ID: project.id,
           IARA_PROJECT_DIR: projectDir,
@@ -127,6 +137,7 @@ export function registerTerminalHandlers(manager: TerminalManager): void {
       ...(params.resumeSessionId != null ? { resumeSessionId: params.resumeSessionId } : {}),
       env: {
         ...envVars,
+        ...getAutocompactEnv(),
         IARA_TASK_ID: task.id,
         IARA_PROJECT_ID: project.id,
         IARA_PROJECT_DIR: projectDir,

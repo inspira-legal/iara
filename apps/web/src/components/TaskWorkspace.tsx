@@ -1,15 +1,21 @@
-import { useEffect, useState } from "react";
+import { useState, useEffect } from "react";
 import {
   GitBranch,
   ChevronLeft,
   CheckCircle2,
+  Code,
+  FolderOpen,
   AlertCircle,
   ArrowUp,
   ArrowDown,
+  Sparkles,
 } from "lucide-react";
 import type { Task, Project, RepoInfo } from "@iara/contracts";
 import { transport } from "~/lib/ws-transport.js";
 import { useTerminalStore } from "~/stores/terminal";
+import { useRegenerate } from "~/hooks/useRegenerate";
+import { RegenerationBanner } from "./RegenerationBanner";
+import { PromptPreview } from "./PromptPreview";
 import { EnvEditor } from "./EnvEditor";
 import { TerminalView } from "./TerminalView";
 import { SessionList } from "./SessionList";
@@ -105,6 +111,34 @@ export function TaskWorkspace({ project, task }: TaskWorkspaceProps) {
             <code className="rounded bg-zinc-800 px-1 py-0.5">{task.branch}</code>
           </div>
         </div>
+        <div className="ml-auto flex items-center gap-1">
+          <button
+            type="button"
+            onClick={() =>
+              void transport.request("files.openInEditor", {
+                projectId: project.id,
+                taskId: task.id,
+              })
+            }
+            className="rounded p-1.5 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-300"
+            title="Open in editor"
+          >
+            <Code size={14} />
+          </button>
+          <button
+            type="button"
+            onClick={() =>
+              void transport.request("files.openInExplorer", {
+                projectId: project.id,
+                taskId: task.id,
+              })
+            }
+            className="rounded p-1.5 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-300"
+            title="Open in file explorer"
+          >
+            <FolderOpen size={14} />
+          </button>
+        </div>
       </div>
 
       {/* Content */}
@@ -115,6 +149,7 @@ export function TaskWorkspace({ project, task }: TaskWorkspaceProps) {
         />
       ) : (
         <TaskDetailView
+          project={project}
           task={task}
           repoInfo={repoInfo}
           repoLoading={repoLoading}
@@ -131,20 +166,46 @@ export function TaskWorkspace({ project, task }: TaskWorkspaceProps) {
 // ---------------------------------------------------------------------------
 
 function TaskDetailView({
+  project,
   task,
   repoInfo,
   repoLoading,
   hasActiveTerminal,
   onLaunchSession,
 }: {
+  project: Project;
   task: Task;
   repoInfo: RepoInfo[];
   repoLoading: boolean;
   hasActiveTerminal: boolean;
   onLaunchSession: (resumeSessionId?: string) => void;
 }) {
+  const {
+    isRegenerating,
+    showEmptyBanner,
+    messages,
+    result,
+    error,
+    handleStartRegenerate,
+    cancel,
+  } = useRegenerate({
+    entityId: task.id,
+    filePath: `${project.slug}/${task.slug}/TASK.md`,
+    regenerateFn: () => transport.request("tasks.regenerate", { taskId: task.id }),
+  });
+
   return (
     <div className="flex-1 overflow-y-auto p-6">
+      <RegenerationBanner
+        isRegenerating={isRegenerating}
+        showEmptyBanner={showEmptyBanner}
+        error={error}
+        messages={messages}
+        fileName="TASK.md"
+        onGenerate={() => void handleStartRegenerate()}
+        onCancel={cancel}
+      />
+
       {/* Task info */}
       {task.description && (
         <div className="mb-6">
@@ -152,16 +213,45 @@ function TaskDetailView({
         </div>
       )}
 
+      {/* System prompts */}
+      <div className="mb-6">
+        <h3 className="mb-3 text-sm font-medium text-zinc-300">System Prompts</h3>
+        <div className="space-y-1">
+          <PromptPreview filePath={`${project.slug}/PROJECT.md`} label="PROJECT.md" />
+          {!showEmptyBanner && !isRegenerating && (
+            <PromptPreview
+              filePath={`${project.slug}/${task.slug}/TASK.md`}
+              label="TASK.md"
+              refreshKey={result ? 1 : 0}
+            />
+          )}
+        </div>
+      </div>
+
       {/* Repos */}
       <div className="mb-6">
-        <h3 className="mb-3 text-sm font-medium text-zinc-300">Repos</h3>
+        <div className="mb-3 flex items-center justify-between">
+          <h3 className="text-sm font-medium text-zinc-300">Repos</h3>
+          {/* Regenerate button (CP-08) */}
+          {!isRegenerating && !showEmptyBanner && (
+            <button
+              type="button"
+              onClick={() => void handleStartRegenerate()}
+              className="flex items-center gap-1.5 rounded-md border border-zinc-700 px-2 py-1 text-xs text-zinc-500 hover:border-zinc-500 hover:text-zinc-300"
+              title="Regenerate TASK.md"
+            >
+              <Sparkles size={12} />
+              Regenerate TASK.md
+            </button>
+          )}
+        </div>
         <div className="space-y-2">
           {repoLoading ? (
             Array.from({ length: 1 }, (_, i) => <RepoSkeleton key={i} />)
           ) : repoInfo.length === 0 ? (
             <p className="text-xs text-zinc-600">No repos configured.</p>
           ) : (
-            repoInfo.map((repo) => <RepoCard key={repo.name} repo={repo} />)
+            repoInfo.map((repo) => <RepoCard key={repo.name} repo={repo} taskId={task.id} />)
           )}
         </div>
       </div>
@@ -200,9 +290,34 @@ function RepoSkeleton() {
   );
 }
 
-function RepoCard({ repo }: { repo: RepoInfo }) {
+function RepoCard({ repo, taskId }: { repo: RepoInfo; taskId?: string }) {
   const isClean = repo.dirtyCount === 0;
   const showAheadBehind = repo.ahead > 0 || repo.behind > 0;
+  const [editing, setEditing] = useState(false);
+  const [branchInput, setBranchInput] = useState(repo.branch);
+  const [renaming, setRenaming] = useState(false);
+
+  const handleRenameBranch = async () => {
+    if (!taskId || branchInput.trim() === repo.branch || !branchInput.trim()) {
+      setEditing(false);
+      setBranchInput(repo.branch);
+      return;
+    }
+    setRenaming(true);
+    try {
+      await transport.request("tasks.renameBranch", {
+        taskId,
+        repoName: repo.name,
+        newBranch: branchInput.trim(),
+      });
+      setEditing(false);
+    } catch {
+      setBranchInput(repo.branch);
+      setEditing(false);
+    } finally {
+      setRenaming(false);
+    }
+  };
 
   return (
     <div className="flex items-center gap-3 rounded-lg border border-zinc-700 bg-zinc-800/50 px-4 py-3">
@@ -210,7 +325,33 @@ function RepoCard({ repo }: { repo: RepoInfo }) {
 
       <span className="flex shrink-0 items-center gap-1 text-xs text-zinc-400">
         <GitBranch size={13} />
-        {repo.branch}
+        {editing ? (
+          <input
+            type="text"
+            value={branchInput}
+            onChange={(e) => setBranchInput(e.target.value)}
+            onBlur={() => void handleRenameBranch()}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") void handleRenameBranch();
+              if (e.key === "Escape") {
+                setBranchInput(repo.branch);
+                setEditing(false);
+              }
+            }}
+            disabled={renaming}
+            autoFocus
+            className="w-32 rounded border border-zinc-600 bg-zinc-900 px-1 py-0.5 text-xs text-zinc-300 outline-none focus:border-blue-500"
+          />
+        ) : (
+          <button
+            type="button"
+            onClick={() => taskId && setEditing(true)}
+            className={taskId ? "cursor-pointer hover:text-zinc-200" : ""}
+            title={taskId ? "Click to rename branch" : undefined}
+          >
+            {repo.branch}
+          </button>
+        )}
       </span>
 
       {isClean ? (
@@ -243,26 +384,4 @@ function RepoCard({ repo }: { repo: RepoInfo }) {
       )}
     </div>
   );
-}
-
-function formatDate(iso: string): string {
-  try {
-    const d = new Date(iso);
-    const now = new Date();
-    const diffMs = now.getTime() - d.getTime();
-    const diffMins = Math.floor(diffMs / 60000);
-
-    if (diffMins < 1) return "now";
-    if (diffMins < 60) return `${diffMins}m ago`;
-
-    const diffHours = Math.floor(diffMins / 60);
-    if (diffHours < 24) return `${diffHours}h ago`;
-
-    const diffDays = Math.floor(diffHours / 24);
-    if (diffDays < 7) return `${diffDays}d ago`;
-
-    return d.toLocaleDateString();
-  } catch {
-    return iso;
-  }
 }
