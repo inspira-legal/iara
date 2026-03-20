@@ -129,7 +129,8 @@ export function registerTerminalHandlers(manager: TerminalManager): void {
     const envVars = mergeEnvForContext(project.slug, task.slug, repoNames);
 
     // When resuming a session, honour sessionCwd so the hash matches the original
-    const effectiveCwd = taskParams.resumeSessionId && taskParams.sessionCwd ? taskParams.sessionCwd : taskDir;
+    const effectiveCwd =
+      taskParams.resumeSessionId && taskParams.sessionCwd ? taskParams.sessionCwd : taskDir;
 
     return manager.create({
       taskId: taskParams.taskId,

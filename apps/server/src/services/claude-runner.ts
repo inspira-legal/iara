@@ -1,7 +1,6 @@
 import * as fs from "node:fs";
-import { query, type CanUseTool } from "@anthropic-ai/claude-agent-sdk";
+import { query, tool, createSdkMcpServer } from "@anthropic-ai/claude-agent-sdk";
 import { z } from "zod";
-import { jsonrepair } from "jsonrepair";
 import type { ClaudeProgress } from "@iara/contracts";
 
 export type { ClaudeProgress };
@@ -21,7 +20,7 @@ export interface ClaudeRun<T> {
 }
 
 // ---------------------------------------------------------------------------
-// Shared machinery extracted from runClaude / runClaudeToFile
+// Shared core
 // ---------------------------------------------------------------------------
 
 interface RunCoreConfig {
@@ -32,21 +31,13 @@ interface RunCoreConfig {
   signal?: AbortSignal | undefined;
   allowedTools: string[];
   disallowedTools: string[];
-  canUseTool?: CanUseTool | undefined;
+  mcpServers?: NonNullable<Parameters<typeof query>[0]["options"]>["mcpServers"];
   describeToolUse: (tool: string, input: Record<string, unknown>) => string;
   handleResult: (message: { subtype: string; result?: string; errors?: string[] }) => void;
   onError: (err: Error) => void;
 }
 
-interface RunCoreReturn {
-  progressQueue: ClaudeProgress[];
-  state: { progressResolve: (() => void) | null; done: boolean };
-  pushProgress: (event: ClaudeProgress) => void;
-  progressIterable: AsyncIterable<ClaudeProgress>;
-  abort: () => void;
-}
-
-function createRunCore(config: RunCoreConfig): RunCoreReturn {
+function createRunCore(config: RunCoreConfig) {
   const abortController = new AbortController();
 
   if (config.signal) {
@@ -78,12 +69,12 @@ function createRunCore(config: RunCoreConfig): RunCoreReturn {
         stderr: (data: string) => console.error("[claude-sdk]", data),
       };
 
-      if (config.canUseTool) {
-        options.canUseTool = config.canUseTool;
-      }
-
       if (config.systemPrompt) {
         options.systemPrompt = config.systemPrompt;
+      }
+
+      if (config.mcpServers) {
+        options.mcpServers = config.mcpServers;
       }
 
       const stream = query({ prompt: config.prompt, options });
@@ -151,9 +142,6 @@ function createRunCore(config: RunCoreConfig): RunCoreReturn {
   };
 
   return {
-    progressQueue,
-    state,
-    pushProgress,
     progressIterable,
     abort: () => abortController.abort(),
   };
@@ -175,17 +163,80 @@ function makeDescribeToolUse(cwd: string) {
     switch (tool) {
       case "Read":
         return `Reading ${shortPath(input.file_path as string)}`;
-      case "Write":
-        return `Writing ${shortPath(input.file_path as string)}`;
       case "Glob":
         return `Searching for ${shortPath((input.pattern as string) ?? "")}`;
       case "Grep":
         return `Searching for "${input.pattern as string}"${input.path ? ` in ${shortPath(input.path as string)}` : ""}`;
       case "Agent":
         return `Analyzing${input.description ? `: ${input.description}` : "..."}`;
+      case "submit_result":
+        return "Submitting result...";
       default:
         return `${tool}...`;
     }
+  };
+}
+
+// ---------------------------------------------------------------------------
+// submit_result MCP tool — used by all runClaude calls
+// ---------------------------------------------------------------------------
+
+function createSubmitResultServer<T>(
+  schema: z.ZodType<T> | undefined,
+  onResult: (data: T | string) => void,
+  onError: (err: Error) => void,
+): { mcpServers: RunCoreConfig["mcpServers"]; isReceived: () => boolean } {
+  let received = false;
+
+  const isZodObject = schema instanceof z.ZodObject;
+
+  const toolShape = schema
+    ? isZodObject
+      ? (schema as z.ZodObject<z.ZodRawShape>).shape
+      : { result: schema }
+    : { content: z.string().describe("The complete result content") };
+
+  const submitTool = tool(
+    "submit_result",
+    "Submit the final result. You MUST call this tool exactly once with your answer.",
+    toolShape,
+    async (input) => {
+      if (received) {
+        return { content: [{ type: "text" as const, text: "Result already received." }] };
+      }
+
+      if (schema) {
+        const data = isZodObject ? input : input.result;
+        const parsed = schema.safeParse(data);
+        if (!parsed.success) {
+          // Let Claude retry with corrected data
+          const issues = parsed.error.issues
+            .map((i) => `${i.path.join(".")}: ${i.message}`)
+            .join("; ");
+          return {
+            content: [
+              {
+                type: "text" as const,
+                text: `Validation failed: ${issues}. Fix the errors and call submit_result again.`,
+              },
+            ],
+            isError: true,
+          };
+        }
+        received = true;
+        onResult(parsed.data as T);
+      } else {
+        received = true;
+        onResult(input.content as unknown as T | string);
+      }
+
+      return { content: [{ type: "text" as const, text: "Result received." }] };
+    },
+  );
+
+  return {
+    mcpServers: { iara: createSdkMcpServer({ name: "iara", tools: [submitTool] }) },
+    isReceived: () => received,
   };
 }
 
@@ -207,86 +258,27 @@ export function runClaude<T>(
     resultReject = reject;
   });
 
-  let prompt = config.prompt;
-  if (schema) {
-    const jsonSchema = z.toJSONSchema(schema);
-    prompt += `\n\nResponda APENAS com JSON válido no seguinte schema:\n${JSON.stringify(jsonSchema, null, 2)}`;
-  }
-
-  const core = createRunCore({
-    cwd: config.cwd,
-    prompt,
-    systemPrompt: config.systemPrompt,
-    maxTurns: config.maxTurns,
-    signal: config.signal,
-    allowedTools: ["Read", "Glob", "Grep"],
-    disallowedTools: ["Bash", "Edit", "Write"],
-    describeToolUse: makeDescribeToolUse(config.cwd),
-    handleResult: (message) => {
-      if (message.subtype === "success") {
-        if (schema) {
-          const data = parseJsonFromText(message.result!);
-          const parsed = schema.safeParse(data);
-          if (parsed.success) {
-            resultResolve(parsed.data as T);
-          } else {
-            resultReject(
-              new Error(`JSON validation failed: ${JSON.stringify(parsed.error.issues)}`),
-            );
-          }
-        } else {
-          resultResolve(stripMarkdownFences(message.result!));
-        }
-      } else {
-        const errors = message.errors ? message.errors.join(", ") : message.subtype;
-        resultReject(new Error(`Claude query failed: ${errors}`));
-      }
-    },
-    onError: resultReject,
-  });
-
-  return {
-    progress: core.progressIterable,
-    result: resultPromise,
-    abort: core.abort,
-  };
-}
-
-/**
- * Run Claude with Write tool enabled for a single target file.
- * Claude analyzes the codebase (read-only) and writes output directly to the file.
- * Returns a ClaudeRun<string> where result is the path of the written file.
- */
-export function runClaudeToFile(
-  config: ClaudeRunConfig & { outputPath: string },
-): ClaudeRun<string> {
-  let resultResolve!: (value: string) => void;
-  let resultReject!: (err: Error) => void;
-  const resultPromise = new Promise<string>((resolve, reject) => {
-    resultResolve = resolve;
-    resultReject = reject;
-  });
-
-  const targetPath = config.outputPath;
+  const { mcpServers, isReceived } = createSubmitResultServer(schema, resultResolve, resultReject);
 
   const core = createRunCore({
     cwd: config.cwd,
     prompt: config.prompt,
-    systemPrompt: config.systemPrompt,
+    systemPrompt: [
+      config.systemPrompt,
+      "IMPORTANT: You MUST use the `submit_result` tool to submit your final answer. Do NOT output the result as text.",
+    ]
+      .filter(Boolean)
+      .join("\n\n"),
     maxTurns: config.maxTurns,
     signal: config.signal,
-    allowedTools: ["Read", "Glob", "Grep", "Write"],
-    disallowedTools: ["Bash", "Edit"],
-    canUseTool: async (tool: string, input: Record<string, unknown>) => {
-      if (tool === "Write" && input.file_path !== targetPath) {
-        return { behavior: "deny" as const, message: `Write only allowed to ${targetPath}` };
-      }
-      return { behavior: "allow" as const };
-    },
+    allowedTools: ["Read", "Glob", "Grep", "mcp__iara__submit_result"],
+    disallowedTools: ["Bash", "Edit", "Write"],
+    mcpServers,
     describeToolUse: makeDescribeToolUse(config.cwd),
     handleResult: (message) => {
       if (message.subtype === "success") {
-        resultResolve(targetPath);
+        if (isReceived()) return;
+        resultReject(new Error("Claude did not call submit_result tool"));
       } else {
         const errors = message.errors ? message.errors.join(", ") : message.subtype;
         resultReject(new Error(`Claude query failed: ${errors}`));
@@ -300,71 +292,6 @@ export function runClaudeToFile(
     result: resultPromise,
     abort: core.abort,
   };
-}
-
-// ---------------------------------------------------------------------------
-// JSON / text utilities
-// ---------------------------------------------------------------------------
-
-function tryParseJson(text: string): unknown | undefined {
-  try {
-    return JSON.parse(text);
-  } catch {}
-  try {
-    return JSON.parse(jsonrepair(text));
-  } catch {}
-  return undefined;
-}
-
-/**
- * Robustly parse JSON from LLM text output.
- * Cascading strategy:
- * 1. Direct JSON.parse (text is already valid JSON)
- * 2. Extract from markdown code fences (```json ... ```)
- * 3. Bracket matching (first { to last }, handles surrounding text)
- * 4. Array bracket matching (first [ to last ])
- * 5. jsonrepair on full text (last resort)
- * Each extraction attempt is also tried through jsonrepair as final fallback.
- */
-export function parseJsonFromText(text: string): unknown {
-  const trimmed = text.trim();
-
-  // Layer 1: Direct parse
-  const direct = tryParseJson(trimmed);
-  if (direct !== undefined) return direct;
-
-  // Layer 2: Extract from markdown code fences
-  const fenceMatch = trimmed.match(/```(?:json)?\s*\n?([\s\S]*?)\n?\s*```/);
-  if (fenceMatch) {
-    const fenced = tryParseJson(fenceMatch[1]!.trim());
-    if (fenced !== undefined) return fenced;
-  }
-
-  // Layer 3: Bracket matching — first { to last }
-  const firstBrace = trimmed.indexOf("{");
-  const lastBrace = trimmed.lastIndexOf("}");
-  if (firstBrace !== -1 && lastBrace > firstBrace) {
-    const braced = tryParseJson(trimmed.slice(firstBrace, lastBrace + 1));
-    if (braced !== undefined) return braced;
-  }
-
-  // Layer 4: Array bracket matching — first [ to last ]
-  const firstBracket = trimmed.indexOf("[");
-  const lastBracket = trimmed.lastIndexOf("]");
-  if (firstBracket !== -1 && lastBracket > firstBracket) {
-    const bracketed = tryParseJson(trimmed.slice(firstBracket, lastBracket + 1));
-    if (bracketed !== undefined) return bracketed;
-  }
-
-  return undefined;
-}
-
-/** Strip markdown code fences wrapping the entire response (```markdown, ```md, ```, etc.) */
-export function stripMarkdownFences(text: string): string {
-  const trimmed = text.trim();
-  // Greedy match: first opening fence to LAST closing fence (preserves internal code blocks)
-  const match = trimmed.match(/^```(?:markdown|md|text)?\s*\n([\s\S]*)\n```\s*$/);
-  return match ? match[1]!.trim() : trimmed;
 }
 
 // Map of active runs for cancel support
@@ -378,14 +305,11 @@ export function streamClaudeRun<T>(
   pushFn: (event: any, params: any) => void,
   transform?: (data: T) => string,
 ): void {
-  console.log("[streamClaudeRun] starting for requestId:", requestId);
   void (async () => {
     try {
       for await (const event of run.progress) {
-        console.log("[streamClaudeRun] progress event:", event.type);
         pushFn("claude:progress", { requestId, progress: event });
       }
-      console.log("[streamClaudeRun] awaiting result...");
       const data = await run.result;
       const content = transform ? transform(data) : String(data);
       if (outputPath) {
