@@ -35,6 +35,50 @@ let osNotificationsEnabled = true;
 const browserPanel = new BrowserPanel();
 
 // ---------------------------------------------------------------------------
+// Window state persistence (position, size, maximized)
+// ---------------------------------------------------------------------------
+
+const fs = require("node:fs") as typeof import("node:fs");
+const windowStatePath = path.join(stateDir, "window-state.json");
+
+interface WindowState {
+  x?: number;
+  y?: number;
+  width: number;
+  height: number;
+  maximized?: boolean;
+  zoomLevel?: number;
+}
+
+function loadWindowState(): WindowState {
+  try {
+    const data = fs.readFileSync(windowStatePath, "utf-8");
+    return JSON.parse(data) as WindowState;
+  } catch {
+    return { width: 1280, height: 800 };
+  }
+}
+
+function saveWindowState(win: BrowserWindow): void {
+  const maximized = win.isMaximized();
+  const bounds = maximized ? ((win as any).__restoreBounds ?? win.getBounds()) : win.getBounds();
+  const state: WindowState = {
+    x: bounds.x,
+    y: bounds.y,
+    width: bounds.width,
+    height: bounds.height,
+    maximized,
+    zoomLevel: win.webContents.getZoomLevel(),
+  };
+  try {
+    fs.mkdirSync(path.dirname(windowStatePath), { recursive: true });
+    fs.writeFileSync(windowStatePath, JSON.stringify(state));
+  } catch {
+    // best-effort
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Port & Token
 // ---------------------------------------------------------------------------
 
@@ -199,9 +243,12 @@ function connectWs(): void {
 // ---------------------------------------------------------------------------
 
 function createWindow(): BrowserWindow {
+  const saved = loadWindowState();
+
   const win = new BrowserWindow({
-    width: 1280,
-    height: 800,
+    ...(saved.x != null && saved.y != null ? { x: saved.x, y: saved.y } : {}),
+    width: saved.width,
+    height: saved.height,
     minWidth: 800,
     minHeight: 600,
     backgroundColor: "#000000",
@@ -213,6 +260,37 @@ function createWindow(): BrowserWindow {
     },
     title: isDevelopment ? "iara (Dev)" : "iara",
     autoHideMenuBar: true,
+  });
+
+  if (saved.maximized) {
+    win.maximize();
+  }
+
+  if (saved.zoomLevel) {
+    win.webContents.setZoomLevel(saved.zoomLevel);
+  }
+
+  // Track restore bounds and persist with debounce (survives SIGINT/SIGTERM)
+  let saveTimer: ReturnType<typeof setTimeout> | null = null;
+  const debouncedSave = () => {
+    if (saveTimer) clearTimeout(saveTimer);
+    saveTimer = setTimeout(() => saveWindowState(win), 500);
+  };
+
+  (win as any).__restoreBounds = win.getBounds();
+  win.on("resize", () => {
+    if (!win.isMaximized()) (win as any).__restoreBounds = win.getBounds();
+    debouncedSave();
+  });
+  win.on("move", () => {
+    if (!win.isMaximized()) (win as any).__restoreBounds = win.getBounds();
+    debouncedSave();
+  });
+  win.on("maximize", debouncedSave);
+  win.on("unmaximize", debouncedSave);
+  win.on("close", () => {
+    if (saveTimer) clearTimeout(saveTimer);
+    saveWindowState(win);
   });
 
   browserPanel.attach(win);
@@ -238,10 +316,10 @@ function createWindow(): BrowserWindow {
   // re-dispatch so the renderer (xterm.js) receives them.
   const ZOOM_STEP = 0.5;
   const zoomKeys: Record<string, (wc: Electron.WebContents) => void> = {
-    "=": (wc) => wc.setZoomLevel(wc.getZoomLevel() + ZOOM_STEP),
-    "+": (wc) => wc.setZoomLevel(wc.getZoomLevel() + ZOOM_STEP),
-    "-": (wc) => wc.setZoomLevel(wc.getZoomLevel() - ZOOM_STEP),
-    "0": (wc) => wc.setZoomLevel(0),
+    "=": (wc) => { wc.setZoomLevel(wc.getZoomLevel() + ZOOM_STEP); debouncedSave(); },
+    "+": (wc) => { wc.setZoomLevel(wc.getZoomLevel() + ZOOM_STEP); debouncedSave(); },
+    "-": (wc) => { wc.setZoomLevel(wc.getZoomLevel() - ZOOM_STEP); debouncedSave(); },
+    "0": (wc) => { wc.setZoomLevel(0); debouncedSave(); },
   };
 
   let redispatching = false;
@@ -295,7 +373,6 @@ function createWindow(): BrowserWindow {
 // ---------------------------------------------------------------------------
 
 function registerCustomProtocol(): void {
-  const fs = require("node:fs") as typeof import("node:fs");
   const staticRoot = path.join(process.resourcesPath, "web");
   const fallbackIndex = path.join(staticRoot, "index.html");
 
