@@ -67,9 +67,12 @@ export function registerTerminalHandlers(manager: TerminalManager): void {
       const repoNames = repoDirs.map((d) => path.basename(d));
       const envVars = mergeEnvForContext(project.slug, "root", repoNames);
 
+      // Use reposDir as cwd so Claude opens directly where repos live
+      const rootCwd = repoDirs.length > 0 ? reposDir : projectDir;
+
       return manager.create({
         taskId: `root:${params.projectId}`,
-        taskDir: projectDir,
+        taskDir: rootCwd,
         repoDirs,
         appendSystemPrompt: systemPrompt,
         ...(params.resumeSessionId != null ? { resumeSessionId: params.resumeSessionId } : {}),
