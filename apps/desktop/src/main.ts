@@ -214,6 +214,7 @@ function createWindow(): BrowserWindow {
       preload: path.join(__dirname, "preload.js"),
       contextIsolation: true,
       sandbox: true,
+      devTools: isDevelopment,
     },
     title: isDevelopment ? "iara (Dev)" : "iara",
     autoHideMenuBar: true,
@@ -237,17 +238,9 @@ function createWindow(): BrowserWindow {
     Menu.setApplicationMenu(null);
   }
 
-  // Block devtools in production
-  if (!isDevelopment) {
-    win.webContents.on("devtools-opened", () => {
-      win.webContents.closeDevTools();
-    });
-  }
-
   // Keyboard shortcuts handled at the Electron level (before Chromium processes them).
-  // Zoom is consumed here. DevTools shortcuts (Ctrl+Shift+I/J) are blocked so they
-  // don't steal focus from the terminal. Ctrl+Shift+C is NOT blocked — it must reach
-  // the renderer so xterm.js can copy the selection.
+  // Chromium steals Ctrl+Shift+C/I/J even with devTools:false — we must intercept and
+  // re-dispatch so the renderer (xterm.js) receives them.
   const ZOOM_STEP = 0.5;
   const zoomKeys: Record<string, (wc: Electron.WebContents) => void> = {
     "=": (wc) => wc.setZoomLevel(wc.getZoomLevel() + ZOOM_STEP),
@@ -255,11 +248,12 @@ function createWindow(): BrowserWindow {
     "-": (wc) => wc.setZoomLevel(wc.getZoomLevel() - ZOOM_STEP),
     "0": (wc) => wc.setZoomLevel(0),
   };
-  const blockedDevToolsKeys = new Set(["I", "J"]);
 
+  let redispatching = false;
   win.webContents.on("before-input-event", (event, input) => {
     if (input.type !== "keyDown") return;
     if (!(input.control || input.meta)) return;
+    if (redispatching) return;
 
     // Ctrl+key (no shift) → zoom only for =, +, -, 0
     if (!input.shift) {
@@ -267,13 +261,21 @@ function createWindow(): BrowserWindow {
       if (action) {
         action(win.webContents);
         event.preventDefault();
-        return;
       }
+      return;
     }
 
-    // Ctrl+Shift+I/J → block DevTools (accessible via menu in dev, blocked in prod)
-    if (blockedDevToolsKeys.has(input.key)) {
+    // Block Chromium DevTools shortcuts — they steal Ctrl+Shift+C/I/J from the terminal.
+    // DevTools is still accessible via F12.
+    if (input.key === "C" || input.key === "I" || input.key === "J") {
       event.preventDefault();
+      redispatching = true;
+      win.webContents.sendInputEvent({
+        type: "keyDown",
+        keyCode: input.key,
+        modifiers: ["control", "shift"],
+      });
+      redispatching = false;
     }
   });
 

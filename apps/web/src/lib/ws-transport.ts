@@ -91,17 +91,19 @@ class WsTransport {
   async request<M extends keyof WsMethods>(
     method: M,
     params: WsMethods[M]["params"],
+    options?: { timeoutMs?: number },
   ): Promise<WsMethods[M]["result"]> {
     // Ensure connected before first request
     await this.init();
 
     const id = String(this.nextId++);
+    const timeout = options?.timeoutMs ?? REQUEST_TIMEOUT_MS;
 
     const promise = new Promise<WsMethods[M]["result"]>((resolve, reject) => {
       const timer = setTimeout(() => {
         this.pending.delete(id);
-        reject(new Error(`Request "${method as string}" timed out after ${REQUEST_TIMEOUT_MS}ms`));
-      }, REQUEST_TIMEOUT_MS);
+        reject(new Error(`Request "${method as string}" timed out after ${timeout}ms`));
+      }, timeout);
 
       this.pending.set(id, {
         resolve: resolve as (value: unknown) => void,

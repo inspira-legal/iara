@@ -36,7 +36,12 @@ export function registerSessionHandlers(): void {
     const reposDir = path.join(projectDir, "default");
     const repoDirs = getRepoDirs(reposDir);
 
-    // Always include project root — root sessions use projectDir as cwd
+    // Include reposDir itself — root terminals run with cwd=reposDir
+    if (fs.existsSync(reposDir)) {
+      repoDirs.push(reposDir);
+    }
+
+    // Also include project root as a fallback
     repoDirs.push(projectDir);
 
     return listSessions(repoDirs);

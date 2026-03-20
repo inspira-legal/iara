@@ -6,6 +6,8 @@ import { z } from "zod";
 export interface SessionInfo {
   id: string;
   filePath: string;
+  /** The working directory where this session was originally created. */
+  cwd: string;
   title: string | null;
   createdAt: string;
   lastMessageAt: string;
@@ -44,7 +46,7 @@ export function listSessions(repoDirs: string[]): SessionInfo[] {
       const filePath = path.join(projectSessionDir, file);
       const meta = getSessionMetadata(filePath);
       if (meta) {
-        sessions.push({ id, filePath, ...meta });
+        sessions.push({ id, filePath, cwd: dir, ...meta });
       }
     }
   }

@@ -4,7 +4,7 @@ import type { SessionInfo } from "@iara/contracts";
 import { useSessionStore } from "~/stores/sessions";
 
 type SessionListProps = {
-  onLaunch?: (resumeSessionId?: string | undefined) => void;
+  onLaunch?: (resumeSessionId?: string | undefined, sessionCwd?: string | undefined) => void;
 } & ({ taskId: string; projectId?: never } | { projectId: string; taskId?: never });
 
 export function SessionList({ taskId, projectId, onLaunch }: SessionListProps) {
@@ -53,7 +53,7 @@ export function SessionList({ taskId, projectId, onLaunch }: SessionListProps) {
               {onLaunch ? (
                 <button
                   type="button"
-                  onClick={() => onLaunch(session.id)}
+                  onClick={() => onLaunch(session.id, session.cwd)}
                   className="flex w-full items-center gap-3 rounded-md px-2 py-1.5 text-left text-xs hover:bg-zinc-800"
                 >
                   <Play size={12} className="shrink-0 text-zinc-500" />

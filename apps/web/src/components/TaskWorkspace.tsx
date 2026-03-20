@@ -77,9 +77,9 @@ export function TaskWorkspace({ project, task }: TaskWorkspaceProps) {
     };
   }, [project.id]);
 
-  const handleLaunchSession = (resumeSessionId?: string) => {
+  const handleLaunchSession = (resumeSessionId?: string, sessionCwd?: string) => {
     setPendingResumeSessionId(resumeSessionId);
-    void createTerminal(task.id, resumeSessionId);
+    void createTerminal(task.id, resumeSessionId, sessionCwd);
   };
 
   const handleBack = () => {
@@ -178,7 +178,7 @@ function TaskDetailView({
   repoInfo: RepoInfo[];
   repoLoading: boolean;
   hasActiveTerminal: boolean;
-  onLaunchSession: (resumeSessionId?: string) => void;
+  onLaunchSession: (resumeSessionId?: string, sessionCwd?: string) => void;
 }) {
   const {
     isRegenerating,

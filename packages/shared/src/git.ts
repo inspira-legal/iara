@@ -104,13 +104,14 @@ export async function gitWorktreeAdd(
   worktreeDir: string,
   branch: string,
 ): Promise<void> {
+  const timeout = 30_000;
   try {
     // Try creating a new branch
-    await gitExec(["worktree", "add", worktreeDir, "-b", branch], repoDir);
+    await gitExec(["worktree", "add", worktreeDir, "-b", branch], repoDir, { timeout });
   } catch (err) {
     // If branch already exists, attach to it instead
     if (err instanceof GitOperationError && err.stderr.includes("already exists")) {
-      await gitExec(["worktree", "add", worktreeDir, branch], repoDir);
+      await gitExec(["worktree", "add", worktreeDir, branch], repoDir, { timeout });
     } else {
       throw err;
     }

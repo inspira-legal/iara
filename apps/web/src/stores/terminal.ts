@@ -17,8 +17,8 @@ interface TerminalState {
 
 interface TerminalActions {
   getEntry(taskId: string): TerminalEntry;
-  create(taskId: string, resumeSessionId?: string): Promise<void>;
-  createRoot(projectId: string, resumeSessionId?: string): Promise<void>;
+  create(taskId: string, resumeSessionId?: string, sessionCwd?: string): Promise<void>;
+  createRoot(projectId: string, resumeSessionId?: string, sessionCwd?: string): Promise<void>;
   restart(taskId: string): Promise<void>;
   destroy(taskId: string): Promise<void>;
   resetToSessions(taskId: string): void;
@@ -37,16 +37,19 @@ export const useTerminalStore = create<TerminalState & TerminalActions>((set, ge
 
   getEntry: (taskId) => get().entries.get(taskId) ?? DEFAULT_ENTRY,
 
-  create: async (taskId, resumeSessionId?) => {
+  create: async (taskId, resumeSessionId?, sessionCwd?) => {
     set((state) => {
       const next = new Map(state.entries);
       next.set(taskId, { ...DEFAULT_ENTRY, status: "connecting" });
       return { entries: next };
     });
     try {
-      const params: { taskId: string; resumeSessionId?: string } = { taskId };
+      const params: { taskId: string; resumeSessionId?: string; sessionCwd?: string } = { taskId };
       if (resumeSessionId !== undefined) {
         params.resumeSessionId = resumeSessionId;
+      }
+      if (sessionCwd !== undefined) {
+        params.sessionCwd = sessionCwd;
       }
       const result = await transport.request("terminal.create", params);
       set((state) => {
@@ -71,7 +74,7 @@ export const useTerminalStore = create<TerminalState & TerminalActions>((set, ge
     }
   },
 
-  createRoot: async (projectId, resumeSessionId?) => {
+  createRoot: async (projectId, resumeSessionId?, sessionCwd?) => {
     const key = `root:${projectId}`;
     set((state) => {
       const next = new Map(state.entries);
@@ -79,12 +82,20 @@ export const useTerminalStore = create<TerminalState & TerminalActions>((set, ge
       return { entries: next };
     });
     try {
-      const params: { projectId: string; root: true; resumeSessionId?: string } = {
+      const params: {
+        projectId: string;
+        root: true;
+        resumeSessionId?: string;
+        sessionCwd?: string;
+      } = {
         projectId,
         root: true,
       };
       if (resumeSessionId !== undefined) {
         params.resumeSessionId = resumeSessionId;
+      }
+      if (sessionCwd !== undefined) {
+        params.sessionCwd = sessionCwd;
       }
       const result = await transport.request("terminal.create", params);
       set((state) => {

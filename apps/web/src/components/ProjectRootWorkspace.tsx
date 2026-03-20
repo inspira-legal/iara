@@ -79,9 +79,9 @@ export function ProjectRootWorkspace({ project }: ProjectRootWorkspaceProps) {
     };
   }, [project.id]);
 
-  const handleLaunchSession = (resumeSessionId?: string) => {
+  const handleLaunchSession = (resumeSessionId?: string, sessionCwd?: string) => {
     setPendingResumeSessionId(resumeSessionId);
-    void createRoot(project.id, resumeSessionId);
+    void createRoot(project.id, resumeSessionId, sessionCwd);
   };
 
   const handleBack = () => {

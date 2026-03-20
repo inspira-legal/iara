@@ -1,12 +1,13 @@
 import type { IDisposable } from "@xterm/xterm";
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
-import { ClipboardAddon } from "@xterm/addon-clipboard";
+import { ClipboardAddon, type IClipboardProvider } from "@xterm/addon-clipboard";
 import { WebLinksAddon } from "@xterm/addon-web-links";
 import { WebFontsAddon } from "@xterm/addon-web-fonts";
 import { transport } from "./ws-transport.js";
 import { setupTerminalKeybindings, type KeybindingHandlers } from "./terminal-keybindings.js";
 import { findFileLinks, isRelativePath, parseFilePath } from "./terminal-links.js";
+import { writeClipboard, readClipboard } from "./clipboard.js";
 
 interface CachedTerminal {
   term: Terminal;
@@ -78,7 +79,13 @@ export function getOrCreateTerminal(terminalId: string): CachedTerminal {
 
   const fitAddon = new FitAddon();
   term.loadAddon(fitAddon);
-  term.loadAddon(new ClipboardAddon());
+  // Custom clipboard provider that uses the desktop bridge (Electron IPC) when
+  // available instead of navigator.clipboard which fails on custom protocol schemes.
+  const clipboardProvider: IClipboardProvider = {
+    readText: () => readClipboard(),
+    writeText: (_selection, text) => writeClipboard(text),
+  };
+  term.loadAddon(new ClipboardAddon(undefined, clipboardProvider));
 
   // Web links: Ctrl+Click to open URLs
   term.loadAddon(

@@ -67,8 +67,10 @@ export function registerTerminalHandlers(manager: TerminalManager): void {
       const repoNames = repoDirs.map((d) => path.basename(d));
       const envVars = mergeEnvForContext(project.slug, "root", repoNames);
 
-      // Use reposDir as cwd so Claude opens directly where repos live
-      const rootCwd = repoDirs.length > 0 ? reposDir : projectDir;
+      // Use reposDir as cwd so Claude opens directly where repos live.
+      // When resuming a session, honour sessionCwd so the hash matches the original.
+      const defaultCwd = repoDirs.length > 0 ? reposDir : projectDir;
+      const rootCwd = params.resumeSessionId && params.sessionCwd ? params.sessionCwd : defaultCwd;
 
       return manager.create({
         taskId: `root:${params.projectId}`,
@@ -125,12 +127,15 @@ export function registerTerminalHandlers(manager: TerminalManager): void {
     const repoNames = repos.map((r) => r.name);
     const envVars = mergeEnvForContext(project.slug, task.slug, repoNames);
 
+    // When resuming a session, honour sessionCwd so the hash matches the original
+    const effectiveCwd = params.resumeSessionId && params.sessionCwd ? params.sessionCwd : taskDir;
+
     return manager.create({
       taskId: params.taskId,
-      taskDir,
+      taskDir: effectiveCwd,
       repoDirs,
       taskContext: {
-        taskDir,
+        taskDir: effectiveCwd,
         projectName: project.name,
         taskName: task.name,
         taskDescription: task.description,

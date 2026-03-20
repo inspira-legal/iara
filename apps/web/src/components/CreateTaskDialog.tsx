@@ -57,10 +57,11 @@ export function CreateTaskDialog({ open, onClose, projectId, project }: CreateTa
 
     try {
       // Synchronous — fast metadata only, no code exploration
-      const result = await transport.request("tasks.suggest", {
-        projectId,
-        userGoal: userGoal.trim(),
-      });
+      const result = await transport.request(
+        "tasks.suggest",
+        { projectId, userGoal: userGoal.trim() },
+        { timeoutMs: 120_000 },
+      );
       setName(result.name);
       setBranches(result.branches ?? {});
       setStep("review");

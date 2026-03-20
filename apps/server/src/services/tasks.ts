@@ -7,7 +7,6 @@ import { gitWorktreeAdd, gitWorktreeRemove } from "@iara/shared/git";
 import { db, schema } from "../db.js";
 import { ensureGlobalSymlinks } from "./env.js";
 import { getProject, getProjectDir } from "./projects.js";
-import { pullRepos } from "./repos.js";
 
 export function listTasks(projectId: string): Task[] {
   const rows = db.select().from(schema.tasks).where(eq(schema.tasks.projectId, projectId)).all();
@@ -43,8 +42,8 @@ export async function createTask(projectId: string, input: CreateTaskInput): Pro
     updatedAt: now,
   };
 
-  // Best-effort pull — fire-and-forget to avoid blocking task creation
-  void pullRepos(project.slug).catch(() => {});
+  // Skip pull — it can conflict with a running Claude terminal's git operations
+  // and cause freezes. Users can pull manually or via the repos.fetch endpoint.
 
   // Create worktrees BEFORE inserting into DB — rollback is just fs cleanup
   const projectDir = getProjectDir(project.slug);

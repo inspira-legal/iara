@@ -50,6 +50,8 @@ export interface LaunchResult {
 export interface SessionInfo {
   id: string;
   filePath: string;
+  /** The working directory where this session was originally created. */
+  cwd: string;
   title: string | null;
   createdAt: string;
   lastMessageAt: string;
