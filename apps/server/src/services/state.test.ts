@@ -90,10 +90,10 @@ describe("AppState", () => {
       const state = new AppState(projectsDir, stateDir);
       const projects = state.getState().projects;
       expect(projects).toHaveLength(1);
-      expect(projects[0].id).toBe("my-app");
-      expect(projects[0].slug).toBe("my-app");
-      expect(projects[0].name).toBe("My App");
-      expect(projects[0].repoSources).toEqual(["https://github.com/org/repo"]);
+      expect(projects[0]!.id).toBe("my-app");
+      expect(projects[0]!.slug).toBe("my-app");
+      expect(projects[0]!.name).toBe("My App");
+      expect(projects[0]!.repoSources).toEqual(["https://github.com/org/repo"]);
     });
 
     it("discovers multiple projects", () => {
@@ -319,7 +319,7 @@ describe("AppState", () => {
       createFakeWorktree("my-app", "my-task", "unknown-repo", "feat/task");
       const state = new AppState(projectsDir, stateDir);
       expect(state.getProject("my-app")!.workspaces).toHaveLength(1);
-      expect(state.getProject("my-app")!.workspaces[0].type).toBe("default");
+      expect(state.getProject("my-app")!.workspaces[0]!.type).toBe("default");
     });
 
     it("accepts task when worktree names match default/ repo names", () => {

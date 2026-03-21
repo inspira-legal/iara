@@ -219,12 +219,14 @@ async function createWorkspace(
         return fs.statSync(path.join(reposDir, name)).isDirectory();
       });
 
-      for (const repo of repos) {
-        const repoDir = path.join(reposDir, repo);
-        const wtDir = path.join(wsDir, repo);
-        const repoBranch = branchesMap?.[repo] ?? branch;
-        await gitWorktreeAdd(repoDir, wtDir, repoBranch);
-      }
+      await Promise.all(
+        repos.map((repo: string) => {
+          const repoDir = path.join(reposDir, repo);
+          const wtDir = path.join(wsDir, repo);
+          const repoBranch = branchesMap?.[repo] ?? branch;
+          return gitWorktreeAdd(repoDir, wtDir, repoBranch);
+        }),
+      );
 
       // Create global env symlinks in workspace dir
       ensureGlobalSymlinks(project.slug, wsDir, repos);
@@ -271,16 +273,16 @@ async function cleanupWorktrees(projectDir: string, wsDir: string): Promise<void
       return fs.statSync(path.join(reposDir, name)).isDirectory();
     });
 
-    for (const repo of repos) {
-      const wtDir = path.join(wsDir, repo);
-      if (fs.existsSync(wtDir)) {
+    await Promise.all(
+      repos.map(async (repo: string) => {
+        const wtDir = path.join(wsDir, repo);
         try {
           await gitWorktreeRemove(path.join(reposDir, repo), wtDir);
         } catch {
           // Worktree may already be removed
         }
-      }
-    }
+      }),
+    );
   }
 
   // Remove the workspace directory (TASK.md, PROJECT.md symlink, any remaining files)

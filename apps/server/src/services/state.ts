@@ -57,7 +57,7 @@ export class AppState {
     const defaultDir = path.join(projectDir, "default");
 
     // Directory structure is the source of truth
-    if (!this.hasGitRepos(defaultDir)) return null;
+    if (this.listRepoNames(defaultDir).size === 0) return null;
 
     // Read or auto-create project.json for metadata
     const projectFile = new JsonFile(path.join(projectDir, "project.json"), ProjectFileSchema);
@@ -88,6 +88,9 @@ export class AppState {
     const workspaces: Workspace[] = [];
     const defaultDir = path.join(projectDir, "default");
 
+    // Cache repo names from default/ once — avoids N+1 readdirSync for N task workspaces
+    const defaultRepoNames = this.listRepoNames(defaultDir);
+
     let entries: fs.Dirent[];
     try {
       entries = fs.readdirSync(projectDir, { withFileTypes: true });
@@ -102,10 +105,9 @@ export class AppState {
 
       // Directory structure validation — this decides if it's a workspace
       if (isDefault) {
-        if (!this.hasGitRepos(wsDir)) continue;
+        if (defaultRepoNames.size === 0) continue;
       } else {
-        if (!this.hasWorktrees(wsDir)) continue;
-        if (!this.worktreesMatchRepos(wsDir, defaultDir)) continue;
+        if (!this.hasMatchingWorktrees(wsDir, defaultRepoNames)) continue;
       }
 
       // Read or auto-create workspace.json for metadata
@@ -133,62 +135,40 @@ export class AppState {
     return workspaces;
   }
 
-  /** Check if directory contains at least one git repo (.git is a directory). */
-  private hasGitRepos(dir: string): boolean {
+  /** List repo names in a directory (subdirs where .git is a directory). */
+  private listRepoNames(dir: string): Set<string> {
     try {
-      return fs.readdirSync(dir).some((name) => {
+      const names = new Set<string>();
+      for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+        if (!entry.isDirectory()) continue;
         try {
-          const gitPath = path.join(dir, name, ".git");
-          return fs.statSync(path.join(dir, name)).isDirectory() && fs.statSync(gitPath).isDirectory();
-        } catch {
-          return false;
-        }
-      });
-    } catch {
-      return false;
-    }
-  }
-
-  /** Check if directory contains at least one git worktree (.git is a file). */
-  private hasWorktrees(dir: string): boolean {
-    try {
-      return fs.readdirSync(dir).some((name) => {
-        try {
-          const gitPath = path.join(dir, name, ".git");
-          return fs.statSync(path.join(dir, name)).isDirectory() && fs.statSync(gitPath).isFile();
-        } catch {
-          return false;
-        }
-      });
-    } catch {
-      return false;
-    }
-  }
-
-  /** Check that worktree names in a task workspace match repo names in default/. */
-  private worktreesMatchRepos(wsDir: string, defaultDir: string): boolean {
-    try {
-      const repoNames = new Set(
-        fs.readdirSync(defaultDir).filter((name) => {
-          try {
-            const gitPath = path.join(defaultDir, name, ".git");
-            return fs.statSync(path.join(defaultDir, name)).isDirectory() && fs.statSync(gitPath).isDirectory();
-          } catch {
-            return false;
+          if (fs.statSync(path.join(dir, entry.name, ".git")).isDirectory()) {
+            names.add(entry.name);
           }
-        }),
-      );
-      if (repoNames.size === 0) return false;
-
-      // At least one worktree in the task workspace must match a repo in default/
-      return fs.readdirSync(wsDir).some((name) => {
-        try {
-          const gitPath = path.join(wsDir, name, ".git");
-          return fs.statSync(gitPath).isFile() && repoNames.has(name);
         } catch {
-          return false;
+          // no .git or not a directory
         }
-      });
+      }
+      return names;
+    } catch {
+      return new Set();
+    }
+  }
+
+  /** Check if directory has worktrees (.git files) with names matching the given repo set. */
+  private hasMatchingWorktrees(wsDir: string, repoNames: Set<string>): boolean {
+    if (repoNames.size === 0) return false;
+    try {
+      for (const entry of fs.readdirSync(wsDir, { withFileTypes: true })) {
+        if (!entry.isDirectory()) continue;
+        if (!repoNames.has(entry.name)) continue;
+        try {
+          if (fs.statSync(path.join(wsDir, entry.name, ".git")).isFile()) return true;
+        } catch {
+          // no .git or not a file
+        }
+      }
+      return false;
     } catch {
       return false;
     }
@@ -211,7 +191,7 @@ export class AppState {
           // The HEAD file is in the worktree data dir
           const content = fs.readFileSync(gitPath, "utf-8").trim();
           const match = content.match(/^gitdir:\s*(.+)$/);
-          if (match) {
+          if (match?.[1]) {
             headPath = path.join(match[1], "HEAD");
           }
         }
@@ -321,7 +301,7 @@ export class AppState {
   }
 
   /** Update project.json for an existing project (preserves createdAt). */
-  updateProject(slug: string, updates: { name?: string; repoSources?: string[] }): void {
+  updateProject(slug: string, updates: { name?: string; description?: string; repoSources?: string[] }): void {
     const projectDir = this.getProjectDir(slug);
     const file = new JsonFile(path.join(projectDir, "project.json"), ProjectFileSchema);
     const existing = file.readOrThrow();

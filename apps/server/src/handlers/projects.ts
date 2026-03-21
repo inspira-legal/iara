@@ -1,7 +1,6 @@
 import * as crypto from "node:crypto";
 import * as fs from "node:fs";
 import * as path from "node:path";
-import type { WsPushEvents } from "@iara/contracts";
 import type { PortAllocator } from "@iara/orchestrator/ports";
 import type { ScriptSupervisor } from "@iara/orchestrator/supervisor";
 import { gitClone } from "@iara/shared/git";
@@ -13,9 +12,8 @@ import { loadPrompt } from "../prompts/index.js";
 import { getRepoInfo, addRepo, fetchRepos } from "../services/repos.js";
 import type { AppState } from "../services/state.js";
 import type { ProjectsWatcher } from "../services/watcher.js";
+import type { PushFn } from "./index.js";
 import { triggerDiscovery } from "./scripts.js";
-
-type PushFn = <E extends keyof WsPushEvents>(event: E, params: WsPushEvents[E]) => void;
 
 const ProjectMetadataSchema = z.object({
   name: z.string().min(1).describe("nome curto e descritivo do projeto"),
@@ -166,7 +164,7 @@ export function registerProjectHandlers(
     // Update description in project.json
     const projectDir = appState.getProjectDir(project.slug);
     const projectJsonPath = path.join(projectDir, "project.json");
-    appState.updateProject(project.slug, {});
+    appState.updateProject(project.slug, { description });
     watcher.suppressNext(projectJsonPath);
 
     const requestId = crypto.randomUUID();

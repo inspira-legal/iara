@@ -1,13 +1,11 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
-import type { WsPushEvents } from "@iara/contracts";
+import type { PushFn } from "../types.js";
 import type { AppState } from "./state.js";
-
-type PushFn = <E extends keyof WsPushEvents>(event: E, params: WsPushEvents[E]) => void;
 
 export class ProjectsWatcher {
   private watcher: fs.FSWatcher | null = null;
-  private ownWrites = new Set<string>();
+  private ownWrites = new Map<string, ReturnType<typeof setTimeout>>();
   private debounceTimer: ReturnType<typeof setTimeout> | null = null;
   private pendingChanges = new Map<string, "project" | "workspace">();
 
@@ -26,7 +24,12 @@ export class ProjectsWatcher {
         if (basename !== "project.json" && basename !== "workspace.json") return;
 
         const fullPath = path.join(this.projectsDir, filename);
-        if (this.ownWrites.delete(fullPath)) return;
+        if (this.ownWrites.has(fullPath)) {
+          const timer = this.ownWrites.get(fullPath);
+          if (timer) clearTimeout(timer);
+          this.ownWrites.delete(fullPath);
+          return;
+        }
 
         const type = basename === "project.json" ? "project" : "workspace";
         this.pendingChanges.set(filename, type);
@@ -39,8 +42,10 @@ export class ProjectsWatcher {
 
   /** Mark a path as "we wrote this, don't trigger". */
   suppressNext(fullPath: string): void {
-    this.ownWrites.add(fullPath);
-    setTimeout(() => this.ownWrites.delete(fullPath), 1000);
+    const existing = this.ownWrites.get(fullPath);
+    if (existing) clearTimeout(existing);
+    const timer = setTimeout(() => this.ownWrites.delete(fullPath), 1000);
+    this.ownWrites.set(fullPath, timer);
   }
 
   private scheduleFlush(): void {
@@ -50,37 +55,31 @@ export class ProjectsWatcher {
 
   private flush(): void {
     let needsFullResync = false;
+    const projectSlugs = new Set<string>();
 
-    for (const [filename, type] of this.pendingChanges) {
+    for (const [filename] of this.pendingChanges) {
       const parts = filename.split(path.sep);
-      const projectSlug = parts[0] as string;
+      projectSlugs.add(parts[0] as string);
+    }
 
-      if (type === "project") {
-        const project = this.appState.rescanProject(projectSlug);
-        if (project) {
-          this.pushFn("project:changed", { project });
-        } else {
-          needsFullResync = true;
-        }
-      } else {
-        const project = this.appState.rescanProject(projectSlug);
-        if (project) {
-          const wsSlug = parts[1] as string;
-          const workspace = project.workspaces.find((w) => w.slug === wsSlug);
-          if (workspace) {
-            this.pushFn("workspace:changed", { workspace });
-          } else {
-            needsFullResync = true;
-          }
-        } else {
-          needsFullResync = true;
-        }
+    for (const projectSlug of projectSlugs) {
+      const project = this.appState.rescanProject(projectSlug);
+      if (!project) {
+        needsFullResync = true;
       }
     }
 
     if (needsFullResync) {
       this.appState.scan();
       this.pushFn("state:resync", { state: this.appState.getState() });
+    } else {
+      // Push individual project changes
+      for (const projectSlug of projectSlugs) {
+        const project = this.appState.getProject(projectSlug);
+        if (project) {
+          this.pushFn("project:changed", { project });
+        }
+      }
     }
 
     this.pendingChanges.clear();

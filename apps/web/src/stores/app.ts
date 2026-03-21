@@ -200,18 +200,19 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
   },
 
   onWorkspaceChanged: (workspace) => {
-    set((state) => ({
-      projects: state.projects.map((p) => {
-        if (p.id !== workspace.projectId) return p;
-        const wIdx = p.workspaces.findIndex((w) => w.id === workspace.id);
-        if (wIdx === -1) {
-          return { ...p, workspaces: [...p.workspaces, workspace] };
-        }
-        const nextWorkspaces = [...p.workspaces];
-        nextWorkspaces[wIdx] = workspace;
-        return { ...p, workspaces: nextWorkspaces };
-      }),
-    }));
+    set((state) => {
+      const pIdx = state.projects.findIndex((p) => p.id === workspace.projectId);
+      if (pIdx === -1) return state;
+      const project = state.projects[pIdx]!;
+      const wIdx = project.workspaces.findIndex((w) => w.id === workspace.id);
+      const nextWorkspaces =
+        wIdx === -1
+          ? [...project.workspaces, workspace]
+          : [...project.workspaces.slice(0, wIdx), workspace, ...project.workspaces.slice(wIdx + 1)];
+      const next = [...state.projects];
+      next[pIdx] = { ...project, workspaces: nextWorkspaces };
+      return { projects: next };
+    });
   },
 
   onStateResync: (payload) => {

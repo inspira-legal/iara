@@ -1,10 +1,8 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
-import type { WsPushEvents } from "@iara/contracts";
+import type { PushFn } from "../types.js";
 import { computeProjectHash } from "./sessions.js";
 import type { AppState } from "./state.js";
-
-type PushFn = <E extends keyof WsPushEvents>(event: E, params: WsPushEvents[E]) => void;
 
 const DEBOUNCE_MS = 500;
 

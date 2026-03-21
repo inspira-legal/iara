@@ -1,4 +1,3 @@
-import type { WsPushEvents } from "@iara/contracts";
 import type { ScriptSupervisor } from "@iara/orchestrator/supervisor";
 import type { PortAllocator } from "@iara/orchestrator/ports";
 import type { NotificationService } from "../services/notifications.js";
@@ -20,7 +19,8 @@ import { registerWorkspaceHandlers } from "./workspaces.js";
 import { registerFileHandlers } from "./files.js";
 import { registerTerminalHandlers } from "./terminal.js";
 
-export type PushFn = <E extends keyof WsPushEvents>(event: E, params: WsPushEvents[E]) => void;
+import type { PushFn } from "../types.js";
+export type { PushFn };
 
 export interface HandlerDeps {
   appState: AppState;

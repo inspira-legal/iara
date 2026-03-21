@@ -1,7 +1,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as crypto from "node:crypto";
-import type { EssencialKey, ResolvedServiceDef, WsPushEvents } from "@iara/contracts";
+import type { EssencialKey, ResolvedServiceDef } from "@iara/contracts";
 import { ScriptSupervisor } from "@iara/orchestrator/supervisor";
 import { PortAllocator } from "@iara/orchestrator/ports";
 import { parseScriptsYaml } from "@iara/orchestrator/parser";
@@ -11,8 +11,7 @@ import { registerMethod } from "../router.js";
 import { runClaude, activeRuns, streamClaudeRun } from "../services/claude-runner.js";
 import { mergeEnvForWorkspace } from "../services/env.js";
 import type { AppState } from "../services/state.js";
-
-type PushFn = <E extends keyof WsPushEvents>(event: E, params: WsPushEvents[E]) => void;
+import type { PushFn } from "./index.js";
 
 function getScriptsYamlPath(appState: AppState, projectSlug: string): string {
   return path.join(appState.getProjectDir(projectSlug), "scripts.yaml");
