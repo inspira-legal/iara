@@ -17,7 +17,8 @@ import { ProjectsWatcher } from "./services/watcher.js";
 import { getProjectsDir } from "./services/config.js";
 import { stateDir } from "./env.js";
 
-syncShellEnvironment();
+// Shell env must complete before anything that depends on PATH (git, etc.)
+await syncShellEnvironment();
 syncEnvSymlinks();
 
 const port = Number(

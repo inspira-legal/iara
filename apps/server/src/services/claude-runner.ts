@@ -103,7 +103,7 @@ async function runQueryStream(
     allowedTools: ["Read", "Glob", "Grep", "Write"],
     disallowedTools: ["Bash", "Edit"],
     maxTurns: config.maxTurns,
-    persistSession: true,
+    persistSession: false,
     abortController: config.abortController,
     canUseTool: async (toolName: string, input: Record<string, unknown>) => {
       if (toolName === "Write" && input.file_path !== config.tempFile) {
