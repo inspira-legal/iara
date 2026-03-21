@@ -2,6 +2,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { loadPrompt } from "../prompts/index.js";
 
+
 export interface LaunchConfig {
   taskDir: string;
   repoDirs: string[];
@@ -61,10 +62,12 @@ export function buildSystemPrompt(ctx: TaskContext): string {
     const worktreeList = ctx.repos
       .map((r) => `${r.name}/  ← git worktree (branch: ${ctx.branch}, origin: ${r.mainRepoPath})`)
       .join("\n");
+    const defaultWorkspacePath = path.dirname(ctx.repos[0]!.mainRepoPath);
     sections.push(
       loadPrompt("system-worktrees", {
         worktree_list: worktreeList,
         example_repo_path: ctx.repos[0]?.worktreePath ?? "<repo-path>",
+        default_workspace_path: defaultWorkspacePath,
       }),
     );
   }

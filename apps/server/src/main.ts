@@ -91,7 +91,8 @@ httpServer.on("listening", async () => {
 
   // Register hooks in Claude settings
   try {
-    mergeHooks(bridgePath);
+    const hooksDir = path.join(import.meta.dirname, "hooks");
+    mergeHooks(bridgePath, hooksDir);
   } catch (err) {
     console.error("Failed to merge hooks:", err);
   }

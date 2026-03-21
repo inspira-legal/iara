@@ -76,7 +76,7 @@ A tela de projeto (ProjectView) hoje mistura gestao de repos com sessoes e nao t
   - Resolve repos em `default/` do projeto
   - repoDirs = cada repo em `default/`
   - Lanca na branch que o repo estiver — sem checkout, sem deteccao
-  - env inclui `IARA_ROOT=1`, `IARA_PROJECT_ID`, `IARA_PROJECT_DIR`
+  - env inclui `IARA_WORKSPACE_TYPE=default`, `IARA_WORKSPACE_ID`, `IARA_WORKSPACE_DIR`, `IARA_PROJECT_ID`, `IARA_PROJECT_DIR`
   - system prompt usa `buildRootPrompt()`
 
 ### REQ-RT-07: Selecao na sidebar — state management

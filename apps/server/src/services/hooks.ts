@@ -20,12 +20,19 @@ interface HookDefinition {
 }
 
 const HOOK_MARKER = "IARA_SERVER_SOCKET";
+const GUARDRAILS_MARKER = "guardrails.sh";
 
-export function mergeHooks(bridgePath: string): void {
+export function mergeHooks(bridgePath: string, hooksDir: string): void {
+  const guardrailsPath = path.join(hooksDir, "guardrails.sh");
   const settingsPath = getClaudeSettingsPath();
   const settings = readSettings(settingsPath);
 
   const iaraHooks: HookDefinition[] = [
+    {
+      event: "PreToolUse",
+      matcher: "Bash|Edit|Write",
+      command: `sh ${guardrailsPath}`,
+    },
     {
       event: "PostToolUse",
       matcher: "",
@@ -51,7 +58,9 @@ export function mergeHooks(bridgePath: string): void {
 
     const entries = hooks[hook.event]!;
     const alreadyRegistered = entries.some((entry) =>
-      entry.hooks?.some((h) => h.command.includes(HOOK_MARKER)),
+      entry.hooks?.some(
+        (h) => h.command.includes(HOOK_MARKER) || h.command.includes(GUARDRAILS_MARKER),
+      ),
     );
 
     if (!alreadyRegistered) {
@@ -75,7 +84,10 @@ export function removeHooks(): void {
 
   for (const event of Object.keys(hooks)) {
     const filtered = (hooks[event] ?? []).filter(
-      (entry) => !entry.hooks?.some((h) => h.command.includes(HOOK_MARKER)),
+      (entry) =>
+        !entry.hooks?.some(
+          (h) => h.command.includes(HOOK_MARKER) || h.command.includes(GUARDRAILS_MARKER),
+        ),
     );
     hooks[event] = filtered;
 

@@ -85,7 +85,9 @@ export function registerTerminalHandlers(appState: AppState, manager: TerminalMa
         env: {
           ...envVars,
           ...getAutocompactEnv(appState),
-          IARA_ROOT: "1",
+          IARA_WORKSPACE_TYPE: "default",
+          IARA_WORKSPACE_ID: params.workspaceId,
+          IARA_WORKSPACE_DIR: rootCwd,
           IARA_PROJECT_ID: projectSlug,
           IARA_PROJECT_DIR: projectDir,
         },
@@ -141,7 +143,9 @@ export function registerTerminalHandlers(appState: AppState, manager: TerminalMa
       env: {
         ...envVars,
         ...getAutocompactEnv(appState),
-        IARA_TASK_ID: params.workspaceId,
+        IARA_WORKSPACE_TYPE: "task",
+        IARA_WORKSPACE_ID: params.workspaceId,
+        IARA_WORKSPACE_DIR: workspaceDir,
         IARA_PROJECT_ID: projectSlug,
         IARA_PROJECT_DIR: projectDir,
       },
