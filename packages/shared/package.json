@@ -23,6 +23,10 @@
     "./json-file": {
       "types": "./src/json-file.ts",
       "import": "./src/json-file.ts"
+    },
+    "./process": {
+      "types": "./src/process.ts",
+      "import": "./src/process.ts"
     }
   },
   "scripts": {

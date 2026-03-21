@@ -7,8 +7,6 @@ export type {
   DesktopBridge,
   EssencialKey,
   GitStatusResult,
-  LaunchClaudeInput,
-  LaunchResult,
   ResolvedServiceDef,
   ScriptEntry,
   ScriptOutputLevel,

@@ -5,8 +5,6 @@ import type {
   CreateWorkspaceInput,
   EssencialKey,
   GitStatusResult,
-  LaunchClaudeInput,
-  LaunchResult,
   ScriptStatus,
   ScriptsConfig,
   SessionInfo,
@@ -74,9 +72,6 @@ export type WsMethods = {
     params: { workspaceId: string; repoName: string; newBranch: string };
     result: void;
   };
-
-  // Launcher
-  "launcher.launch": { params: LaunchClaudeInput; result: LaunchResult };
 
   // Sessions
   "sessions.list": { params: { workspaceId: string }; result: SessionInfo[] };
