@@ -13,6 +13,7 @@ import { RegenerationBanner } from "./RegenerationBanner";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { PromptPreview } from "./PromptPreview";
 import { RepoCard, RepoSkeleton } from "./RepoCard";
+import { GitSyncButton } from "./GitSyncButton";
 import { Button } from "./ui/Button";
 import { SectionHeader } from "./ui/SectionHeader";
 import { EmptyState } from "./ui/EmptyState";
@@ -93,6 +94,7 @@ export function DefaultWorkspace({ project }: DefaultWorkspaceProps) {
           </div>
         </div>
         <div className="ml-auto flex items-center gap-1">
+          <GitSyncButton projectId={project.id} repoInfo={repoInfo} onSynced={setRepoInfo} />
           <Button
             variant="ghost"
             size="icon-md"

@@ -25,6 +25,7 @@ export type {
   EnvRepoEntries,
   Project,
   RepoInfo,
+  SyncResult,
   Workspace,
 } from "./models.js";
 export type {

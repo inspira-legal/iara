@@ -1,8 +1,8 @@
 import { execSync } from "node:child_process";
 import * as fs from "node:fs";
 import * as path from "node:path";
-import type { AddRepoInput, CloneProgress, RepoInfo } from "@iara/contracts";
-import { gitCloneWithProgress, gitFetch, gitPull, gitWorktreeAdd } from "@iara/shared/git";
+import type { AddRepoInput, CloneProgress, RepoInfo, SyncResult } from "@iara/contracts";
+import { gitCloneWithProgress, gitFetch, gitPull, gitPush, gitWorktreeAdd } from "@iara/shared/git";
 import type { AppState } from "./state.js";
 
 export async function getRepoInfo(appState: AppState, projectSlug: string): Promise<RepoInfo[]> {
@@ -105,15 +105,30 @@ export async function addRepo(
 }
 
 /**
- * Pull default branch on all repos in default/ (updates base for new worktrees).
- * Best-effort: skips repos that fail (no upstream, network error, etc).
+ * Sync all repos in default/: pull (ff-only) then push.
+ * Returns per-repo results so the UI can show what happened.
  */
-export async function pullRepos(appState: AppState, projectSlug: string): Promise<void> {
+export async function syncRepos(appState: AppState, projectSlug: string): Promise<SyncResult[]> {
   const repos = appState.discoverRepos(projectSlug);
   const reposDir = path.join(appState.getProjectDir(projectSlug), "default");
 
-  await Promise.all(
-    repos.map((name: string) => gitPull(path.join(reposDir, name)).catch(() => {})),
+  return Promise.all(
+    repos.map(async (name: string): Promise<SyncResult> => {
+      const repoPath = path.join(reposDir, name);
+      try {
+        await gitPull(repoPath);
+        await gitPush(repoPath).catch(() => {
+          // Push may fail (no upstream, nothing to push) — not fatal
+        });
+        return { repo: name, status: "ok" };
+      } catch (err) {
+        return {
+          repo: name,
+          status: "error",
+          error: err instanceof Error ? err.message : String(err),
+        };
+      }
+    }),
   );
 }
 

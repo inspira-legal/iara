@@ -50,3 +50,9 @@ export interface CloneProgress {
   message?: string;
   error?: string;
 }
+
+export interface SyncResult {
+  repo: string;
+  status: "ok" | "error";
+  error?: string;
+}
