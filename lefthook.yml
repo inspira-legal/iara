@@ -1,0 +1,16 @@
+pre-commit:
+  parallel: true
+  commands:
+    fmt-check:
+      run: bun fmt:check
+    lint:
+      run: bun lint
+    typecheck:
+      run: bun typecheck
+    knip:
+      run: bunx knip --no-progress
+
+pre-push:
+  commands:
+    test:
+      run: bun run test

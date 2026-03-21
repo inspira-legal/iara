@@ -1,0 +1,17 @@
+{
+  "$schema": "https://unpkg.com/knip@6/schema.json",
+  "workspaces": {
+    "apps/web": {
+      "entry": ["src/**/*.test.{ts,tsx}"]
+    },
+    "packages/contracts": {
+      "includeEntryExports": true
+    },
+    "packages/orchestrator": {
+      "includeEntryExports": true
+    },
+    "packages/shared": {
+      "includeEntryExports": true
+    }
+  }
+}
