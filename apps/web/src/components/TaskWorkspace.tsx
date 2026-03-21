@@ -10,6 +10,7 @@ import { EnvEditor } from "./EnvEditor";
 import { TerminalView } from "./TerminalView";
 import { SessionList } from "./SessionList";
 import { RepoCard, RepoSkeleton } from "./RepoCard";
+import { GitSyncButton } from "./GitSyncButton";
 import { Button } from "./ui/Button";
 import { SectionHeader } from "./ui/SectionHeader";
 import { EmptyState } from "./ui/EmptyState";
@@ -97,6 +98,7 @@ export function TaskWorkspace({ project, task }: TaskWorkspaceProps) {
           )}
         </div>
         <div className="ml-auto flex items-center gap-1">
+          <GitSyncButton projectId={project.id} repoInfo={repoInfo} onSynced={setRepoInfo} />
           <Button
             variant="ghost"
             size="icon-md"

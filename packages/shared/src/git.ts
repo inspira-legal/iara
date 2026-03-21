@@ -159,3 +159,8 @@ export async function gitFetch(cwd: string): Promise<void> {
     // Network error or timeout — silently skip
   }
 }
+
+/** Push to upstream. Throws on failure (no upstream, auth, network). 15s timeout. */
+export async function gitPush(cwd: string): Promise<void> {
+  await gitExec(["push"], cwd, { timeout: 15_000 });
+}

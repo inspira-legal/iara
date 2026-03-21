@@ -9,7 +9,7 @@ import { registerMethod } from "../router.js";
 import { runClaude, activeRuns, streamClaudeRun } from "../services/claude-runner.js";
 import { ensureGlobalSymlinks } from "../services/env.js";
 import { loadPrompt } from "../prompts/index.js";
-import { getRepoInfo, addRepo, fetchRepos } from "../services/repos.js";
+import { getRepoInfo, addRepo, fetchRepos, syncRepos } from "../services/repos.js";
 import type { AppState } from "../services/state.js";
 import type { ProjectsWatcher } from "../services/watcher.js";
 import type { PushFn } from "./index.js";
@@ -144,6 +144,12 @@ export function registerProjectHandlers(
     const project = appState.getProject(params.projectId);
     if (!project) throw new Error(`Project not found: ${params.projectId}`);
     await fetchRepos(appState, project.slug);
+  });
+
+  registerMethod("repos.sync", async (params) => {
+    const project = appState.getProject(params.projectId);
+    if (!project) throw new Error(`Project not found: ${params.projectId}`);
+    return syncRepos(appState, project.slug);
   });
 
   registerMethod("projects.suggest", async (params) => {
