@@ -35,20 +35,22 @@ export function TaskWorkspace({ project, task }: TaskWorkspaceProps) {
 
   useEffect(() => {
     const doFetch = () => {
-      void transport.request("repos.fetch", { projectId: project.id }).catch(() => {});
+      void transport
+        .request("repos.fetch", { projectId: project.id, workspaceId: task.id })
+        .catch(() => {});
     };
 
     doFetch();
     const id = setInterval(doFetch, FETCH_INTERVAL_MS);
     return () => clearInterval(id);
-  }, [project.id]);
+  }, [project.id, task.id]);
 
   useEffect(() => {
     let cancelled = false;
     setRepoLoading(true);
 
     transport
-      .request("repos.getInfo", { projectId: project.id })
+      .request("repos.getInfo", { projectId: project.id, workspaceId: task.id })
       .then((info) => {
         if (!cancelled) {
           setRepoInfo(info);
@@ -65,7 +67,7 @@ export function TaskWorkspace({ project, task }: TaskWorkspaceProps) {
     return () => {
       cancelled = true;
     };
-  }, [project.id]);
+  }, [project.id, task.id]);
 
   const handleLaunchSession = (resumeSessionId?: string, sessionCwd?: string) => {
     setPendingResumeSessionId(resumeSessionId);
@@ -98,7 +100,12 @@ export function TaskWorkspace({ project, task }: TaskWorkspaceProps) {
           )}
         </div>
         <div className="ml-auto flex items-center gap-1">
-          <GitSyncButton projectId={project.id} repoInfo={repoInfo} onSynced={setRepoInfo} />
+          <GitSyncButton
+            projectId={project.id}
+            workspaceId={task.id}
+            repoInfo={repoInfo}
+            onSynced={setRepoInfo}
+          />
           <Button
             variant="ghost"
             size="icon-md"

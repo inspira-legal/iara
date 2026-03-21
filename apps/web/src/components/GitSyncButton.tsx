@@ -6,11 +6,12 @@ import { Button } from "./ui/Button";
 
 interface GitSyncButtonProps {
   projectId: string;
+  workspaceId?: string;
   repoInfo: RepoInfo[];
   onSynced: (info: RepoInfo[]) => void;
 }
 
-export function GitSyncButton({ projectId, repoInfo, onSynced }: GitSyncButtonProps) {
+export function GitSyncButton({ projectId, workspaceId, repoInfo, onSynced }: GitSyncButtonProps) {
   const [syncing, setSyncing] = useState(false);
 
   const totalAhead = repoInfo.reduce((sum, r) => sum + r.ahead, 0);
@@ -19,9 +20,10 @@ export function GitSyncButton({ projectId, repoInfo, onSynced }: GitSyncButtonPr
 
   const handleSync = async () => {
     setSyncing(true);
+    const wsParam = workspaceId ? { workspaceId } : {};
     try {
-      await transport.request("repos.sync", { projectId });
-      const info = await transport.request("repos.getInfo", { projectId });
+      await transport.request("repos.sync", { projectId, ...wsParam });
+      const info = await transport.request("repos.getInfo", { projectId, ...wsParam });
       onSynced(info);
     } catch {
       // Best effort

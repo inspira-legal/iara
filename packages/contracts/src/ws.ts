@@ -49,10 +49,10 @@ export type WsMethods = {
   };
 
   // Repos
-  "repos.getInfo": { params: { projectId: string }; result: RepoInfo[] };
+  "repos.getInfo": { params: { projectId: string; workspaceId?: string }; result: RepoInfo[] };
   "repos.add": { params: { projectId: string } & AddRepoInput; result: void };
-  "repos.fetch": { params: { projectId: string }; result: void };
-  "repos.sync": { params: { projectId: string }; result: SyncResult[] };
+  "repos.fetch": { params: { projectId: string; workspaceId?: string }; result: void };
+  "repos.sync": { params: { projectId: string; workspaceId?: string }; result: SyncResult[] };
 
   // Workspaces
   "workspaces.create": {

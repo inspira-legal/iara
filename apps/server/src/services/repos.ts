@@ -5,10 +5,13 @@ import type { AddRepoInput, CloneProgress, RepoInfo, SyncResult } from "@iara/co
 import { gitCloneWithProgress, gitFetch, gitPull, gitPush, gitWorktreeAdd } from "@iara/shared/git";
 import type { AppState } from "./state.js";
 
-export async function getRepoInfo(appState: AppState, projectSlug: string): Promise<RepoInfo[]> {
+export async function getRepoInfo(
+  appState: AppState,
+  projectSlug: string,
+  workspaceSlug?: string,
+): Promise<RepoInfo[]> {
   const repos = appState.discoverRepos(projectSlug);
-  const projectDir = appState.getProjectDir(projectSlug);
-  const reposDir = path.join(projectDir, "default");
+  const reposDir = resolveReposDir(appState, projectSlug, workspaceSlug);
 
   return repos.map((name: string) => {
     const repoPath = path.join(reposDir, name);
@@ -108,9 +111,13 @@ export async function addRepo(
  * Sync all repos in default/: pull (ff-only) then push.
  * Returns per-repo results so the UI can show what happened.
  */
-export async function syncRepos(appState: AppState, projectSlug: string): Promise<SyncResult[]> {
+export async function syncRepos(
+  appState: AppState,
+  projectSlug: string,
+  workspaceSlug?: string,
+): Promise<SyncResult[]> {
   const repos = appState.discoverRepos(projectSlug);
-  const reposDir = path.join(appState.getProjectDir(projectSlug), "default");
+  const reposDir = resolveReposDir(appState, projectSlug, workspaceSlug);
 
   return Promise.all(
     repos.map(async (name: string): Promise<SyncResult> => {
@@ -136,13 +143,23 @@ export async function syncRepos(appState: AppState, projectSlug: string): Promis
  * Fetch origin on all repos in default/ (updates ahead/behind without merging).
  * Best-effort: silently skips failures.
  */
-export async function fetchRepos(appState: AppState, projectSlug: string): Promise<void> {
+export async function fetchRepos(
+  appState: AppState,
+  projectSlug: string,
+  workspaceSlug?: string,
+): Promise<void> {
   const repos = appState.discoverRepos(projectSlug);
-  const reposDir = path.join(appState.getProjectDir(projectSlug), "default");
+  const reposDir = resolveReposDir(appState, projectSlug, workspaceSlug);
 
   await Promise.all(
     repos.map((name: string) => gitFetch(path.join(reposDir, name)).catch(() => {})),
   );
+}
+
+/** Resolve the directory containing repos for a workspace (default/ or task slug). */
+function resolveReposDir(appState: AppState, projectSlug: string, workspaceSlug?: string): string {
+  const projectDir = appState.getProjectDir(projectSlug);
+  return path.join(projectDir, workspaceSlug ?? "default");
 }
 
 function getGitBranch(repoPath: string): string {

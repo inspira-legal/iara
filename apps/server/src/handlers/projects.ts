@@ -23,6 +23,13 @@ const ProjectMetadataSchema = z.object({
     .describe("descri\u00e7\u00e3o concisa do projeto em 1-2 fra\u0073es"),
 });
 
+/** Extract workspace slug from a workspaceId like "project/task-slug". */
+function extractWorkspaceSlug(workspaceId?: string): string | undefined {
+  if (!workspaceId) return undefined;
+  const slug = workspaceId.split("/")[1];
+  return slug === "default" ? undefined : slug;
+}
+
 /** Extract repo name from a source URL or path. */
 function repoNameFromSource(source: string): string {
   const cleaned = source.replace(/\.git\/?$/, "").replace(/\/+$/, "");
@@ -130,7 +137,8 @@ export function registerProjectHandlers(
   registerMethod("repos.getInfo", async (params) => {
     const project = appState.getProject(params.projectId);
     if (!project) throw new Error(`Project not found: ${params.projectId}`);
-    return getRepoInfo(appState, project.slug);
+    const wsSlug = extractWorkspaceSlug(params.workspaceId);
+    return getRepoInfo(appState, project.slug, wsSlug);
   });
 
   registerMethod("repos.add", async (params) => {
@@ -143,13 +151,15 @@ export function registerProjectHandlers(
   registerMethod("repos.fetch", async (params) => {
     const project = appState.getProject(params.projectId);
     if (!project) throw new Error(`Project not found: ${params.projectId}`);
-    await fetchRepos(appState, project.slug);
+    const wsSlug = extractWorkspaceSlug(params.workspaceId);
+    await fetchRepos(appState, project.slug, wsSlug);
   });
 
   registerMethod("repos.sync", async (params) => {
     const project = appState.getProject(params.projectId);
     if (!project) throw new Error(`Project not found: ${params.projectId}`);
-    return syncRepos(appState, project.slug);
+    const wsSlug = extractWorkspaceSlug(params.workspaceId);
+    return syncRepos(appState, project.slug, wsSlug);
   });
 
   registerMethod("projects.suggest", async (params) => {
