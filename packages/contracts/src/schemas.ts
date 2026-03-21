@@ -24,6 +24,7 @@ export const WorkspaceFileSchema = z.discriminatedUnion("type", [
     name: z.string(),
     description: z.string().default(""),
     branch: z.string(),
+    branches: z.record(z.string(), z.string()).optional(),
     createdAt: z.string(),
   }),
 ]);

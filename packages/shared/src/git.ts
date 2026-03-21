@@ -1,4 +1,4 @@
-import { execFile, spawn } from "node:child_process";
+import { execFile, execFileSync, spawn } from "node:child_process";
 import { promisify } from "node:util";
 
 const execFileAsync = promisify(execFile);
@@ -51,6 +51,21 @@ async function gitExec(
       throw new GitOperationError(args.join(" "), "timed out", null);
     }
     throw new GitOperationError(args.join(" "), String(err.stderr ?? ""), err.status ?? null);
+  }
+}
+
+/** Get the remote origin URL for a repo. Returns null if no remote or on error. Sync. */
+export function gitRemoteUrlSync(repoDir: string): string | null {
+  try {
+    return (
+      execFileSync("git", ["remote", "get-url", "origin"], {
+        cwd: repoDir,
+        timeout: 5_000,
+        encoding: "utf-8",
+      }).trim() || null
+    );
+  } catch {
+    return null;
   }
 }
 

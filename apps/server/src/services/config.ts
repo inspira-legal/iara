@@ -1,26 +1,24 @@
-import * as fs from "node:fs";
 import * as path from "node:path";
 import * as os from "node:os";
+import { z } from "zod";
+import { createJsonFile } from "@iara/shared/json-file";
 
-interface AppConfig {
-  projectsDir: string;
-}
+const AppConfigSchema = z.object({
+  projectsDir: z.string(),
+});
+
+type AppConfig = z.infer<typeof AppConfigSchema>;
 
 let cachedConfig: AppConfig | null = null;
 
 export function getConfig(): AppConfig {
   if (cachedConfig) return cachedConfig;
 
-  const configPath = getConfigPath();
-  try {
-    const raw = fs.readFileSync(configPath, "utf-8");
-    cachedConfig = JSON.parse(raw) as AppConfig;
-  } catch {
-    cachedConfig = getDefaultConfig();
-    fs.mkdirSync(path.dirname(configPath), { recursive: true });
-    fs.writeFileSync(configPath, JSON.stringify(cachedConfig, null, 2));
-  }
+  const configFile = createJsonFile(getConfigPath(), AppConfigSchema, () => ({
+    projectsDir: path.join(os.homedir(), "iara"),
+  }));
 
+  cachedConfig = configFile.read();
   return cachedConfig;
 }
 
@@ -30,10 +28,4 @@ export function getProjectsDir(): string {
 
 function getConfigPath(): string {
   return path.join(os.homedir(), ".config", "iara", "config.json");
-}
-
-function getDefaultConfig(): AppConfig {
-  return {
-    projectsDir: path.join(os.homedir(), "iara"),
-  };
 }

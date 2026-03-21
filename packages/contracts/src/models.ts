@@ -16,6 +16,7 @@ export interface Workspace {
   name: string;
   description: string;
   branch?: string;
+  branches?: Record<string, string>;
   createdAt: string;
 }
 

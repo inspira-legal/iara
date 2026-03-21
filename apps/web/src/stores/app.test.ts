@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import type { Project, Workspace } from "@iara/contracts";
 
 // ---------------------------------------------------------------------------
@@ -58,12 +58,45 @@ const INITIAL_STATE = {
 };
 
 // ---------------------------------------------------------------------------
+// localStorage mock
+// ---------------------------------------------------------------------------
+
+const SELECTION_KEY = "iara:selection:v1";
+
+const localStorageStore: Record<string, string> = {};
+const localStorageMock = {
+  getItem: vi.fn((key: string) => localStorageStore[key] ?? null),
+  setItem: vi.fn((key: string, value: string) => {
+    localStorageStore[key] = value;
+  }),
+  removeItem: vi.fn((key: string) => {
+    delete localStorageStore[key];
+  }),
+  clear: vi.fn(() => {
+    for (const key of Object.keys(localStorageStore)) {
+      delete localStorageStore[key];
+    }
+  }),
+  get length() {
+    return Object.keys(localStorageStore).length;
+  },
+  key: vi.fn((index: number) => Object.keys(localStorageStore)[index] ?? null),
+};
+
+vi.stubGlobal("localStorage", localStorageMock);
+
+// ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
 
 beforeEach(() => {
   vi.clearAllMocks();
+  localStorageMock.clear();
   useAppStore.setState(INITIAL_STATE);
+});
+
+afterEach(() => {
+  localStorageMock.clear();
 });
 
 describe("useAppStore", () => {
@@ -585,6 +618,102 @@ describe("useAppStore", () => {
       useAppStore.getState().subscribePush();
 
       expect(useAppStore.getState().settings.theme).toBe("dark");
+    });
+  });
+
+  // -----------------------------------------------------------------------
+  // localStorage selection persistence
+  // -----------------------------------------------------------------------
+
+  describe("localStorage persistence", () => {
+    it("selectProject saves to localStorage", () => {
+      const proj = makeProject({ id: "proj1" });
+      useAppStore.setState({ projects: [proj] });
+
+      useAppStore.getState().selectProject("proj1");
+
+      const saved = JSON.parse(localStorageStore[SELECTION_KEY]!);
+      expect(saved.projectId).toBe("proj1");
+    });
+
+    it("selectWorkspace saves to localStorage", () => {
+      const ws = makeWorkspace({ id: "proj1/ws1", projectId: "proj1" });
+      const proj = makeProject({ id: "proj1", workspaces: [ws] });
+      useAppStore.setState({ projects: [proj] });
+
+      useAppStore.getState().selectWorkspace("proj1/ws1");
+
+      const saved = JSON.parse(localStorageStore[SELECTION_KEY]!);
+      expect(saved.projectId).toBe("proj1");
+      expect(saved.workspaceId).toBe("proj1/ws1");
+    });
+
+    it("init() restores valid selection from localStorage", async () => {
+      const ws = makeWorkspace({ id: "proj1/ws1", projectId: "proj1" });
+      const proj = makeProject({ id: "proj1", workspaces: [ws] });
+      localStorageStore[SELECTION_KEY] = JSON.stringify({
+        projectId: "proj1",
+        workspaceId: "proj1/ws1",
+      });
+      mockRequest.mockResolvedValueOnce({ projects: [proj], settings: {} });
+
+      await useAppStore.getState().init();
+
+      expect(useAppStore.getState().selectedProjectId).toBe("proj1");
+      expect(useAppStore.getState().selectedWorkspaceId).toBe("proj1/ws1");
+    });
+
+    it("init() clears stale selection (project deleted) from localStorage", async () => {
+      localStorageStore[SELECTION_KEY] = JSON.stringify({
+        projectId: "deleted-proj",
+        workspaceId: "deleted-proj/ws1",
+      });
+      mockRequest.mockResolvedValueOnce({ projects: [], settings: {} });
+
+      await useAppStore.getState().init();
+
+      expect(useAppStore.getState().selectedProjectId).toBeNull();
+      expect(useAppStore.getState().selectedWorkspaceId).toBeNull();
+      // localStorage should have been cleared
+      expect(localStorageStore[SELECTION_KEY]).toBeUndefined();
+    });
+
+    it("init() clears stale workspace but keeps valid project from localStorage", async () => {
+      const proj = makeProject({ id: "proj1", workspaces: [] });
+      localStorageStore[SELECTION_KEY] = JSON.stringify({
+        projectId: "proj1",
+        workspaceId: "proj1/deleted-ws",
+      });
+      mockRequest.mockResolvedValueOnce({ projects: [proj], settings: {} });
+
+      await useAppStore.getState().init();
+
+      expect(useAppStore.getState().selectedProjectId).toBe("proj1");
+      expect(useAppStore.getState().selectedWorkspaceId).toBeNull();
+      // localStorage should have been updated to keep project but clear workspace
+      const saved = JSON.parse(localStorageStore[SELECTION_KEY]!);
+      expect(saved.projectId).toBe("proj1");
+      expect(saved.workspaceId).toBeNull();
+    });
+
+    it("deleteProject clears selection from localStorage when deleted project was selected", async () => {
+      const proj = makeProject({ id: "proj1" });
+      useAppStore.setState({
+        projects: [proj],
+        selectedProjectId: "proj1",
+        selectedWorkspaceId: "proj1/ws1",
+      });
+      localStorageStore[SELECTION_KEY] = JSON.stringify({
+        projectId: "proj1",
+        workspaceId: "proj1/ws1",
+      });
+      mockRequest.mockResolvedValueOnce(undefined);
+
+      await useAppStore.getState().deleteProject("proj1");
+
+      const saved = JSON.parse(localStorageStore[SELECTION_KEY]!);
+      expect(saved.projectId).toBeNull();
+      expect(saved.workspaceId).toBeNull();
     });
   });
 

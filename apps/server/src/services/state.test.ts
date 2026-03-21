@@ -669,6 +669,123 @@ describe("AppState", () => {
     });
   });
 
+  describe("self-healing JSON (corrupt files)", () => {
+    it("project.json with invalid JSON gets regenerated", () => {
+      const dir = path.join(projectsDir, "corrupt-proj");
+      fs.mkdirSync(dir, { recursive: true });
+      fs.writeFileSync(path.join(dir, "project.json"), "NOT VALID JSON{{{");
+      createFakeRepo("corrupt-proj", "default", "repo", "main");
+
+      const state = new AppState(projectsDir, stateDir);
+      const project = state.getProject("corrupt-proj");
+      expect(project).not.toBeNull();
+      expect(project!.name).toBe("corrupt-proj"); // regenerated from slug
+
+      // File should have been recreated with valid JSON
+      const raw = JSON.parse(fs.readFileSync(path.join(dir, "project.json"), "utf-8"));
+      expect(raw.name).toBe("corrupt-proj");
+    });
+
+    it("workspace.json with invalid JSON gets regenerated", () => {
+      writeProjectJson("my-app", {
+        name: "My App",
+        repoSources: [],
+        createdAt: "2026-03-20T00:00:00.000Z",
+      });
+      createFakeRepo("my-app", "default", "repo", "main");
+      const wsDir = path.join(projectsDir, "my-app", "default");
+      fs.writeFileSync(path.join(wsDir, "workspace.json"), "{{BAD JSON}}");
+
+      const state = new AppState(projectsDir, stateDir);
+      const ws = state.getWorkspace("my-app/default");
+      expect(ws).not.toBeNull();
+      expect(ws!.type).toBe("default");
+
+      const raw = JSON.parse(fs.readFileSync(path.join(wsDir, "workspace.json"), "utf-8"));
+      expect(raw.type).toBe("default");
+    });
+
+    it("project.json with wrong schema (missing required fields) gets regenerated", () => {
+      const dir = path.join(projectsDir, "bad-schema");
+      fs.mkdirSync(dir, { recursive: true });
+      // Valid JSON but missing required fields
+      fs.writeFileSync(path.join(dir, "project.json"), JSON.stringify({ irrelevant: true }));
+      createFakeRepo("bad-schema", "default", "repo", "main");
+
+      const state = new AppState(projectsDir, stateDir);
+      const project = state.getProject("bad-schema");
+      expect(project).not.toBeNull();
+      expect(project!.name).toBe("bad-schema");
+
+      const raw = JSON.parse(fs.readFileSync(path.join(dir, "project.json"), "utf-8"));
+      expect(raw.name).toBe("bad-schema");
+      expect(raw.createdAt).toBeDefined();
+    });
+  });
+
+  describe("per-repo branches in workspace.json", () => {
+    it("auto-created workspace.json for multi-repo task populates branches map", () => {
+      createFakeRepo("multi", "default", "frontend", "main");
+      createFakeRepo("multi", "default", "backend", "main");
+      createFakeWorktree("multi", "feat-x", "frontend", "feat/frontend-x");
+      createFakeWorktree("multi", "feat-x", "backend", "feat/backend-x");
+
+      const state = new AppState(projectsDir, stateDir);
+      const ws = state.getWorkspace("multi/feat-x");
+      expect(ws).not.toBeNull();
+      expect(ws!.type).toBe("task");
+
+      // Read the auto-created workspace.json from disk
+      const raw = JSON.parse(
+        fs.readFileSync(path.join(projectsDir, "multi", "feat-x", "workspace.json"), "utf-8"),
+      );
+      expect(raw.branches).toBeDefined();
+      expect(raw.branches.frontend).toBe("feat/frontend-x");
+      expect(raw.branches.backend).toBe("feat/backend-x");
+    });
+  });
+
+  describe("writeWorkspace with branches", () => {
+    it("persists branches map to disk for task workspace", () => {
+      fs.mkdirSync(path.join(projectsDir, "my-app", "multi-task"), { recursive: true });
+      const state = new AppState(projectsDir, stateDir);
+      state.writeWorkspace("my-app", "multi-task", {
+        type: "task",
+        name: "Multi Task",
+        branch: "feat/multi",
+        branches: { frontend: "feat/multi-fe", backend: "feat/multi-be" },
+      });
+
+      const raw = JSON.parse(
+        fs.readFileSync(path.join(projectsDir, "my-app", "multi-task", "workspace.json"), "utf-8"),
+      );
+      expect(raw.type).toBe("task");
+      expect(raw.branch).toBe("feat/multi");
+      expect(raw.branches).toEqual({ frontend: "feat/multi-fe", backend: "feat/multi-be" });
+    });
+  });
+
+  describe("updateProject preserves other fields", () => {
+    it("preserves repoSources when updating name", () => {
+      writeProjectJson("my-app", {
+        name: "Old",
+        description: "desc",
+        repoSources: ["https://github.com/org/repo"],
+        createdAt: "2026-01-01T00:00:00.000Z",
+      });
+      const state = new AppState(projectsDir, stateDir);
+      state.updateProject("my-app", { name: "New" });
+
+      const raw = JSON.parse(
+        fs.readFileSync(path.join(projectsDir, "my-app", "project.json"), "utf-8"),
+      );
+      expect(raw.name).toBe("New");
+      expect(raw.repoSources).toEqual(["https://github.com/org/repo"]);
+      expect(raw.description).toBe("desc");
+      expect(raw.createdAt).toBe("2026-01-01T00:00:00.000Z");
+    });
+  });
+
   describe("getProjectDir / getWorkspaceDir", () => {
     it("returns correct project directory", () => {
       const state = new AppState(projectsDir, stateDir);

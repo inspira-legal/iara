@@ -136,9 +136,11 @@ describe("WsTransport", () => {
       const promise = transport.request("terminal.write" as never, {} as never);
 
       await vi.advanceTimersByTimeAsync(0); // init
-      await vi.advanceTimersByTimeAsync(30_000); // timeout
 
-      await expect(promise).rejects.toThrow("timed out");
+      // Attach rejection handler BEFORE advancing to timeout
+      const rejection = expect(promise).rejects.toThrow("timed out");
+      await vi.advanceTimersByTimeAsync(30_000); // timeout
+      await rejection;
     });
 
     it("times out after custom timeout", async () => {
@@ -147,9 +149,11 @@ describe("WsTransport", () => {
       });
 
       await vi.advanceTimersByTimeAsync(0);
-      await vi.advanceTimersByTimeAsync(5000);
 
-      await expect(promise).rejects.toThrow("timed out");
+      // Attach rejection handler BEFORE advancing to timeout
+      const rejection = expect(promise).rejects.toThrow("timed out");
+      await vi.advanceTimersByTimeAsync(5000);
+      await rejection;
     });
   });
 

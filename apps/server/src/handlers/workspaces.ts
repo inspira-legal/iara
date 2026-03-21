@@ -252,6 +252,7 @@ async function createWorkspace(
     name: input.name,
     ...(input.description !== undefined ? { description: input.description } : {}),
     branch,
+    ...(branchesMap ? { branches: branchesMap } : {}),
   });
 
   // Rescan project and push updated state

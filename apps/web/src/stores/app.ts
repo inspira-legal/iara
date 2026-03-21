@@ -9,6 +9,43 @@ import type {
 import { transport } from "~/lib/ws-transport";
 
 // ---------------------------------------------------------------------------
+// Selection persistence
+// ---------------------------------------------------------------------------
+
+const SELECTION_KEY = "iara:selection:v1";
+
+interface PersistedSelection {
+  projectId: string | null;
+  workspaceId: string | null;
+}
+
+function saveSelection(projectId: string | null, workspaceId: string | null): void {
+  try {
+    localStorage.setItem(SELECTION_KEY, JSON.stringify({ projectId, workspaceId }));
+  } catch {
+    // localStorage may be unavailable
+  }
+}
+
+function loadSelection(): PersistedSelection | null {
+  try {
+    const raw = localStorage.getItem(SELECTION_KEY);
+    if (!raw) return null;
+    return JSON.parse(raw) as PersistedSelection;
+  } catch {
+    return null;
+  }
+}
+
+function clearSelection(): void {
+  try {
+    localStorage.removeItem(SELECTION_KEY);
+  } catch {
+    // localStorage may be unavailable
+  }
+}
+
+// ---------------------------------------------------------------------------
 // State
 // ---------------------------------------------------------------------------
 
@@ -79,6 +116,26 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
   init: async () => {
     const { projects, settings } = await transport.request("state.init", {});
     set({ projects, settings, initialized: true });
+
+    // Restore persisted selection
+    const saved = loadSelection();
+    if (saved) {
+      const project = projects.find((p: Project) => p.id === saved.projectId);
+      if (project) {
+        const workspace = saved.workspaceId
+          ? project.workspaces.find((w: Workspace) => w.id === saved.workspaceId)
+          : undefined;
+        set({
+          selectedProjectId: project.id,
+          selectedWorkspaceId: workspace ? workspace.id : null,
+        });
+        if (!workspace && saved.workspaceId) {
+          saveSelection(project.id, null);
+        }
+      } else {
+        clearSelection();
+      }
+    }
   },
 
   // ---------------------------------------------------------------------------
@@ -88,6 +145,7 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
   selectProject: (id) => {
     if (id === null) {
       set({ selectedProjectId: null, selectedWorkspaceId: null });
+      saveSelection(null, null);
       return;
     }
 
@@ -98,15 +156,19 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
       state.selectedWorkspaceId != null &&
       project?.workspaces.some((w) => w.id === state.selectedWorkspaceId);
 
+    const newWorkspaceId = keepWorkspace ? state.selectedWorkspaceId : null;
     set({
       selectedProjectId: id,
-      selectedWorkspaceId: keepWorkspace ? state.selectedWorkspaceId : null,
+      selectedWorkspaceId: newWorkspaceId,
     });
+    saveSelection(id, newWorkspaceId);
   },
 
   selectWorkspace: (id) => {
     if (id === null) {
+      const state = get();
       set({ selectedWorkspaceId: null });
+      saveSelection(state.selectedProjectId, null);
       return;
     }
 
@@ -115,12 +177,14 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
     for (const project of state.projects) {
       if (project.workspaces.some((w) => w.id === id)) {
         set({ selectedWorkspaceId: id, selectedProjectId: project.id });
+        saveSelection(project.id, id);
         return;
       }
     }
 
     // Workspace not found in any project — just set it
     set({ selectedWorkspaceId: id });
+    saveSelection(state.selectedProjectId, id);
   },
 
   // ---------------------------------------------------------------------------
@@ -139,12 +203,16 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
   },
 
   deleteProject: async (id) => {
+    const wasSelected = get().selectedProjectId === id;
     // Optimistically remove from state
     set((state) => ({
       projects: state.projects.filter((p) => p.id !== id),
       selectedProjectId: state.selectedProjectId === id ? null : state.selectedProjectId,
       selectedWorkspaceId: state.selectedProjectId === id ? null : state.selectedWorkspaceId,
     }));
+    if (wasSelected) {
+      saveSelection(null, null);
+    }
     await transport.request("projects.delete", { id });
   },
 
@@ -159,15 +227,19 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
   },
 
   deleteWorkspace: async (workspaceId) => {
+    const state = get();
+    const wasSelected = state.selectedWorkspaceId === workspaceId;
     // Optimistically remove from state
-    set((state) => ({
-      projects: state.projects.map((p) => ({
+    set((s) => ({
+      projects: s.projects.map((p) => ({
         ...p,
         workspaces: p.workspaces.filter((w) => w.id !== workspaceId),
       })),
-      selectedWorkspaceId:
-        state.selectedWorkspaceId === workspaceId ? null : state.selectedWorkspaceId,
+      selectedWorkspaceId: s.selectedWorkspaceId === workspaceId ? null : s.selectedWorkspaceId,
     }));
+    if (wasSelected) {
+      saveSelection(state.selectedProjectId, null);
+    }
     await transport.request("workspaces.delete", { workspaceId });
   },
 

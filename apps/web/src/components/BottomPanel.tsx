@@ -44,7 +44,6 @@ export function BottomPanel({ panelRef }: { panelRef: RefObject<PanelImperativeH
     activeTab,
     setActiveTab,
     collapsed,
-    setCollapsed,
     subscribePush,
     loadConfig,
     discover,
@@ -97,9 +96,9 @@ export function BottomPanel({ panelRef }: { panelRef: RefObject<PanelImperativeH
   // Fall back to scripts tab if output tab has nothing
   useEffect(() => {
     if (activeTab === "output" && !hasOutputs) {
-      setActiveTab("scripts");
+      setActiveTab(collapsed ? null : "scripts");
     }
-  }, [activeTab, hasOutputs, setActiveTab]);
+  }, [activeTab, hasOutputs, collapsed, setActiveTab]);
 
   // Auto-open output tab when any script fails
   const hasUnhealthy = statuses.some(isScriptUnhealthy);
@@ -114,13 +113,14 @@ export function BottomPanel({ panelRef }: { panelRef: RefObject<PanelImperativeH
 
   const toggleCollapse = () => {
     if (collapsed) {
+      setActiveTab("scripts");
       panelRef.current?.expand();
     } else {
       panelRef.current?.collapse();
     }
   };
 
-  const expandAndSetTab = (tab: "scripts" | "output") => {
+  const handleTabClick = (tab: "scripts" | "output") => {
     setActiveTab(tab);
     if (collapsed) {
       panelRef.current?.expand();
@@ -135,14 +135,14 @@ export function BottomPanel({ panelRef }: { panelRef: RefObject<PanelImperativeH
           <TabButton
             label="Scripts"
             active={activeTab === "scripts"}
-            onClick={() => expandAndSetTab("scripts")}
+            onClick={() => handleTabClick("scripts")}
             badge={runningCount || undefined}
           />
           {hasOutputs && (
             <TabButton
               label="Output"
               active={activeTab === "output"}
-              onClick={() => expandAndSetTab("output")}
+              onClick={() => handleTabClick("output")}
             />
           )}
           {(loading || discovering) && (

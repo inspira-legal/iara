@@ -55,7 +55,7 @@ const INITIAL_STATE = {
   discoveringProjects: new Set<string>(),
   logs: new Map<string, string[]>(),
   selectedLog: null,
-  activeTab: "scripts" as const,
+  activeTab: null,
   collapsed: false,
 };
 
@@ -239,6 +239,22 @@ describe("useScriptsStore", () => {
     it("sets collapsed state", () => {
       useScriptsStore.getState().setCollapsed(true);
       expect(useScriptsStore.getState().collapsed).toBe(true);
+    });
+
+    it("clears activeTab when collapsing", () => {
+      useScriptsStore.setState({ activeTab: "scripts" });
+      useScriptsStore.getState().setCollapsed(true);
+      expect(useScriptsStore.getState().activeTab).toBeNull();
+    });
+
+    it("does not clear activeTab when expanding", () => {
+      useScriptsStore.setState({ activeTab: "output", collapsed: true });
+      useScriptsStore.getState().setCollapsed(false);
+      expect(useScriptsStore.getState().activeTab).toBe("output");
+    });
+
+    it("initial activeTab is null", () => {
+      expect(useScriptsStore.getState().activeTab).toBeNull();
     });
   });
 

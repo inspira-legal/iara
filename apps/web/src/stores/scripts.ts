@@ -4,7 +4,7 @@ import { transport } from "../lib/ws-transport.js";
 
 const MAX_LOG_LINES = 1000;
 
-export type PanelTab = "scripts" | "output";
+export type PanelTab = "scripts" | "output" | null;
 
 interface ScriptsState {
   config: ScriptsConfig | null;
@@ -50,7 +50,7 @@ export const useScriptsStore = create<ScriptsState & ScriptsActions>((set, get) 
   discoveringProjects: new Set<string>(),
   logs: new Map(),
   selectedLog: null,
-  activeTab: "scripts",
+  activeTab: null,
   collapsed: false,
 
   loadConfig: async (workspaceId) => {
@@ -124,7 +124,7 @@ export const useScriptsStore = create<ScriptsState & ScriptsActions>((set, get) 
   },
 
   setActiveTab: (tab) => set({ activeTab: tab }),
-  setCollapsed: (collapsed) => set({ collapsed }),
+  setCollapsed: (collapsed) => set({ collapsed, ...(collapsed ? { activeTab: null } : {}) }),
 
   subscribePush: () => {
     const unsubStatus = transport.subscribe(
