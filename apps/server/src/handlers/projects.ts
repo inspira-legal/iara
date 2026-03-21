@@ -212,9 +212,9 @@ export function registerProjectHandlers(
     console.log("[projects.analyze] repoPaths:", repoPaths);
 
     const systemPrompt = [
-      `O usuario descreveu este projeto como: "${description}"`,
-      `Os repositorios estao em: ${repoPaths.join(", ")}`,
-      "Analise APENAS esses diretorios. Nao navegue para fora deles.",
+      `The user described this project as: "${description}"`,
+      `The repositories are at: ${repoPaths.join(", ")}`,
+      "Analyze ONLY these directories. Do not navigate outside of them.",
     ].join("\n");
 
     const projectMdPath = path.join(projectDir, "PROJECT.md");

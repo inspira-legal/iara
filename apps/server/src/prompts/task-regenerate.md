@@ -1,2 +1,2 @@
-Escreva o objetivo da task em 1-3 frases.
-Formato: título (# Task: <slug>) seguido do objetivo.
+Write the task objective in 1-3 sentences.
+Format: title (# Task: <slug>) followed by the objective.

@@ -17,7 +17,14 @@ const SEARCH_DIRS = [
   path.resolve("dist", "prompts"),
 ];
 
-const PROMPT_NAMES = ["project-analyze", "project-suggest", "task-suggest", "task-regenerate"];
+const PROMPT_NAMES = [
+  "project-analyze",
+  "project-suggest",
+  "task-suggest",
+  "task-regenerate",
+  "system-worktrees",
+  "system-env",
+];
 
 const cache = new Map<string, string>();
 

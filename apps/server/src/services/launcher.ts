@@ -1,5 +1,6 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
+import { loadPrompt } from "../prompts/index.js";
 
 export interface LaunchConfig {
   taskDir: string;
@@ -56,10 +57,15 @@ export function buildSystemPrompt(ctx: TaskContext): string {
   const sections: string[] = [];
 
   // # WORKTREES
-  const env = buildEnvironmentSection(ctx);
-  if (env) {
+  if (ctx.repos.length > 0) {
+    const worktreeList = ctx.repos
+      .map((r) => `${r.name}/  ← git worktree (branch: ${ctx.branch}, origin: ${r.mainRepoPath})`)
+      .join("\n");
     sections.push(
-      `# WORKTREES\n${env}\n\nYour working directory is NOT a git repository. All code and git operations must happen inside the worktree directories listed above.`,
+      loadPrompt("system-worktrees", {
+        worktree_list: worktreeList,
+        example_repo_path: ctx.repos[0]?.worktreePath ?? "<repo-path>",
+      }),
     );
   }
 
@@ -83,16 +89,6 @@ export function buildSystemPrompt(ctx: TaskContext): string {
   }
 
   return sections.join("\n\n");
-}
-
-function buildEnvironmentSection(ctx: TaskContext): string {
-  if (ctx.repos.length === 0) return "";
-
-  const lines = ctx.repos.map(
-    (r) => `${r.name}/  ← git worktree (branch: ${ctx.branch}, origem: ${r.mainRepoPath})`,
-  );
-
-  return lines.join("\n");
 }
 
 /** Fallback: build system prompt from just the task directory (no structured context). */
@@ -126,7 +122,7 @@ export function buildRootPrompt(ctx: RootContext): string {
   // # REPOS
   if (ctx.repos.length > 0) {
     const lines = ctx.repos.map((r) => `${r.name}/  ← git repository (branch: ${r.branch})`);
-    sections.push(`# REPOS\n${lines.join("\n")}`);
+    sections.push(`<repos>\n${lines.join("\n")}\n</repos>`);
   }
 
   // # ENV FILES
@@ -147,9 +143,11 @@ export function buildRootPrompt(ctx: RootContext): string {
 }
 
 function buildEnvSection(repoNames: string[]): string {
-  const lines = repoNames.flatMap((r) => [
-    `.env.${r}.global  ← shared env vars (symlink to global — edit here or via iara UI)`,
-    `.env.${r}.local   ← local env vars for this context only`,
-  ]);
-  return `# ENV FILES\n${lines.join("\n")}\n\nEnvironment variables are already injected into this session. To add or change env vars, edit the files above (NOT .env inside the repo). Changes take effect on next session restart.`;
+  const envList = repoNames
+    .flatMap((r) => [
+      `.env.${r}.global  ← shared env vars (symlink to global — edit here or via iara UI)`,
+      `.env.${r}.local   ← local env vars for this context only`,
+    ])
+    .join("\n");
+  return loadPrompt("system-env", { env_list: envList });
 }
