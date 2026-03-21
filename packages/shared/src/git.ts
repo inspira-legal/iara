@@ -69,6 +69,11 @@ export function gitRemoteUrlSync(repoDir: string): string | null {
   }
 }
 
+/** Check if a remote URL is reachable. Throws GitOperationError with details if not. */
+export async function gitLsRemote(url: string): Promise<void> {
+  await gitExec(["ls-remote", "--exit-code", url], process.cwd(), { timeout: 15_000 });
+}
+
 export async function gitClone(url: string, dest: string): Promise<void> {
   const path = await import("node:path");
   const fs = await import("node:fs");
@@ -93,15 +98,20 @@ export async function gitCloneWithProgress(
       stdio: ["ignore", "pipe", "pipe"],
     });
 
+    let stderrOutput = "";
+
     // Git writes progress to stderr
     proc.stderr?.on("data", (data: Buffer) => {
       const text = data.toString().trim();
-      if (text && onProgress) onProgress(text);
+      if (text) {
+        stderrOutput += `${text}\n`;
+        onProgress?.(text);
+      }
     });
 
     proc.on("close", (code) => {
       if (code === 0) resolve();
-      else reject(new GitOperationError(`clone ${url}`, `exit code ${code}`, code));
+      else reject(new GitOperationError(`clone ${url}`, stderrOutput.trim() || `exit code ${code}`, code));
     });
 
     proc.on("error", (err) => {

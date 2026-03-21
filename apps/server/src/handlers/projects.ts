@@ -9,7 +9,7 @@ import { registerMethod } from "../router.js";
 import { runClaude, activeRuns, streamClaudeRun } from "../services/claude-runner.js";
 import { ensureGlobalSymlinks } from "../services/env.js";
 import { loadPrompt } from "../prompts/index.js";
-import { getRepoInfo, addRepo, fetchRepos, syncRepos } from "../services/repos.js";
+import { getRepoInfo, addRepo, validateGitUrl, fetchRepos, syncRepos } from "../services/repos.js";
 import type { AppState } from "../services/state.js";
 import type { ProjectsWatcher } from "../services/watcher.js";
 import type { PushFn } from "./index.js";
@@ -88,11 +88,19 @@ export function registerProjectHandlers(
       fs.writeFileSync(projectMdPath, "");
     }
 
-    // Rescan and push
-    const project = appState.rescanProject(slug);
-    if (project) {
-      pushFn("project:changed", { project });
-    }
+    // readProject requires repos in default/ — skip disk rescan when none were cloned
+    const project =
+      repoSources.length > 0
+        ? appState.rescanProject(slug)
+        : null;
+
+    const result = project ?? appState.createEmptyProject(slug, {
+      name,
+      description: description ?? "",
+      repoSources,
+    });
+
+    pushFn("project:changed", { project: result });
 
     // Auto-discover scripts after repos are cloned (async, non-blocking)
     try {
@@ -101,7 +109,7 @@ export function registerProjectHandlers(
       console.error("Auto-discovery failed:", err);
     }
 
-    return project!;
+    return result;
   });
 
   registerMethod("projects.update", async (params) => {
@@ -139,6 +147,10 @@ export function registerProjectHandlers(
     if (!project) throw new Error(`Project not found: ${params.projectId}`);
     const wsSlug = extractWorkspaceSlug(params.workspaceId);
     return getRepoInfo(appState, project.slug, wsSlug);
+  });
+
+  registerMethod("repos.validateUrl", async (params) => {
+    await validateGitUrl(params.url);
   });
 
   registerMethod("repos.add", async (params) => {
@@ -185,11 +197,31 @@ export function registerProjectHandlers(
 
     const requestId = crypto.randomUUID();
     const defaultDir = path.join(projectDir, "default");
+    const repoNames = appState.discoverRepos(project.slug);
 
-    const systemPrompt = `O usu\u00e1rio descreveu este projeto como: "${description}"`;
+    console.log("[projects.analyze] projectId:", projectId);
+    console.log("[projects.analyze] project.slug:", project.slug);
+    console.log("[projects.analyze] projectDir:", projectDir);
+    console.log("[projects.analyze] defaultDir:", defaultDir);
+    console.log("[projects.analyze] repoNames:", repoNames);
+    console.log("[projects.analyze] process.cwd():", process.cwd());
+
+    if (repoNames.length === 0) throw new Error("No repos found to analyze");
+
+    const repoPaths = repoNames.map((name) => path.join(defaultDir, name));
+    console.log("[projects.analyze] repoPaths:", repoPaths);
+
+    const systemPrompt = [
+      `O usuario descreveu este projeto como: "${description}"`,
+      `Os repositorios estao em: ${repoPaths.join(", ")}`,
+      "Analise APENAS esses diretorios. Nao navegue para fora deles.",
+    ].join("\n");
 
     const projectMdPath = path.join(projectDir, "PROJECT.md");
     const prompt = loadPrompt("project-analyze");
+
+    console.log("[projects.analyze] systemPrompt:", systemPrompt);
+    console.log("[projects.analyze] cwd for claude:", defaultDir);
 
     const run = runClaude({ cwd: defaultDir, prompt, systemPrompt });
     activeRuns.set(requestId, run);

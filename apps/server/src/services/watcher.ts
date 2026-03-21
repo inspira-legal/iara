@@ -73,9 +73,13 @@ export class ProjectsWatcher {
       }
 
       let needsFullResync = false;
+      const rescanned = new Map<string, NonNullable<ReturnType<typeof this.appState.rescanProject>>>();
       for (const projectSlug of projectSlugs) {
+        const wasPreviouslyKnown = !!this.appState.getProject(projectSlug);
         const project = this.appState.rescanProject(projectSlug);
-        if (!project) {
+        if (project) {
+          rescanned.set(projectSlug, project);
+        } else if (wasPreviouslyKnown) {
           needsFullResync = true;
         }
       }
@@ -84,11 +88,8 @@ export class ProjectsWatcher {
         this.appState.scan();
         this.pushFn("state:resync", { state: this.appState.getState() });
       } else {
-        for (const projectSlug of projectSlugs) {
-          const project = this.appState.getProject(projectSlug);
-          if (project) {
-            this.pushFn("project:changed", { project });
-          }
+        for (const project of rescanned.values()) {
+          this.pushFn("project:changed", { project });
         }
       }
     } catch {
