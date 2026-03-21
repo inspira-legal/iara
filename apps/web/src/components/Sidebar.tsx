@@ -6,8 +6,6 @@ import { useSidebarStore } from "~/stores/sidebar";
 import { ProjectTree } from "./ProjectTree";
 import { CreateProjectDialog } from "./CreateProjectDialog";
 import { CreateTaskDialog } from "./CreateTaskDialog";
-import { BrowserToggle } from "./BrowserToggle";
-import { NotificationBell } from "./NotificationBell";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { AddRepoDialog } from "./AddRepoDialog";
 import { transport } from "~/lib/ws-transport";
@@ -51,9 +49,7 @@ export function Sidebar() {
             >
               <Plus size={14} />
             </button>
-            <NotificationBell />
-            <BrowserToggle />
-            <button
+<button
               type="button"
               onClick={() => void navigate({ to: "/settings" })}
               className="rounded p-1 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-300"

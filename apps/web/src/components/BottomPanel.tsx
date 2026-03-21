@@ -62,6 +62,13 @@ export function BottomPanel({ panelRef }: { panelRef: RefObject<PanelImperativeH
     }
   }, [workspace, loadConfig]);
 
+  // Collapse panel when no project is selected
+  useEffect(() => {
+    if (!selectedProjectId && !collapsed) {
+      panelRef.current?.collapse();
+    }
+  }, [selectedProjectId, collapsed, panelRef]);
+
   // Reload config when scripts.yaml changes on disk
   useEffect(() => {
     const unsub = transport.subscribe("scripts:reload", ({ projectId }) => {
@@ -110,6 +117,7 @@ export function BottomPanel({ panelRef }: { panelRef: RefObject<PanelImperativeH
   }, [hasUnhealthy, setActiveTab, collapsed, panelRef]);
 
   const toggleCollapse = () => {
+    if (!selectedProjectId) return;
     if (collapsed) {
       setActiveTab("scripts");
       panelRef.current?.expand();
@@ -119,6 +127,7 @@ export function BottomPanel({ panelRef }: { panelRef: RefObject<PanelImperativeH
   };
 
   const handleTabClick = (tab: "scripts" | "output") => {
+    if (!selectedProjectId) return;
     setActiveTab(tab);
     if (collapsed) {
       panelRef.current?.expand();
