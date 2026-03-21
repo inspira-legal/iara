@@ -1,5 +1,8 @@
 import * as fs from "node:fs";
-import { query, tool, createSdkMcpServer } from "@anthropic-ai/claude-agent-sdk";
+import * as crypto from "node:crypto";
+import * as os from "node:os";
+import * as path from "node:path";
+import { query } from "@anthropic-ai/claude-agent-sdk";
 import { z } from "zod";
 import type { ClaudeProgress } from "@iara/contracts";
 
@@ -20,120 +23,51 @@ export interface ClaudeRun<T> {
 }
 
 // ---------------------------------------------------------------------------
-// Shared core
+// Constants
 // ---------------------------------------------------------------------------
 
-interface RunCoreConfig {
-  cwd: string;
-  prompt: string;
-  systemPrompt?: string | undefined;
-  maxTurns?: number | undefined;
-  signal?: AbortSignal | undefined;
-  allowedTools: string[];
-  disallowedTools: string[];
-  mcpServers?: NonNullable<Parameters<typeof query>[0]["options"]>["mcpServers"];
-  describeToolUse: (tool: string, input: Record<string, unknown>) => string;
-  handleResult: (message: { subtype: string; result?: string; errors?: string[] }) => void;
-  onError: (err: Error) => void;
-}
+const MAX_RETRIES = 2;
+const DEFAULT_MAX_TURNS = 20;
 
-function createRunCore(config: RunCoreConfig) {
-  const abortController = new AbortController();
+// ---------------------------------------------------------------------------
+// Progress queue — shared across retries
+// ---------------------------------------------------------------------------
 
-  if (config.signal) {
-    config.signal.addEventListener("abort", () => abortController.abort(), { once: true });
-  }
+function createProgressQueue() {
+  const queue: ClaudeProgress[] = [];
+  let resolve: (() => void) | null = null;
+  let done = false;
 
-  const progressQueue: ClaudeProgress[] = [];
-  const state = { progressResolve: null as (() => void) | null, done: false };
-
-  function pushProgress(event: ClaudeProgress): void {
-    progressQueue.push(event);
-    if (state.progressResolve) {
-      state.progressResolve();
-      state.progressResolve = null;
+  function push(event: ClaudeProgress): void {
+    queue.push(event);
+    if (resolve) {
+      resolve();
+      resolve = null;
     }
   }
 
-  // Start the async query loop
-  void (async () => {
-    try {
-      const options: NonNullable<Parameters<typeof query>[0]["options"]> = {
-        cwd: config.cwd,
-        allowedTools: config.allowedTools,
-        disallowedTools: config.disallowedTools,
-        permissionMode: "dontAsk" as const,
-        maxTurns: config.maxTurns ?? 20,
-        persistSession: false,
-        abortController,
-        stderr: (data: string) => console.error("[claude-sdk]", data),
-      };
-
-      if (config.systemPrompt) {
-        options.systemPrompt = config.systemPrompt;
-      }
-
-      if (config.mcpServers) {
-        options.mcpServers = config.mcpServers;
-      }
-
-      const stream = query({ prompt: config.prompt, options });
-
-      for await (const message of stream) {
-        if (message.type === "assistant") {
-          const betaMessage = message.message;
-          if (betaMessage && "content" in betaMessage) {
-            for (const block of betaMessage.content) {
-              if (block.type === "tool_use") {
-                const desc = config.describeToolUse(
-                  block.name,
-                  block.input as Record<string, unknown>,
-                );
-                pushProgress({ type: "status", message: desc });
-              } else if (block.type === "text" && block.text) {
-                pushProgress({ type: "text", content: block.text });
-              }
-            }
-          }
-        } else if (message.type === "result") {
-          config.handleResult(message as { subtype: string; result?: string; errors?: string[] });
-        } else if (
-          message.type === "system" &&
-          "subtype" in message &&
-          message.subtype === "status"
-        ) {
-          pushProgress({ type: "status", message: "Processing..." });
-        } else if (message.type === "tool_use_summary") {
-          pushProgress({ type: "status", message: message.summary });
-        } else if (message.type === "tool_progress") {
-          pushProgress({ type: "status", message: `Using ${message.tool_name}...` });
-        }
-      }
-    } catch (err) {
-      config.onError(err instanceof Error ? err : new Error(String(err)));
-    } finally {
-      state.done = true;
-      if (state.progressResolve) {
-        state.progressResolve();
-        state.progressResolve = null;
-      }
+  function finish(): void {
+    done = true;
+    if (resolve) {
+      resolve();
+      resolve = null;
     }
-  })();
+  }
 
-  const progressIterable: AsyncIterable<ClaudeProgress> = {
+  const iterable: AsyncIterable<ClaudeProgress> = {
     [Symbol.asyncIterator]() {
       let index = 0;
       return {
         async next(): Promise<IteratorResult<ClaudeProgress>> {
           while (true) {
-            if (index < progressQueue.length) {
-              return { value: progressQueue[index++]!, done: false };
+            if (index < queue.length) {
+              return { value: queue[index++]!, done: false };
             }
-            if (state.done) {
+            if (done) {
               return { value: undefined as never, done: true };
             }
-            await new Promise<void>((resolve) => {
-              state.progressResolve = resolve;
+            await new Promise<void>((r) => {
+              resolve = r;
             });
           }
         },
@@ -141,11 +75,89 @@ function createRunCore(config: RunCoreConfig) {
     },
   };
 
-  return {
-    progressIterable,
-    abort: () => abortController.abort(),
-  };
+  return { push, finish, iterable };
 }
+
+// ---------------------------------------------------------------------------
+// Query stream — runs a single SDK query, pushing progress events
+// ---------------------------------------------------------------------------
+
+interface QueryStreamConfig {
+  prompt: string;
+  cwd: string;
+  systemPrompt?: string;
+  sessionId?: string;
+  resume?: string;
+  maxTurns: number;
+  abortController: AbortController;
+  tempFile: string;
+  pushProgress: (event: ClaudeProgress) => void;
+  describeToolUse: (tool: string, input: Record<string, unknown>) => string;
+}
+
+async function runQueryStream(
+  config: QueryStreamConfig,
+): Promise<{ subtype: string; errors?: string[] }> {
+  const options: NonNullable<Parameters<typeof query>[0]["options"]> = {
+    cwd: config.cwd,
+    allowedTools: ["Read", "Glob", "Grep", "Write"],
+    disallowedTools: ["Bash", "Edit"],
+    maxTurns: config.maxTurns,
+    persistSession: true,
+    abortController: config.abortController,
+    canUseTool: async (toolName: string, input: Record<string, unknown>) => {
+      if (toolName === "Write" && input.file_path !== config.tempFile) {
+        return {
+          behavior: "deny" as const,
+          message: "Write is only allowed for the result file.",
+        };
+      }
+      return { behavior: "allow" as const };
+    },
+    stderr: (data: string) => console.error("[claude-sdk]", data),
+  };
+
+  if (config.systemPrompt) options.systemPrompt = config.systemPrompt;
+  if (config.sessionId) options.sessionId = config.sessionId;
+  if (config.resume) options.resume = config.resume;
+
+  let result: { subtype: string; errors?: string[] } = { subtype: "no_result" };
+
+  const stream = query({ prompt: config.prompt, options });
+
+  for await (const message of stream) {
+    if (message.type === "assistant") {
+      const betaMessage = message.message;
+      if (betaMessage && "content" in betaMessage) {
+        for (const block of betaMessage.content) {
+          if (block.type === "tool_use") {
+            const desc = config.describeToolUse(block.name, block.input as Record<string, unknown>);
+            config.pushProgress({ type: "status", message: desc });
+          } else if (block.type === "text" && block.text) {
+            config.pushProgress({ type: "text", content: block.text });
+          }
+        }
+      }
+    } else if (message.type === "result") {
+      result = message as { subtype: string; errors?: string[] };
+    } else if (message.type === "system" && "subtype" in message && message.subtype === "status") {
+      config.pushProgress({ type: "status", message: "Processing..." });
+    } else if (message.type === "tool_use_summary") {
+      config.pushProgress({ type: "status", message: message.summary });
+    } else if (message.type === "tool_progress") {
+      config.pushProgress({
+        type: "status",
+        message: `Using ${message.tool_name}...`,
+      });
+    }
+  }
+
+  return result;
+}
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
 
 function makeShortPath(cwd: string) {
   return (filePath: string): string => {
@@ -169,7 +181,7 @@ function makeDescribeToolUse(cwd: string) {
         return `Searching for "${input.pattern as string}"${input.path ? ` in ${shortPath(input.path as string)}` : ""}`;
       case "Agent":
         return `Analyzing${input.description ? `: ${input.description}` : "..."}`;
-      case "mcp__iara__submit_result":
+      case "Write":
         return "Preparing result...";
       default:
         return `${tool}...`;
@@ -177,67 +189,19 @@ function makeDescribeToolUse(cwd: string) {
   };
 }
 
-// ---------------------------------------------------------------------------
-// submit_result MCP tool — used by all runClaude calls
-// ---------------------------------------------------------------------------
-
-function createSubmitResultServer<T>(
-  schema: z.ZodType<T> | undefined,
-  onResult: (data: T | string) => void,
-  onError: (err: Error) => void,
-): { mcpServers: RunCoreConfig["mcpServers"]; isReceived: () => boolean } {
-  let received = false;
-
-  const isZodObject = schema instanceof z.ZodObject;
-
-  const toolShape = schema
-    ? isZodObject
-      ? (schema as z.ZodObject<z.ZodRawShape>).shape
-      : { result: schema }
-    : { content: z.string().describe("The complete result content") };
-
-  const submitTool = tool(
-    "submit_result",
-    "Submit the final result. You MUST call this tool exactly once with your answer.",
-    toolShape,
-    async (input) => {
-      if (received) {
-        return { content: [{ type: "text" as const, text: "Result already received." }] };
-      }
-
-      if (schema) {
-        const data = isZodObject ? input : input.result;
-        const parsed = schema.safeParse(data);
-        if (!parsed.success) {
-          // Let Claude retry with corrected data
-          const issues = parsed.error.issues
-            .map((i) => `${i.path.join(".")}: ${i.message}`)
-            .join("; ");
-          return {
-            content: [
-              {
-                type: "text" as const,
-                text: `Validation failed: ${issues}. Fix the errors and call mcp__iara__submit_result again.`,
-              },
-            ],
-            isError: true,
-          };
-        }
-        received = true;
-        onResult(parsed.data as T);
-      } else {
-        received = true;
-        onResult(input.content as unknown as T | string);
-      }
-
-      return { content: [{ type: "text" as const, text: "Result received." }] };
-    },
-  );
-
-  return {
-    mcpServers: { iara: createSdkMcpServer({ name: "iara", tools: [submitTool] }) },
-    isReceived: () => received,
-  };
+function buildResultInstruction(tempFile: string, schema?: z.ZodType<unknown>): string {
+  const lines = [
+    `IMPORTANT: Write your final result as JSON to "${tempFile}" using the Write tool. Do NOT output the result as plain text.`,
+  ];
+  if (schema && schema instanceof z.ZodObject) {
+    const shape = (schema as z.ZodObject<z.ZodRawShape>).shape;
+    const fields = Object.entries(shape).map(([key, val]) => {
+      const desc = (val as z.ZodType<unknown>).description ?? "";
+      return `  - "${key}": ${desc}`;
+    });
+    lines.push("The JSON must match this structure:", ...fields);
+  }
+  return lines.join("\n");
 }
 
 // ---------------------------------------------------------------------------
@@ -251,46 +215,151 @@ export function runClaude<T>(
   config: ClaudeRunConfig,
   schema?: z.ZodType<T>,
 ): ClaudeRun<T | string> {
-  let resultResolve!: (value: T | string) => void;
-  let resultReject!: (err: Error) => void;
-  const resultPromise = new Promise<T | string>((resolve, reject) => {
-    resultResolve = resolve;
-    resultReject = reject;
-  });
+  const tempFile = path.join(os.tmpdir(), `iara-claude-${crypto.randomUUID()}.json`);
+  const sessionId = crypto.randomUUID();
+  const progress = createProgressQueue();
+  const describeToolUse = makeDescribeToolUse(config.cwd);
 
-  const { mcpServers, isReceived } = createSubmitResultServer(schema, resultResolve, resultReject);
+  const abortController = new AbortController();
+  if (config.signal) {
+    config.signal.addEventListener("abort", () => abortController.abort(), {
+      once: true,
+    });
+  }
 
-  const core = createRunCore({
-    cwd: config.cwd,
-    prompt: config.prompt,
-    systemPrompt: [
-      config.systemPrompt,
-      "IMPORTANT: You MUST use the `mcp__iara__submit_result` tool to submit your final answer. Do NOT output the result as text.",
-    ]
-      .filter(Boolean)
-      .join("\n\n"),
-    maxTurns: config.maxTurns,
-    signal: config.signal,
-    allowedTools: ["Read", "Glob", "Grep", "mcp__iara__submit_result"],
-    disallowedTools: ["Bash", "Edit", "Write"],
-    mcpServers,
-    describeToolUse: makeDescribeToolUse(config.cwd),
-    handleResult: (message) => {
-      if (message.subtype === "success") {
-        if (isReceived()) return;
-        resultReject(new Error("Claude did not call submit_result tool"));
-      } else {
-        const errors = message.errors ? message.errors.join(", ") : message.subtype;
-        resultReject(new Error(`Claude query failed: ${errors}`));
+  const systemPrompt = [config.systemPrompt, buildResultInstruction(tempFile, schema)]
+    .filter(Boolean)
+    .join("\n\n");
+
+  const resultPromise = (async (): Promise<T | string> => {
+    try {
+      // Initial query
+      const firstResult = await runQueryStream({
+        prompt: config.prompt,
+        cwd: config.cwd,
+        systemPrompt,
+        sessionId,
+        maxTurns: config.maxTurns ?? DEFAULT_MAX_TURNS,
+        abortController,
+        tempFile,
+        pushProgress: progress.push,
+        describeToolUse,
+      });
+
+      if (firstResult.subtype !== "success") {
+        const errors = firstResult.errors?.join(", ") ?? firstResult.subtype;
+        throw new Error(`Claude query failed: ${errors}`);
       }
-    },
-    onError: resultReject,
-  });
+
+      // Read + validate with retries in same session
+      for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+        // Read temp file
+        let content: string;
+        try {
+          content = await fs.promises.readFile(tempFile, "utf-8");
+        } catch {
+          if (attempt < MAX_RETRIES) {
+            progress.push({
+              type: "status",
+              message: `Result file not found, retrying (${attempt + 1}/${MAX_RETRIES})...`,
+            });
+            const retryResult = await runQueryStream({
+              prompt: `You did not write the result file. Write the result as JSON to "${tempFile}" using the Write tool.`,
+              cwd: config.cwd,
+              resume: sessionId,
+              maxTurns: config.maxTurns ?? DEFAULT_MAX_TURNS,
+              abortController,
+              tempFile,
+              pushProgress: progress.push,
+              describeToolUse,
+            });
+            if (retryResult.subtype !== "success") {
+              throw new Error(
+                `Retry query failed: ${retryResult.errors?.join(", ") ?? retryResult.subtype}`,
+              );
+            }
+            continue;
+          }
+          throw new Error("Claude did not write the result file");
+        }
+
+        // No schema — return raw content
+        if (!schema) return content;
+
+        // Parse JSON
+        let parsed: unknown;
+        try {
+          parsed = JSON.parse(content);
+        } catch {
+          if (attempt < MAX_RETRIES) {
+            progress.push({
+              type: "status",
+              message: `Invalid JSON, retrying (${attempt + 1}/${MAX_RETRIES})...`,
+            });
+            const retryResult = await runQueryStream({
+              prompt: `The file "${tempFile}" is not valid JSON. Fix the content and write valid JSON to the same file.`,
+              cwd: config.cwd,
+              resume: sessionId,
+              maxTurns: config.maxTurns ?? DEFAULT_MAX_TURNS,
+              abortController,
+              tempFile,
+              pushProgress: progress.push,
+              describeToolUse,
+            });
+            if (retryResult.subtype !== "success") {
+              throw new Error(
+                `Retry query failed: ${retryResult.errors?.join(", ") ?? retryResult.subtype}`,
+              );
+            }
+            continue;
+          }
+          throw new Error("Result is not valid JSON after retries");
+        }
+
+        // Validate with Zod
+        const result = schema.safeParse(parsed);
+        if (result.success) return result.data as T;
+
+        if (attempt < MAX_RETRIES) {
+          const issues = result.error.issues
+            .map((i) => `${i.path.join(".")}: ${i.message}`)
+            .join("; ");
+          progress.push({
+            type: "status",
+            message: `Validation failed, retrying (${attempt + 1}/${MAX_RETRIES})...`,
+          });
+          const retryResult = await runQueryStream({
+            prompt: `Validation failed for "${tempFile}": ${issues}. Fix the errors and write the corrected JSON to the same file.`,
+            cwd: config.cwd,
+            resume: sessionId,
+            maxTurns: config.maxTurns ?? DEFAULT_MAX_TURNS,
+            abortController,
+            tempFile,
+            pushProgress: progress.push,
+            describeToolUse,
+          });
+          if (retryResult.subtype !== "success") {
+            throw new Error(
+              `Retry query failed: ${retryResult.errors?.join(", ") ?? retryResult.subtype}`,
+            );
+          }
+          continue;
+        }
+
+        throw new Error(`Validation failed after ${MAX_RETRIES} retries: ${result.error.message}`);
+      }
+
+      throw new Error("Unexpected: exhausted retry loop without result");
+    } finally {
+      await fs.promises.unlink(tempFile).catch(() => {});
+      progress.finish();
+    }
+  })();
 
   return {
-    progress: core.progressIterable,
+    progress: progress.iterable,
     result: resultPromise,
-    abort: core.abort,
+    abort: () => abortController.abort(),
   };
 }
 
