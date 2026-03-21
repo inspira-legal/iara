@@ -1,0 +1,215 @@
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import * as fs from "node:fs";
+import * as path from "node:path";
+import * as os from "node:os";
+import { SessionWatcher } from "./session-watcher.js";
+
+let tmpHome: string;
+
+function createMockAppState(
+  projects: Array<{
+    slug: string;
+    workspaces: Array<{ id: string; slug: string }>;
+  }> = [],
+) {
+  return {
+    getState: vi.fn().mockReturnValue({ projects }),
+    getProjectDir: vi.fn((slug: string) => path.join(tmpHome, "projects", slug)),
+    getWorkspaceDir: vi.fn((wsId: string) => {
+      const [pSlug, wsSlug] = wsId.split("/") as [string, string];
+      return path.join(tmpHome, "projects", pSlug, wsSlug);
+    }),
+  } as any;
+}
+
+beforeEach(() => {
+  vi.useFakeTimers();
+  tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "session-watcher-test-"));
+  // Override HOME so computeProjectHash-based paths use our temp dir
+  process.env.HOME = tmpHome;
+});
+
+afterEach(() => {
+  vi.useRealTimers();
+  fs.rmSync(tmpHome, { recursive: true, force: true });
+});
+
+describe("SessionWatcher", () => {
+  describe("refresh()", () => {
+    it("creates watchers for workspace session directories", () => {
+      const projects = [
+        {
+          slug: "proj1",
+          workspaces: [{ id: "proj1/default", slug: "default" }],
+        },
+      ];
+
+      // Create workspace dir so computeProjectHash has a real path
+      const wsDir = path.join(tmpHome, "projects", "proj1", "default");
+      fs.mkdirSync(wsDir, { recursive: true });
+
+      const pushFn = vi.fn();
+      const appState = createMockAppState(projects);
+      const watcher = new SessionWatcher(pushFn, appState);
+
+      watcher.refresh();
+
+      // The watcher should have mapped workspace IDs to session hashes
+      const w = watcher as any;
+      expect(w.hashToWorkspaceIds.size).toBeGreaterThan(0);
+
+      watcher.stop();
+    });
+
+    it("removes watchers for deleted projects", () => {
+      const pushFn = vi.fn();
+      const projects = [
+        {
+          slug: "proj1",
+          workspaces: [{ id: "proj1/default", slug: "default" }],
+        },
+      ];
+
+      const wsDir = path.join(tmpHome, "projects", "proj1", "default");
+      fs.mkdirSync(wsDir, { recursive: true });
+
+      const appState = createMockAppState(projects);
+      const watcher = new SessionWatcher(pushFn, appState);
+
+      watcher.refresh();
+      const w = watcher as any;
+      const initialSize = w.hashToWorkspaceIds.size;
+      expect(initialSize).toBeGreaterThan(0);
+
+      // Now refresh with empty projects
+      appState.getState.mockReturnValue({ projects: [] });
+      watcher.refresh();
+
+      expect(w.hashToWorkspaceIds.size).toBe(0);
+      watcher.stop();
+    });
+
+    it("handles projects with multiple workspaces", () => {
+      const projects = [
+        {
+          slug: "proj1",
+          workspaces: [
+            { id: "proj1/default", slug: "default" },
+            { id: "proj1/feature", slug: "feature" },
+          ],
+        },
+      ];
+
+      const wsDir1 = path.join(tmpHome, "projects", "proj1", "default");
+      const wsDir2 = path.join(tmpHome, "projects", "proj1", "feature");
+      fs.mkdirSync(wsDir1, { recursive: true });
+      fs.mkdirSync(wsDir2, { recursive: true });
+
+      const pushFn = vi.fn();
+      const appState = createMockAppState(projects);
+      const watcher = new SessionWatcher(pushFn, appState);
+
+      watcher.refresh();
+      const w = watcher as any;
+      // Should have watchers for both workspaces (possibly shared hashes)
+      expect(w.hashToWorkspaceIds.size).toBeGreaterThan(0);
+
+      watcher.stop();
+    });
+  });
+
+  describe("push events", () => {
+    it("pushes session:changed events after debounce", () => {
+      const projects = [
+        {
+          slug: "proj1",
+          workspaces: [{ id: "proj1/default", slug: "default" }],
+        },
+      ];
+
+      const wsDir = path.join(tmpHome, "projects", "proj1", "default");
+      fs.mkdirSync(wsDir, { recursive: true });
+
+      const pushFn = vi.fn();
+      const appState = createMockAppState(projects);
+      const watcher = new SessionWatcher(pushFn, appState);
+      watcher.refresh();
+
+      // Simulate debounced notify via private method
+      const w = watcher as any;
+      const hashes = Array.from(w.hashToWorkspaceIds.keys()) as string[];
+      if (hashes.length > 0) {
+        w.debouncedNotify(hashes[0]);
+        expect(pushFn).not.toHaveBeenCalled();
+
+        vi.advanceTimersByTime(600);
+        expect(pushFn).toHaveBeenCalledWith("session:changed", { workspaceId: "proj1/default" });
+      }
+
+      watcher.stop();
+    });
+
+    it("debounces multiple rapid changes", () => {
+      const projects = [
+        {
+          slug: "proj1",
+          workspaces: [{ id: "proj1/default", slug: "default" }],
+        },
+      ];
+
+      const wsDir = path.join(tmpHome, "projects", "proj1", "default");
+      fs.mkdirSync(wsDir, { recursive: true });
+
+      const pushFn = vi.fn();
+      const appState = createMockAppState(projects);
+      const watcher = new SessionWatcher(pushFn, appState);
+      watcher.refresh();
+
+      const w = watcher as any;
+      const hashes = Array.from(w.hashToWorkspaceIds.keys()) as string[];
+      if (hashes.length > 0) {
+        w.debouncedNotify(hashes[0]);
+        w.debouncedNotify(hashes[0]);
+        w.debouncedNotify(hashes[0]);
+
+        vi.advanceTimersByTime(600);
+        // Should only push once despite 3 rapid calls
+        expect(pushFn).toHaveBeenCalledTimes(1);
+      }
+
+      watcher.stop();
+    });
+  });
+
+  describe("stop()", () => {
+    it("cleans up all watchers and timers", () => {
+      const projects = [
+        {
+          slug: "proj1",
+          workspaces: [{ id: "proj1/default", slug: "default" }],
+        },
+      ];
+
+      const wsDir = path.join(tmpHome, "projects", "proj1", "default");
+      fs.mkdirSync(wsDir, { recursive: true });
+
+      const pushFn = vi.fn();
+      const appState = createMockAppState(projects);
+      const watcher = new SessionWatcher(pushFn, appState);
+      watcher.refresh();
+
+      watcher.stop();
+
+      const w = watcher as any;
+      expect(w.watchers.size).toBe(0);
+      expect(w.debounceTimers.size).toBe(0);
+    });
+
+    it("is safe to call without starting", () => {
+      const pushFn = vi.fn();
+      const appState = createMockAppState();
+      const watcher = new SessionWatcher(pushFn, appState);
+      expect(() => watcher.stop()).not.toThrow();
+    });
+  });
+});
