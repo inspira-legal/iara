@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState } from "react";
 import { Plus, Sparkles, AlertTriangle, GitBranch, FolderOpen, FileText, X } from "lucide-react";
 import type { AddRepoInput } from "@iara/contracts";
 import { useAppStore } from "~/stores/app";
@@ -111,11 +111,11 @@ export function CreateProjectDialog({ open, onClose }: CreateProjectDialogProps)
     setPendingRepos((prev) => prev.filter((r) => r.input.name !== repoName));
   };
 
-  const handleAskClaude = useCallback(async () => {
+  const handleAskClaude = async () => {
     if (!userGoal.trim()) return;
     setStep("loading");
     await claude.ask(userGoal);
-  }, [userGoal, claude]);
+  };
 
   const handleCreate = async () => {
     if (!name.trim() || !computedSlug || slugTaken) return;
