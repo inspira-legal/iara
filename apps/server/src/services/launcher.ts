@@ -59,7 +59,7 @@ export function buildSystemPrompt(ctx: TaskContext): string {
   // # WORKTREES
   if (ctx.repos.length > 0) {
     const worktreeList = ctx.repos
-      .map((r) => `${r.name}/  ← git worktree (branch: ${ctx.branch}, origin: ${r.mainRepoPath})`)
+      .map((r) => `./${r.name}/  ← git worktree (branch: ${ctx.branch}, origin: ${r.mainRepoPath})`)
       .join("\n");
     const defaultWorkspacePath = path.dirname(ctx.repos[0]!.mainRepoPath);
     sections.push(
@@ -123,8 +123,15 @@ export function buildRootPrompt(ctx: RootContext): string {
 
   // # REPOS
   if (ctx.repos.length > 0) {
-    const lines = ctx.repos.map((r) => `${r.name}/  ← git repository (branch: ${r.branch})`);
-    sections.push(`<repos>\n${lines.join("\n")}\n</repos>`);
+    const repoList = ctx.repos
+      .map((r) => `./${r.name}/  ← git repository (branch: ${r.branch})`)
+      .join("\n");
+    sections.push(
+      loadPrompt("system-repos", {
+        repo_list: repoList,
+        example_repo_name: ctx.repos[0]?.name ?? "<repo>",
+      }),
+    );
   }
 
   // # ENV FILES
