@@ -17,8 +17,10 @@ describe("writeClipboard", () => {
 
   it("uses navigator.clipboard.writeText when no desktop bridge", () => {
     const writeTextMock = vi.fn().mockResolvedValue(undefined);
-    Object.assign(navigator, {
-      clipboard: { writeText: writeTextMock, readText: vi.fn() },
+    Object.defineProperty(navigator, "clipboard", {
+      value: { writeText: writeTextMock, readText: vi.fn() },
+      writable: true,
+      configurable: true,
     });
 
     writeClipboard("hello");
@@ -44,8 +46,10 @@ describe("readClipboard", () => {
 
   it("uses navigator.clipboard.readText when no desktop bridge", async () => {
     const readTextMock = vi.fn().mockResolvedValue("pasted text");
-    Object.assign(navigator, {
-      clipboard: { readText: readTextMock, writeText: vi.fn() },
+    Object.defineProperty(navigator, "clipboard", {
+      value: { readText: readTextMock, writeText: vi.fn() },
+      writable: true,
+      configurable: true,
     });
 
     const result = await readClipboard();

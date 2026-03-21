@@ -6,6 +6,8 @@ export default mergeConfig(
   defineConfig({
     test: {
       passWithNoTests: true,
+      environment: "happy-dom",
+      setupFiles: ["./src/test-setup.ts"],
       coverage: {
         provider: "v8",
         thresholds: {
