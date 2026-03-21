@@ -44,7 +44,7 @@ export function registerProjectHandlers(
     // Auto-discover scripts after repos are cloned (async, non-blocking)
     // triggerDiscovery handles repo/build-file checks internally
     try {
-      triggerDiscovery(project.slug, pushFn);
+      triggerDiscovery(project.id, project.slug, pushFn);
     } catch (err) {
       console.error("Auto-discovery failed:", err);
     }

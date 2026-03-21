@@ -12,6 +12,8 @@ interface ScriptsState {
   currentWorkspace: string | null;
   loading: boolean;
   discovering: boolean;
+  /** Projects currently running discovery */
+  discoveringProjects: Set<string>;
   /** Logs keyed by ScriptStatus.id */
   logs: Map<string, string[]>;
   selectedLog: { service: string; script: string } | null;
@@ -42,6 +44,7 @@ export const useScriptsStore = create<ScriptsState & ScriptsActions>((set, get) 
   currentWorkspace: null as string | null,
   loading: false,
   discovering: false,
+  discoveringProjects: new Set<string>(),
   logs: new Map(),
   selectedLog: null,
   activeTab: "scripts",
@@ -55,6 +58,7 @@ export const useScriptsStore = create<ScriptsState & ScriptsActions>((set, get) 
       activeTab: "scripts",
       currentProjectId: projectId,
       currentWorkspace: workspace,
+      discovering: get().discoveringProjects.has(projectId),
     });
     try {
       const config = await transport.request("scripts.load", { projectId, workspace });
@@ -81,12 +85,18 @@ export const useScriptsStore = create<ScriptsState & ScriptsActions>((set, get) 
   },
 
   discover: async (projectId) => {
-    set({ discovering: true });
+    const next = new Set(get().discoveringProjects);
+    next.add(projectId);
+    set({ discovering: true, discoveringProjects: next });
     try {
       await transport.request("scripts.discover", { projectId });
-      // discovering is cleared by scripts:reload push in subscribePush
     } catch {
-      set({ discovering: false });
+      const cleared = new Set(get().discoveringProjects);
+      cleared.delete(projectId);
+      set({
+        discoveringProjects: cleared,
+        discovering: cleared.has(get().currentProjectId ?? ""),
+      });
     }
   },
 
@@ -155,8 +165,13 @@ export const useScriptsStore = create<ScriptsState & ScriptsActions>((set, get) 
       },
     );
 
-    const unsubReload = transport.subscribe("scripts:reload", () => {
-      set({ discovering: false });
+    const unsubReload = transport.subscribe("scripts:reload", ({ projectId }) => {
+      const next = new Set(get().discoveringProjects);
+      next.delete(projectId);
+      set({
+        discoveringProjects: next,
+        discovering: next.has(get().currentProjectId ?? ""),
+      });
     });
 
     return () => {

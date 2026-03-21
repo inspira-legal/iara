@@ -78,6 +78,22 @@ describe("PortAllocator", () => {
     expect(ports.get("frontend")).toBe(3001);
   });
 
+  it("skips over pinned ports when assigning dynamic ports", () => {
+    const allocator = new PortAllocator(createMockStore());
+    const services = [
+      makeService("pinned-svc", 3001),
+      makeService("backend"),
+      makeService("frontend"),
+      makeService("worker"),
+    ];
+    const ports = allocator.resolve(services, 3000);
+    expect(ports.get("pinned-svc")).toBe(3001);
+    expect(ports.get("backend")).toBe(3000);
+    // 3001 is pinned, so frontend skips to 3002
+    expect(ports.get("frontend")).toBe(3002);
+    expect(ports.get("worker")).toBe(3003);
+  });
+
   it("pinned ports do not consume offsets", () => {
     const allocator = new PortAllocator(createMockStore());
     const services = [

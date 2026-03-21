@@ -171,7 +171,7 @@ export type WsPushEvents = {
   "terminal:exit": { terminalId: string; exitCode: number };
   "scripts:status": { service: string; script: string; status: ScriptStatus };
   "scripts:log": { scriptId: string; service: string; script: string; line: string };
-  "scripts:reload": Record<string, never>;
+  "scripts:reload": { projectId: string };
   notification: { title: string; body: string; type?: string };
   "clone:progress": CloneProgress;
   "session:changed": { taskId: string };

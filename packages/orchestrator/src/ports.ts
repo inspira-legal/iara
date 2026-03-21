@@ -34,16 +34,18 @@ export class PortAllocator {
   /**
    * Resolve ports for all services given a base port.
    * Services with a pinned `port` use that value.
-   * Services without `port` get base+0, base+1, base+2, etc.
+   * Services without `port` get base+0, base+1, … skipping any pinned ports.
    */
   resolve(services: ServiceDef[], basePort: number): Map<string, number> {
     const ports = new Map<string, number>();
-    let offset = 0;
+    const pinned = new Set(services.filter((s) => s.port !== null).map((s) => s.port!));
 
+    let offset = 0;
     for (const svc of services) {
       if (svc.port !== null) {
         ports.set(svc.name, svc.port);
       } else {
+        while (pinned.has(basePort + offset)) offset++;
         ports.set(svc.name, basePort + offset);
         offset++;
       }

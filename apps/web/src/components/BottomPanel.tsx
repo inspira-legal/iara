@@ -71,8 +71,8 @@ export function BottomPanel() {
 
   // Reload config when scripts.yaml changes on disk
   useEffect(() => {
-    const unsub = transport.subscribe("scripts:reload", () => {
-      if (selectedProjectId) {
+    const unsub = transport.subscribe("scripts:reload", ({ projectId }) => {
+      if (selectedProjectId && projectId === selectedProjectId) {
         void loadConfig(selectedProjectId, workspace);
       }
     });

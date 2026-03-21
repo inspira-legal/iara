@@ -69,6 +69,7 @@ function loadResolvedConfig(
 }
 
 export function triggerDiscovery(
+  projectId: string,
   projectSlug: string,
   pushFn: PushFn,
   existingYaml?: string,
@@ -98,7 +99,7 @@ export function triggerDiscovery(
       .replace(/^```ya?ml\s*\n/i, "")
       .replace(/\n```\s*$/, "")
       .trim();
-    pushFn("scripts:reload", {} as Record<string, never>);
+    pushFn("scripts:reload", { projectId });
     return yaml;
   });
 
@@ -223,7 +224,7 @@ export function registerScriptHandlers(
     const yamlPath = getScriptsYamlPath(project.slug);
     const existingYaml = fs.existsSync(yamlPath) ? fs.readFileSync(yamlPath, "utf-8") : undefined;
 
-    const requestId = triggerDiscovery(project.slug, pushFn, existingYaml) ?? "";
+    const requestId = triggerDiscovery(params.projectId, project.slug, pushFn, existingYaml) ?? "";
     return { requestId };
   });
 
