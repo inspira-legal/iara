@@ -100,7 +100,7 @@ export function triggerDiscovery(
       .replace(/^```ya?ml\s*\n/i, "")
       .replace(/\n```\s*$/, "")
       .trim();
-    pushFn("scripts:reload", { projectId });
+    pushFn("scripts:reload", { projectId: projectSlug });
     return yaml;
   });
 

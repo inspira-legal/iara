@@ -2,7 +2,8 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { NotificationService } from "./notifications.js";
 
 function createPushFn() {
-  return vi.fn() as ReturnType<typeof vi.fn>;
+  // biome-ignore lint: test mock
+  return vi.fn() as any;
 }
 
 describe("NotificationService", () => {
@@ -11,7 +12,7 @@ describe("NotificationService", () => {
 
   beforeEach(() => {
     pushFn = createPushFn();
-    service = new NotificationService(pushFn);
+    service = new NotificationService(pushFn as any);
   });
 
   describe("send()", () => {

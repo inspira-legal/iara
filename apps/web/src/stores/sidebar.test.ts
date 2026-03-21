@@ -38,7 +38,6 @@ import { useSidebarStore } from "./sidebar";
 const INITIAL_STATE = {
   expandedProjectIds: new Set<string>(),
   projectOrder: [] as string[],
-  sidebarWidth: 256,
 };
 
 // ---------------------------------------------------------------------------
@@ -151,41 +150,6 @@ describe("useSidebarStore", () => {
   });
 
   // -----------------------------------------------------------------------
-  // setSidebarWidth
-  // -----------------------------------------------------------------------
-
-  describe("setSidebarWidth()", () => {
-    it("sets width within bounds", () => {
-      useSidebarStore.getState().setSidebarWidth(350);
-      expect(useSidebarStore.getState().sidebarWidth).toBe(350);
-    });
-
-    it("clamps to minimum of 200", () => {
-      useSidebarStore.getState().setSidebarWidth(100);
-      expect(useSidebarStore.getState().sidebarWidth).toBe(200);
-    });
-
-    it("clamps to maximum of 480", () => {
-      useSidebarStore.getState().setSidebarWidth(600);
-      expect(useSidebarStore.getState().sidebarWidth).toBe(480);
-    });
-
-    it("clamps at exact boundary values", () => {
-      useSidebarStore.getState().setSidebarWidth(200);
-      expect(useSidebarStore.getState().sidebarWidth).toBe(200);
-
-      useSidebarStore.getState().setSidebarWidth(480);
-      expect(useSidebarStore.getState().sidebarWidth).toBe(480);
-    });
-
-    it("saves clamped value to localStorage", () => {
-      useSidebarStore.getState().setSidebarWidth(100);
-      const saved = JSON.parse(localStorageMock.setItem.mock.calls[0]![1] as string);
-      expect(saved.sidebarWidth).toBe(200);
-    });
-  });
-
-  // -----------------------------------------------------------------------
   // hydrateFromStorage
   // -----------------------------------------------------------------------
 
@@ -194,14 +158,12 @@ describe("useSidebarStore", () => {
       storageData[STORAGE_KEY] = JSON.stringify({
         expandedProjectIds: ["proj1", "proj2"],
         projectOrder: ["proj2", "proj1"],
-        sidebarWidth: 300,
       });
 
       useSidebarStore.getState().hydrateFromStorage();
 
       expect(useSidebarStore.getState().expandedProjectIds).toEqual(new Set(["proj1", "proj2"]));
       expect(useSidebarStore.getState().projectOrder).toEqual(["proj2", "proj1"]);
-      expect(useSidebarStore.getState().sidebarWidth).toBe(300);
     });
 
     it("handles empty localStorage gracefully", () => {
@@ -210,7 +172,6 @@ describe("useSidebarStore", () => {
       // Should remain at defaults
       expect(useSidebarStore.getState().expandedProjectIds).toEqual(new Set());
       expect(useSidebarStore.getState().projectOrder).toEqual([]);
-      expect(useSidebarStore.getState().sidebarWidth).toBe(256);
     });
 
     it("handles invalid JSON gracefully", () => {
@@ -218,8 +179,8 @@ describe("useSidebarStore", () => {
 
       useSidebarStore.getState().hydrateFromStorage();
 
-      // Should remain at defaults — no crash
-      expect(useSidebarStore.getState().sidebarWidth).toBe(256);
+      // Should remain at defaults - no crash
+      expect(useSidebarStore.getState().expandedProjectIds).toEqual(new Set());
     });
 
     it("defaults missing fields", () => {
@@ -229,7 +190,6 @@ describe("useSidebarStore", () => {
 
       expect(useSidebarStore.getState().expandedProjectIds).toEqual(new Set());
       expect(useSidebarStore.getState().projectOrder).toEqual([]);
-      expect(useSidebarStore.getState().sidebarWidth).toBe(256);
     });
   });
 
@@ -283,7 +243,6 @@ describe("useSidebarStore", () => {
     it("state saved by one action can be hydrated back", () => {
       useSidebarStore.getState().expandProject("proj1");
       useSidebarStore.getState().setProjectOrder(["proj1", "proj2"]);
-      useSidebarStore.getState().setSidebarWidth(400);
 
       // Reset store
       useSidebarStore.setState(INITIAL_STATE);
@@ -294,7 +253,6 @@ describe("useSidebarStore", () => {
 
       expect(useSidebarStore.getState().expandedProjectIds.has("proj1")).toBe(true);
       expect(useSidebarStore.getState().projectOrder).toEqual(["proj1", "proj2"]);
-      expect(useSidebarStore.getState().sidebarWidth).toBe(400);
     });
   });
 });

@@ -76,7 +76,7 @@ describe("PortAllocator", () => {
   });
 
   it("skips over pinned ports when assigning dynamic ports", () => {
-    const allocator = new PortAllocator(createMockStore());
+    const allocator = new PortAllocator();
     const services = [
       makeService("pinned-svc", 3001),
       makeService("backend"),

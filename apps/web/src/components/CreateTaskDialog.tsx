@@ -41,7 +41,7 @@ export function CreateTaskDialog({ open, onClose, projectId, project }: CreateTa
   const isSlugDefault = computedSlug === "default";
 
   const claude = useClaudeSuggestion({
-    requestFn: (userGoal) => transport.request("tasks.suggest", { projectId, userGoal }),
+    requestFn: (userGoal) => transport.request("workspaces.suggest", { projectId, userGoal }),
     onResult: (data) => {
       try {
         const parsed = JSON.parse(data.content);

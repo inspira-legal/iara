@@ -8,7 +8,7 @@ interface DialogShellProps {
   maxWidth?: string;
   onClose: () => void;
   disabled?: boolean;
-  backButton?: () => void;
+  backButton?: (() => void) | undefined;
   children: React.ReactNode;
 }
 

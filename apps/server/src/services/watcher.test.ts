@@ -16,7 +16,8 @@ function createMockAppState(overrides: Record<string, unknown> = {}) {
 
 describe("ProjectsWatcher", () => {
   let tmpDir: string;
-  let pushFn: ReturnType<typeof vi.fn>;
+  // biome-ignore lint: test mock
+  let pushFn: any;
 
   beforeEach(() => {
     vi.useFakeTimers();

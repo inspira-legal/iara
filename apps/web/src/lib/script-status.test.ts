@@ -8,7 +8,7 @@ function makeStatus(
   return {
     scriptId: "test:svc:script",
     projectId: "proj-1",
-    workspaceId: "ws-1",
+    workspace: "ws-1",
     service: "svc",
     script: "script",
     pid: null,

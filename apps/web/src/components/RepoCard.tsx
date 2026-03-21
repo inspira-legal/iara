@@ -55,8 +55,8 @@ export function RepoCard({ repo, onRemove, taskId }: RepoCardProps) {
     }
     setRenaming(true);
     try {
-      await transport.request("tasks.renameBranch", {
-        taskId,
+      await transport.request("workspaces.renameBranch", {
+        workspaceId: taskId,
         repoName: repo.name,
         newBranch: branchInput.trim(),
       });

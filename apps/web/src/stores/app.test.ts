@@ -7,13 +7,13 @@ import type { Project, Workspace } from "@iara/contracts";
 
 const { mockRequest, mockSubscribe } = vi.hoisted(() => ({
   mockRequest: vi.fn(),
-  mockSubscribe: vi.fn(() => vi.fn()),
+  mockSubscribe: vi.fn((_event: string, _cb: (...args: unknown[]) => void) => vi.fn()),
 }));
 
 vi.mock("~/lib/ws-transport", () => ({
   transport: {
-    request: (...args: unknown[]) => mockRequest(...args),
-    subscribe: (...args: unknown[]) => mockSubscribe(...args),
+    request: mockRequest,
+    subscribe: mockSubscribe,
   },
 }));
 

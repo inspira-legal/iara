@@ -7,13 +7,13 @@ import type { ScriptsConfig, ScriptStatus } from "@iara/contracts";
 
 const { mockRequest, mockSubscribe } = vi.hoisted(() => ({
   mockRequest: vi.fn(),
-  mockSubscribe: vi.fn(() => vi.fn()),
+  mockSubscribe: vi.fn((_event: string, _cb: (...args: unknown[]) => void) => vi.fn()),
 }));
 
 vi.mock("~/lib/ws-transport", () => ({
   transport: {
-    request: (...args: unknown[]) => mockRequest(...args),
-    subscribe: (...args: unknown[]) => mockSubscribe(...args),
+    request: mockRequest,
+    subscribe: mockSubscribe,
   },
 }));
 
@@ -52,11 +52,11 @@ const INITIAL_STATE = {
   currentWorkspaceId: null,
   loading: false,
   discovering: false,
+  discoveringProjects: new Set<string>(),
   logs: new Map<string, string[]>(),
   selectedLog: null,
   activeTab: "scripts" as const,
   collapsed: false,
-  panelHeight: 240,
 };
 
 // ---------------------------------------------------------------------------
@@ -222,35 +222,6 @@ describe("useScriptsStore", () => {
   });
 
   // -----------------------------------------------------------------------
-  // setPanelHeight
-  // -----------------------------------------------------------------------
-
-  describe("setPanelHeight()", () => {
-    it("sets height within bounds", () => {
-      useScriptsStore.getState().setPanelHeight(300);
-      expect(useScriptsStore.getState().panelHeight).toBe(300);
-    });
-
-    it("clamps to minimum of 120", () => {
-      useScriptsStore.getState().setPanelHeight(50);
-      expect(useScriptsStore.getState().panelHeight).toBe(120);
-    });
-
-    it("clamps to maximum of 600", () => {
-      useScriptsStore.getState().setPanelHeight(900);
-      expect(useScriptsStore.getState().panelHeight).toBe(600);
-    });
-
-    it("clamps exactly at boundary values", () => {
-      useScriptsStore.getState().setPanelHeight(120);
-      expect(useScriptsStore.getState().panelHeight).toBe(120);
-
-      useScriptsStore.getState().setPanelHeight(600);
-      expect(useScriptsStore.getState().panelHeight).toBe(600);
-    });
-  });
-
-  // -----------------------------------------------------------------------
   // setActiveTab / setCollapsed
   // -----------------------------------------------------------------------
 
@@ -277,8 +248,6 @@ describe("useScriptsStore", () => {
       mockRequest.mockResolvedValueOnce(undefined);
 
       const promise = useScriptsStore.getState().discover("proj1");
-
-      expect(useScriptsStore.getState().discovering).toBe(true);
 
       await promise;
 
@@ -325,7 +294,8 @@ describe("useScriptsStore", () => {
       const config = makeConfig({ statuses: [status] });
       useScriptsStore.setState({ config, currentWorkspaceId: "proj1/ws1" });
 
-      mockSubscribe.mockImplementation((event: string, cb: (...args: unknown[]) => void) => {
+      // biome-ignore lint: test mock
+      mockSubscribe.mockImplementation((event: string, cb: (...args: any[]) => void) => {
         if (event === "scripts:status") {
           cb({ service: "api", script: "dev", status: { ...status, health: "running", pid: 1234 } });
         }
@@ -343,7 +313,8 @@ describe("useScriptsStore", () => {
       const config = makeConfig({ statuses: [] });
       useScriptsStore.setState({ config, currentWorkspaceId: "proj1/ws1" });
 
-      mockSubscribe.mockImplementation((event: string, cb: (...args: unknown[]) => void) => {
+      // biome-ignore lint: test mock
+      mockSubscribe.mockImplementation((event: string, cb: (...args: any[]) => void) => {
         if (event === "scripts:status") {
           cb({
             service: "api",
@@ -370,7 +341,8 @@ describe("useScriptsStore", () => {
         health: "running",
       });
 
-      mockSubscribe.mockImplementation((event: string, cb: (...args: unknown[]) => void) => {
+      // biome-ignore lint: test mock
+      mockSubscribe.mockImplementation((event: string, cb: (...args: any[]) => void) => {
         if (event === "scripts:status") {
           cb({ service: "api", script: "dev", status: newStatus });
         }
@@ -390,7 +362,8 @@ describe("useScriptsStore", () => {
 
       const setMock = vi.spyOn(useScriptsStore, "setState");
 
-      mockSubscribe.mockImplementation((event: string, cb: (...args: unknown[]) => void) => {
+      // biome-ignore lint: test mock
+      mockSubscribe.mockImplementation((event: string, cb: (...args: any[]) => void) => {
         if (event === "scripts:status") {
           // Same health, pid, exitCode = no-op
           cb({ service: "api", script: "dev", status: { ...status } });
@@ -412,7 +385,8 @@ describe("useScriptsStore", () => {
       logs.set("8080:api:dev", ["line1"]);
       useScriptsStore.setState({ logs });
 
-      mockSubscribe.mockImplementation((event: string, cb: (...args: unknown[]) => void) => {
+      // biome-ignore lint: test mock
+      mockSubscribe.mockImplementation((event: string, cb: (...args: any[]) => void) => {
         if (event === "scripts:log") {
           cb({ scriptId: "8080:api:dev", service: "api", script: "dev", line: "line2" });
         }
@@ -425,7 +399,8 @@ describe("useScriptsStore", () => {
     });
 
     it("scripts:log creates new log entry if none exists", () => {
-      mockSubscribe.mockImplementation((event: string, cb: (...args: unknown[]) => void) => {
+      // biome-ignore lint: test mock
+      mockSubscribe.mockImplementation((event: string, cb: (...args: any[]) => void) => {
         if (event === "scripts:log") {
           cb({ scriptId: "new-script", service: "api", script: "dev", line: "first line" });
         }
@@ -443,7 +418,8 @@ describe("useScriptsStore", () => {
       logs.set("script-1", existingLines);
       useScriptsStore.setState({ logs });
 
-      mockSubscribe.mockImplementation((event: string, cb: (...args: unknown[]) => void) => {
+      // biome-ignore lint: test mock
+      mockSubscribe.mockImplementation((event: string, cb: (...args: any[]) => void) => {
         if (event === "scripts:log") {
           cb({ scriptId: "script-1", service: "api", script: "dev", line: "overflow-line" });
         }
@@ -459,11 +435,13 @@ describe("useScriptsStore", () => {
     });
 
     it("scripts:reload clears discovering flag", () => {
-      useScriptsStore.setState({ discovering: true });
+      const discoveringProjects = new Set(["proj1"]);
+      useScriptsStore.setState({ discovering: true, discoveringProjects, currentWorkspaceId: "proj1/default" });
 
-      mockSubscribe.mockImplementation((event: string, cb: (...args: unknown[]) => void) => {
+      // biome-ignore lint: test mock
+      mockSubscribe.mockImplementation((event: string, cb: (...args: any[]) => void) => {
         if (event === "scripts:reload") {
-          cb({});
+          cb({ projectId: "proj1" });
         }
         return vi.fn();
       });

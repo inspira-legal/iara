@@ -12,8 +12,8 @@ const { mockRequest, mockSubscribe, mockInvalidateWorkspace } = vi.hoisted(() =>
 
 vi.mock("~/lib/ws-transport", () => ({
   transport: {
-    request: (...args: unknown[]) => mockRequest(...args),
-    subscribe: (...args: unknown[]) => mockSubscribe(...args),
+    request: mockRequest,
+    subscribe: mockSubscribe,
   },
 }));
 

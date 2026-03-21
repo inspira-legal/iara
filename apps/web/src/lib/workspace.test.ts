@@ -16,45 +16,45 @@ describe("useWorkspace", () => {
   });
 
   it("returns selectedWorkspaceId when set", () => {
-    mockedUseAppStore.mockImplementation((selector: (s: Record<string, unknown>) => unknown) =>
-      selector({ selectedWorkspaceId: "ws-123", selectedProjectId: "proj-456" }),
-    );
+    // biome-ignore lint: test mock
+    mockedUseAppStore.mockImplementation(((selector: any) =>
+      selector({ selectedWorkspaceId: "ws-123", selectedProjectId: "proj-456" })) as any);
 
     const result = useWorkspace();
     expect(result).toBe("ws-123");
   });
 
   it('returns "${selectedProjectId}/default" when only project is selected', () => {
-    mockedUseAppStore.mockImplementation((selector: (s: Record<string, unknown>) => unknown) =>
-      selector({ selectedWorkspaceId: null, selectedProjectId: "proj-456" }),
-    );
+    // biome-ignore lint: test mock
+    mockedUseAppStore.mockImplementation(((selector: any) =>
+      selector({ selectedWorkspaceId: null, selectedProjectId: "proj-456" })) as any);
 
     const result = useWorkspace();
     expect(result).toBe("proj-456/default");
   });
 
   it("returns null when nothing is selected", () => {
-    mockedUseAppStore.mockImplementation((selector: (s: Record<string, unknown>) => unknown) =>
-      selector({ selectedWorkspaceId: null, selectedProjectId: null }),
-    );
+    // biome-ignore lint: test mock
+    mockedUseAppStore.mockImplementation(((selector: any) =>
+      selector({ selectedWorkspaceId: null, selectedProjectId: null })) as any);
 
     const result = useWorkspace();
     expect(result).toBeNull();
   });
 
   it("prefers workspaceId over projectId fallback", () => {
-    mockedUseAppStore.mockImplementation((selector: (s: Record<string, unknown>) => unknown) =>
-      selector({ selectedWorkspaceId: "ws-specific", selectedProjectId: "proj-123" }),
-    );
+    // biome-ignore lint: test mock
+    mockedUseAppStore.mockImplementation(((selector: any) =>
+      selector({ selectedWorkspaceId: "ws-specific", selectedProjectId: "proj-123" })) as any);
 
     const result = useWorkspace();
     expect(result).toBe("ws-specific");
   });
 
   it('returns null when workspaceId is empty string and projectId is null', () => {
-    mockedUseAppStore.mockImplementation((selector: (s: Record<string, unknown>) => unknown) =>
-      selector({ selectedWorkspaceId: "", selectedProjectId: null }),
-    );
+    // biome-ignore lint: test mock
+    mockedUseAppStore.mockImplementation(((selector: any) =>
+      selector({ selectedWorkspaceId: "", selectedProjectId: null })) as any);
 
     const result = useWorkspace();
     expect(result).toBeNull();
