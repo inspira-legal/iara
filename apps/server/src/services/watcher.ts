@@ -18,21 +18,31 @@ export class ProjectsWatcher {
   start(): void {
     try {
       this.watcher = fs.watch(this.projectsDir, { recursive: true }, (_event, filename) => {
-        if (!filename) return;
+        try {
+          if (!filename) return;
 
-        const basename = path.basename(filename);
-        if (basename !== "project.json" && basename !== "workspace.json") return;
+          const basename = path.basename(filename);
+          if (basename !== "project.json" && basename !== "workspace.json") return;
 
-        const fullPath = path.join(this.projectsDir, filename);
-        if (this.ownWrites.has(fullPath)) {
-          const timer = this.ownWrites.get(fullPath);
-          if (timer) clearTimeout(timer);
-          this.ownWrites.delete(fullPath);
-          return;
+          const fullPath = path.join(this.projectsDir, filename);
+          if (this.ownWrites.has(fullPath)) {
+            const timer = this.ownWrites.get(fullPath);
+            if (timer) clearTimeout(timer);
+            this.ownWrites.delete(fullPath);
+            return;
+          }
+
+          const type = basename === "project.json" ? "project" : "workspace";
+          this.pendingChanges.set(filename, type);
+          this.scheduleFlush();
+        } catch {
+          // Watcher callback can fire during/after directory deletion
+          this.scheduleFlush();
         }
+      });
 
-        const type = basename === "project.json" ? "project" : "workspace";
-        this.pendingChanges.set(filename, type);
+      this.watcher.on("error", () => {
+        // Watcher errors on directory deletion are expected — trigger resync
         this.scheduleFlush();
       });
     } catch {
@@ -54,32 +64,37 @@ export class ProjectsWatcher {
   }
 
   private flush(): void {
-    let needsFullResync = false;
-    const projectSlugs = new Set<string>();
+    try {
+      const projectSlugs = new Set<string>();
 
-    for (const [filename] of this.pendingChanges) {
-      const parts = filename.split(path.sep);
-      projectSlugs.add(parts[0] as string);
-    }
-
-    for (const projectSlug of projectSlugs) {
-      const project = this.appState.rescanProject(projectSlug);
-      if (!project) {
-        needsFullResync = true;
+      for (const [filename] of this.pendingChanges) {
+        const parts = filename.split(path.sep);
+        projectSlugs.add(parts[0] as string);
       }
-    }
 
-    if (needsFullResync) {
-      this.appState.scan();
-      this.pushFn("state:resync", { state: this.appState.getState() });
-    } else {
-      // Push individual project changes
+      let needsFullResync = false;
       for (const projectSlug of projectSlugs) {
-        const project = this.appState.getProject(projectSlug);
-        if (project) {
-          this.pushFn("project:changed", { project });
+        const project = this.appState.rescanProject(projectSlug);
+        if (!project) {
+          needsFullResync = true;
         }
       }
+
+      if (needsFullResync) {
+        this.appState.scan();
+        this.pushFn("state:resync", { state: this.appState.getState() });
+      } else {
+        for (const projectSlug of projectSlugs) {
+          const project = this.appState.getProject(projectSlug);
+          if (project) {
+            this.pushFn("project:changed", { project });
+          }
+        }
+      }
+    } catch {
+      // FS may be in inconsistent state during deletions — full resync
+      this.appState.scan();
+      this.pushFn("state:resync", { state: this.appState.getState() });
     }
 
     this.pendingChanges.clear();
