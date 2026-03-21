@@ -23,7 +23,6 @@ export const CachedStateSchema = z.object({
 
 export const ScriptsPanelSchema = z.object({
   activeTab: z.enum(["scripts", "output"]).nullable(),
-  collapsed: z.boolean(),
 });
 
 // ---------------------------------------------------------------------------

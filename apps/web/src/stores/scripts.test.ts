@@ -55,7 +55,6 @@ const INITIAL_STATE = {
   logs: new Map<string, string[]>(),
   selectedLog: null,
   activeTab: null,
-  collapsed: false,
 };
 
 // ---------------------------------------------------------------------------
@@ -224,7 +223,7 @@ describe("useScriptsStore", () => {
   });
 
   // -----------------------------------------------------------------------
-  // setActiveTab / setCollapsed
+  // setActiveTab / syncCollapsed
   // -----------------------------------------------------------------------
 
   describe("setActiveTab()", () => {
@@ -234,25 +233,26 @@ describe("useScriptsStore", () => {
     });
   });
 
-  describe("setCollapsed()", () => {
-    it("sets collapsed state", () => {
-      useScriptsStore.getState().setCollapsed(true);
-      expect(useScriptsStore.getState().collapsed).toBe(true);
-    });
-
+  describe("syncCollapsed()", () => {
     it("clears activeTab when collapsing", () => {
       useScriptsStore.setState({ activeTab: "scripts" });
-      useScriptsStore.getState().setCollapsed(true);
+      useScriptsStore.getState().syncCollapsed(true);
       expect(useScriptsStore.getState().activeTab).toBeNull();
     });
 
-    it("does not clear activeTab when expanding", () => {
-      useScriptsStore.setState({ activeTab: "output", collapsed: true });
-      useScriptsStore.getState().setCollapsed(false);
+    it("sets activeTab to scripts when expanding with no tab", () => {
+      useScriptsStore.setState({ activeTab: null });
+      useScriptsStore.getState().syncCollapsed(false);
+      expect(useScriptsStore.getState().activeTab).toBe("scripts");
+    });
+
+    it("does not change activeTab when expanding with existing tab", () => {
+      useScriptsStore.setState({ activeTab: "output" });
+      useScriptsStore.getState().syncCollapsed(false);
       expect(useScriptsStore.getState().activeTab).toBe("output");
     });
 
-    it("initial activeTab is null", () => {
+    it("initial activeTab is null (collapsed)", () => {
       expect(useScriptsStore.getState().activeTab).toBeNull();
     });
   });

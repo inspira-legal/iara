@@ -6,7 +6,7 @@ import { useWorkspace } from "~/lib/workspace";
 
 export function MainPanel({ children }: { children: ReactNode }) {
   const bottomPanelRef = usePanelRef();
-  const { setCollapsed } = useScriptsStore();
+  const { syncCollapsed } = useScriptsStore();
   const workspace = useWorkspace();
 
   const contentLayout = useDefaultLayout({ id: "iara:content-layout:v3", storage: localStorage });
@@ -15,8 +15,9 @@ export function MainPanel({ children }: { children: ReactNode }) {
     const panel = bottomPanelRef.current;
     if (!panel) return;
     const isCollapsed = panel.isCollapsed();
-    if (isCollapsed !== useScriptsStore.getState().collapsed) {
-      setCollapsed(isCollapsed);
+    const storeCollapsed = useScriptsStore.getState().activeTab === null;
+    if (isCollapsed !== storeCollapsed) {
+      syncCollapsed(isCollapsed);
     }
   };
 

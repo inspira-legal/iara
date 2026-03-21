@@ -32,9 +32,8 @@ interface ScriptsState {
   /** Logs keyed by ScriptStatus.id */
   logs: Map<string, string[]>;
   selectedLog: { service: string; script: string } | null;
-  /** Bottom panel UI state */
+  /** Bottom panel UI state — collapsed is derived: activeTab === null */
   activeTab: PanelTab;
-  collapsed: boolean;
 }
 
 interface ScriptsActions {
@@ -47,7 +46,8 @@ interface ScriptsActions {
   selectLog(service: string, script: string): void;
   fetchLogs(scriptId: string): Promise<void>;
   setActiveTab(tab: PanelTab): void;
-  setCollapsed(collapsed: boolean): void;
+  /** Called by the resizable panel when its physical collapsed state changes */
+  syncCollapsed(collapsed: boolean): void;
   subscribePush(): () => void;
 }
 
@@ -66,7 +66,6 @@ export const useScriptsStore = create<ScriptsState & ScriptsActions>((set, get) 
   logs: new Map(),
   selectedLog: null,
   activeTab: cachedPanel?.activeTab ?? null,
-  collapsed: cachedPanel?.collapsed ?? false,
 
   loadConfig: async (workspaceId) => {
     // Show cached config immediately if available
@@ -139,12 +138,16 @@ export const useScriptsStore = create<ScriptsState & ScriptsActions>((set, get) 
 
   setActiveTab: (tab) => {
     set({ activeTab: tab });
-    panelCache.set({ activeTab: tab, collapsed: get().collapsed });
+    panelCache.set({ activeTab: tab });
   },
-  setCollapsed: (collapsed) => {
-    const activeTab = collapsed ? null : get().activeTab;
-    set({ collapsed, ...(collapsed ? { activeTab: null } : {}) });
-    panelCache.set({ activeTab, collapsed });
+  syncCollapsed: (isCollapsed) => {
+    if (isCollapsed && get().activeTab !== null) {
+      set({ activeTab: null });
+      panelCache.set({ activeTab: null });
+    } else if (!isCollapsed && get().activeTab === null) {
+      set({ activeTab: "scripts" });
+      panelCache.set({ activeTab: "scripts" });
+    }
   },
 
   subscribePush: () => {

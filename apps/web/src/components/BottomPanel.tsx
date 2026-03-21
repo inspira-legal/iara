@@ -39,7 +39,7 @@ export function BottomPanel({ panelRef }: { panelRef: RefObject<PanelImperativeH
   const config = useScriptsStore((s) => s.config);
   const loading = useScriptsStore((s) => s.loading);
   const activeTab = useScriptsStore((s) => s.activeTab);
-  const collapsed = useScriptsStore((s) => s.collapsed);
+  const collapsed = activeTab === null;
   const subscribePush = useScriptsStore((s) => s.subscribePush);
   const loadConfig = useScriptsStore((s) => s.loadConfig);
   const discover = useScriptsStore((s) => s.discover);
@@ -121,6 +121,7 @@ export function BottomPanel({ panelRef }: { panelRef: RefObject<PanelImperativeH
       setActiveTab("scripts");
       panelRef.current?.expand();
     } else {
+      setActiveTab(null);
       panelRef.current?.collapse();
     }
   };
@@ -128,6 +129,7 @@ export function BottomPanel({ panelRef }: { panelRef: RefObject<PanelImperativeH
   const handleTabClick = (tab: "scripts" | "output") => {
     if (!workspace) return;
     if (activeTab === tab) {
+      setActiveTab(null);
       panelRef.current?.collapse();
       return;
     }
