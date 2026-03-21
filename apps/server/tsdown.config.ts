@@ -1,6 +1,5 @@
 import { defineConfig } from "tsdown";
-import { copyFileSync, mkdirSync } from "node:fs";
-import { globSync } from "node:fs";
+import { copyFileSync, mkdirSync, readdirSync } from "node:fs";
 
 export default defineConfig({
   entry: ["src/main.ts"],
@@ -13,12 +12,7 @@ export default defineConfig({
   onSuccess: async () => {
     // Copy prompt .md files to dist
     mkdirSync("dist/prompts", { recursive: true });
-    for (const file of [
-      "project-analyze.md",
-      "project-suggest.md",
-      "task-suggest.md",
-      "task-regenerate.md",
-    ]) {
+    for (const file of readdirSync("src/prompts").filter((f) => f.endsWith(".md"))) {
       copyFileSync(`src/prompts/${file}`, `dist/prompts/${file}`);
     }
   },

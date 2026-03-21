@@ -1,4 +1,4 @@
-O usuário descreveu o projeto como: "{{userGoal}}"
+The user described the project as: "{{userGoal}}"
 
-Sugira um nome curto e descritivo para o projeto (será usado como identificador/slug).
-Gere uma descrição concisa do projeto (1-2 frases).
+Suggest a short, descriptive name for the project (will be used as identifier/slug).
+Generate a concise project description (1-2 sentences).

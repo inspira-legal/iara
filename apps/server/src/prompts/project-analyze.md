@@ -1,4 +1,4 @@
-Explore os repositórios do projeto.
-Para cada repo, escreva UMA linha: **nome** (linguagem): descrição curta do que faz.
-Depois, UMA linha de stack compartilhada (tooling, frameworks, padrões).
-Máximo 8 linhas total.
+Explore the project repositories.
+For each repo, write ONE line: **name** (language): short description of what it does.
+Then, ONE line of shared stack (tooling, frameworks, patterns).
+Maximum 8 lines total.
