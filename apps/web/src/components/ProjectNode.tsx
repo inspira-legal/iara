@@ -7,14 +7,11 @@ import {
   Plus,
   Pencil,
   Trash2,
-  Circle,
 } from "lucide-react";
 import type { Project, Workspace } from "@iara/contracts";
 import { TaskNode } from "./TaskNode";
 import { SidebarContextMenu, type ContextMenuItem } from "./SidebarContextMenu";
-import { isScriptActive, isScriptUnhealthy } from "~/lib/script-status";
 import { useAppStore } from "~/stores/app";
-import { useScriptsStore } from "~/stores/scripts";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { useInlineEdit } from "~/hooks/useInlineEdit";
 import { useContextMenu } from "~/hooks/useContextMenu";
@@ -49,8 +46,6 @@ export function ProjectNode({
   const { getWorkspacesForProject, deleteWorkspace } = useAppStore();
   const loading = false;
   const error = null;
-  const hasRunning = useScriptsStore((s) => s.config?.statuses.some(isScriptActive) ?? false);
-  const hasUnhealthy = useScriptsStore((s) => s.config?.statuses.some(isScriptUnhealthy) ?? false);
 
   const tasks = getWorkspacesForProject(project.id).filter((w) => !w.id.endsWith("/default"));
   const [showAll, setShowAll] = useState(false);
@@ -92,13 +87,6 @@ export function ProjectNode({
           </button>
 
           <FolderOpen size={14} className="shrink-0 text-zinc-500" />
-
-          {hasRunning && (
-            <Circle
-              size={6}
-              className={`shrink-0 fill-current ${hasUnhealthy ? "text-red-500" : "text-green-500"}`}
-            />
-          )}
 
           {editing ? (
             <input type="text" {...inputProps} />
