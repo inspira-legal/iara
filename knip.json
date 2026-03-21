@@ -1,11 +1,14 @@
 {
   "$schema": "https://unpkg.com/knip@6/schema.json",
   "workspaces": {
-    "apps/web": {
-      "entry": ["src/**/*.test.{ts,tsx}"]
+    ".": {
+      "ignoreBinaries": ["electron-builder", "electron-rebuild"]
     },
-    "packages/contracts": {
-      "includeEntryExports": true
+    "scripts": {
+      "entry": ["dev-runner.ts"]
+    },
+    "apps/web": {
+      "entry": ["src/**/*.test.{ts,tsx}", "src/routes/**/*.{ts,tsx}"]
     },
     "packages/orchestrator": {
       "includeEntryExports": true

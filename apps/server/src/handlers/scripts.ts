@@ -56,15 +56,16 @@ function loadResolvedConfig(
   // Merge project env files (global + local) as base
   const projectEnv = mergeEnvForWorkspace(projectSlug, workspaceSlug, repoNames);
 
-  const resolved: ResolvedServiceDef[] = services.map((svc) => {
+  const resolved: ResolvedServiceDef[] = [];
+  for (const svc of services) {
     const resolvedPort = ports.get(svc.name) ?? 0;
-    return {
+    resolved.push({
       ...svc,
       resolvedPort,
       // PORT as fallback, then project env, then scripts.yaml env, then interpolate
       resolvedEnv: interpolateEnv({ PORT: String(resolvedPort), ...projectEnv, ...svc.env }, ports),
-    };
-  });
+    });
+  }
 
   return { services: resolved, repoNames, ports };
 }

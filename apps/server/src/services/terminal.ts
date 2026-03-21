@@ -13,7 +13,7 @@ import {
   type TaskContext,
 } from "./launcher.js";
 
-export interface TerminalCreateConfig {
+interface TerminalCreateConfig {
   taskId: string;
   taskDir: string;
   repoDirs: string[];
@@ -181,7 +181,7 @@ export class TerminalManager {
   }
 
   destroyAll(): void {
-    for (const [id] of [...this.terminals.entries()]) {
+    for (const [id] of this.terminals.entries()) {
       this.destroy(id);
     }
   }

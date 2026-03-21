@@ -5,24 +5,23 @@
 //   LA   = (?![/\w@\-+])    — lookahead: not followed by more path (. excluded to drop trailing period)
 
 /** Regex for file:// URLs */
-export const FILE_URL_RE = /file:\/\/[^\s"')\]>]+/g;
+const FILE_URL_RE = /file:\/\/[^\s"')\]>]+/g;
 
 /** Absolute paths with file extension, optionally followed by :line:col. */
-export const ABS_PATH_RE = /(?<![:\w/~.])(\/[\w.@\-+/]+\.\w+(?::\d+(?::\d+)?)?)(?![/\w@\-+])/g;
+const ABS_PATH_RE = /(?<![:\w/~.])(\/[\w.@\-+/]+\.\w+(?::\d+(?::\d+)?)?)(?![/\w@\-+])/g;
 
 /** Absolute directory paths (no extension, at least 4 segments like /a/b/c/d). */
-export const ABS_DIR_RE = /(?<![:\w/~.])(\/[\w.@\-+]+(?:\/[\w.@\-+]+){3,})/g;
+const ABS_DIR_RE = /(?<![:\w/~.])(\/[\w.@\-+]+(?:\/[\w.@\-+]+){3,})/g;
 
 /** Relative paths with explicit prefix (./, ../, ~/) and file extension. */
-export const REL_PATH_RE =
-  /(?<!\w)((?:\.\.\/|\.\/|~\/)[\w.@\-+/]+\.\w+(?::\d+(?::\d+)?)?)(?![/\w@\-+])/g;
+const REL_PATH_RE = /(?<!\w)((?:\.\.\/|\.\/|~\/)[\w.@\-+/]+\.\w+(?::\d+(?::\d+)?)?)(?![/\w@\-+])/g;
 
 /** Relative directory paths with explicit prefix (./, ../, ~/) and at least 2 segments after prefix. */
-export const REL_DIR_RE = /(?<!\w)((?:\.\.\/|\.\/|~\/)[\w.@\-+]+(?:\/[\w.@\-+]+){2,})/g;
+const REL_DIR_RE = /(?<!\w)((?:\.\.\/|\.\/|~\/)[\w.@\-+]+(?:\/[\w.@\-+]+){2,})/g;
 
 /** Bare relative paths (no prefix) with file extension.
  *  First segment must start with a letter and be at least 2 chars (avoids git diff a/b/ prefixes). */
-export const BARE_PATH_RE =
+const BARE_PATH_RE =
   /(?<![:\w/~.\\])((?:[a-zA-Z@][\w.@\-+]+\/)+[\w.@\-+]*\.\w+(?::\d+(?::\d+)?)?)(?![/\w@\-+])/g;
 
 export interface FileLink {

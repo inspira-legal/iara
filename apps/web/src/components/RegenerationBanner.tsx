@@ -61,8 +61,17 @@ export function RegenerationBanner({
           </div>
           {messages.length > 0 && (
             <div>
-              {messages.slice(-3).map((msg, i) => (
-                <ClaudeProgressLine key={i} progress={msg} />
+              {messages.slice(-3).map((msg) => (
+                <ClaudeProgressLine
+                  key={
+                    msg.type === "status"
+                      ? msg.message
+                      : msg.type === "tool"
+                        ? msg.tool
+                        : msg.content
+                  }
+                  progress={msg}
+                />
               ))}
             </div>
           )}

@@ -2,13 +2,13 @@ import * as net from "node:net";
 import * as fs from "node:fs";
 import * as path from "node:path";
 
-export interface SocketMessage {
+interface SocketMessage {
   id: string;
   method: string;
   params?: Record<string, unknown>;
 }
 
-export interface SocketResponse {
+interface SocketResponse {
   id: string;
   result?: unknown;
   error?: string;
@@ -119,7 +119,7 @@ export class SocketServer {
   }
 }
 
-export function getDefaultSocketPath(): string {
+function getDefaultSocketPath(): string {
   if (process.platform === "win32") {
     return "\\\\.\\pipe\\iara-server";
   }

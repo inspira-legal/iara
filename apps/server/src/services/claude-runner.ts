@@ -259,7 +259,10 @@ export function runClaude<T>(
           content = await fs.promises.readFile(tempFile, "utf-8");
         } catch {
           if (attempt < MAX_RETRIES) {
-            progress.push({ type: "status", message: `Result file not found, retrying (${attempt + 1}/${MAX_RETRIES})...` });
+            progress.push({
+              type: "status",
+              message: `Result file not found, retrying (${attempt + 1}/${MAX_RETRIES})...`,
+            });
             await runRetry(`Write the result as JSON to "${tempFile}" using the Write tool.`);
             continue;
           }
@@ -275,8 +278,13 @@ export function runClaude<T>(
           parsed = JSON.parse(content);
         } catch {
           if (attempt < MAX_RETRIES) {
-            progress.push({ type: "status", message: `Invalid JSON, retrying (${attempt + 1}/${MAX_RETRIES})...` });
-            await runRetry(`The file "${tempFile}" contains invalid JSON. Write valid JSON to the same file.`);
+            progress.push({
+              type: "status",
+              message: `Invalid JSON, retrying (${attempt + 1}/${MAX_RETRIES})...`,
+            });
+            await runRetry(
+              `The file "${tempFile}" contains invalid JSON. Write valid JSON to the same file.`,
+            );
             continue;
           }
           throw new Error("Result is not valid JSON after retries");
@@ -287,9 +295,16 @@ export function runClaude<T>(
         if (result.success) return result.data as T;
 
         if (attempt < MAX_RETRIES) {
-          const issues = result.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; ");
-          progress.push({ type: "status", message: `Validation failed, retrying (${attempt + 1}/${MAX_RETRIES})...` });
-          await runRetry(`Validation failed for "${tempFile}": ${issues}. Fix the errors and write corrected JSON to the same file.`);
+          const issues = result.error.issues
+            .map((i) => `${i.path.join(".")}: ${i.message}`)
+            .join("; ");
+          progress.push({
+            type: "status",
+            message: `Validation failed, retrying (${attempt + 1}/${MAX_RETRIES})...`,
+          });
+          await runRetry(
+            `Validation failed for "${tempFile}": ${issues}. Fix the errors and write corrected JSON to the same file.`,
+          );
           continue;
         }
 
@@ -317,7 +332,6 @@ export function streamClaudeRun<T>(
   run: ClaudeRun<T>,
   requestId: string,
   outputPath: string | null,
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   pushFn: (event: any, params: any) => void,
   transform?: (data: T) => string,
 ): void {

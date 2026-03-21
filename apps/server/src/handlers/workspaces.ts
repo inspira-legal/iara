@@ -2,7 +2,7 @@ import * as crypto from "node:crypto";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { execFileSync } from "node:child_process";
-import type { CreateWorkspaceInput, Workspace, WsPushEvents } from "@iara/contracts";
+import type { CreateWorkspaceInput, Workspace } from "@iara/contracts";
 import type { PortAllocator } from "@iara/orchestrator/ports";
 import { gitWorktreeAdd, gitWorktreeRemove } from "@iara/shared/git";
 import { z } from "zod";

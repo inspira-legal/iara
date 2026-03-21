@@ -175,8 +175,17 @@ export function CreateTaskDialog({ open, onClose, projectId, project }: CreateTa
           <Spinner text="Claude is analyzing..." />
           {claude.messages.length > 0 && (
             <div className="max-h-32 space-y-1 overflow-y-auto rounded-md border border-zinc-800 bg-zinc-900/50 px-3 py-2">
-              {claude.messages.map((msg, i) => (
-                <ClaudeProgressLine key={i} progress={msg} />
+              {claude.messages.map((msg) => (
+                <ClaudeProgressLine
+                  key={
+                    msg.type === "status"
+                      ? msg.message
+                      : msg.type === "tool"
+                        ? msg.tool
+                        : msg.content
+                  }
+                  progress={msg}
+                />
               ))}
             </div>
           )}

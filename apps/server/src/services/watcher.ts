@@ -73,7 +73,10 @@ export class ProjectsWatcher {
       }
 
       let needsFullResync = false;
-      const rescanned = new Map<string, NonNullable<ReturnType<typeof this.appState.rescanProject>>>();
+      const rescanned = new Map<
+        string,
+        NonNullable<ReturnType<typeof this.appState.rescanProject>>
+      >();
       for (const projectSlug of projectSlugs) {
         const wasPreviouslyKnown = !!this.appState.getProject(projectSlug);
         const project = this.appState.rescanProject(projectSlug);

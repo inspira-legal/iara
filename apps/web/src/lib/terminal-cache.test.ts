@@ -20,12 +20,16 @@ vi.mock("@xterm/addon-fit", () => {
 });
 
 vi.mock("@xterm/addon-clipboard", () => {
-  class MockClipboardAddon {}
+  class MockClipboardAddon {
+    activate() {}
+  }
   return { ClipboardAddon: MockClipboardAddon };
 });
 
 vi.mock("@xterm/addon-web-links", () => {
-  class MockWebLinksAddon {}
+  class MockWebLinksAddon {
+    activate() {}
+  }
   return { WebLinksAddon: MockWebLinksAddon };
 });
 

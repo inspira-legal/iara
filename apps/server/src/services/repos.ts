@@ -16,12 +16,19 @@ import type { AppState } from "./state.js";
 function friendlyGitError(err: unknown): string {
   if (err instanceof GitOperationError && err.exitCode === 128) {
     const s = err.stderr.toLowerCase();
-    if (s.includes("could not read") || s.includes("authentication") || s.includes("permission denied"))
+    if (
+      s.includes("could not read") ||
+      s.includes("authentication") ||
+      s.includes("permission denied")
+    )
       return "Authentication failed. Check your credentials or SSH key.";
-    if (s.includes("not found") || s.includes("does not exist") || s.includes("not appear to be a git repo"))
+    if (
+      s.includes("not found") ||
+      s.includes("does not exist") ||
+      s.includes("not appear to be a git repo")
+    )
       return "Repository not found. Check the URL and try again.";
-    if (s.includes("already exists"))
-      return "Destination directory already exists.";
+    if (s.includes("already exists")) return "Destination directory already exists.";
     return `Could not access repository: ${err.stderr.split("\n")[0]}`;
   }
   return err instanceof Error ? err.message : String(err);

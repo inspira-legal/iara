@@ -13,10 +13,4 @@ function getDesktopBridge(): DesktopBridge | null {
   return null;
 }
 
-export function ensureNativeApi(): DesktopBridge {
-  const bridge = getDesktopBridge();
-  if (!bridge) throw new Error("desktopBridge not available — not running in Electron");
-  return bridge;
-}
-
 export const desktopBridge = getDesktopBridge();

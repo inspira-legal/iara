@@ -13,7 +13,6 @@ type NavigableItem =
 
 export function AppShell({ children }: { children: ReactNode }) {
   const projects = useAppStore((s) => s.projects);
-  const selectedWorkspaceId = useAppStore((s) => s.selectedWorkspaceId);
   const selectProject = useAppStore((s) => s.selectProject);
   const selectWorkspace = useAppStore((s) => s.selectWorkspace);
   const getWorkspacesForProject = useAppStore((s) => s.getWorkspacesForProject);
@@ -41,7 +40,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       }
     }
     return items;
-  }, [projects, projectOrder, expandedProjectIds, getWorkspacesForProject, selectedWorkspaceId]);
+  }, [projects, projectOrder, expandedProjectIds, getWorkspacesForProject]);
 
   const selectByIndex = useCallback(
     (index: number) => {

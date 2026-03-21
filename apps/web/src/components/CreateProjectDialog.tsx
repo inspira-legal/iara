@@ -58,7 +58,8 @@ export function CreateProjectDialog({ open, onClose }: CreateProjectDialogProps)
   const { toast } = useToast();
 
   const computedSlug = toSlug(name);
-  const existingProject = computedSlug !== "" ? projects.find((p) => p.slug === computedSlug) : undefined;
+  const existingProject =
+    computedSlug !== "" ? projects.find((p) => p.slug === computedSlug) : undefined;
   const slugTaken = !!existingProject && existingProject.workspaces.length > 0;
 
   const claude = useClaudeSuggestion({
@@ -159,7 +160,11 @@ export function CreateProjectDialog({ open, onClose }: CreateProjectDialogProps)
       onClose();
     } catch (err) {
       if (projectId) {
-        try { await deleteProject(projectId); } catch { /* best effort */ }
+        try {
+          await deleteProject(projectId);
+        } catch {
+          /* best effort */
+        }
       }
       toast(`Failed: ${err instanceof Error ? err.message : String(err)}`, "error");
       resetForm();
@@ -272,8 +277,17 @@ export function CreateProjectDialog({ open, onClose }: CreateProjectDialogProps)
           <Spinner text="Claude is analyzing..." />
           {claude.messages.length > 0 && (
             <div className="max-h-32 space-y-1 overflow-y-auto rounded-md border border-zinc-800 bg-zinc-900/50 px-3 py-2">
-              {claude.messages.map((msg, i) => (
-                <ClaudeProgressLine key={i} progress={msg} />
+              {claude.messages.map((msg) => (
+                <ClaudeProgressLine
+                  key={
+                    msg.type === "status"
+                      ? msg.message
+                      : msg.type === "tool"
+                        ? msg.tool
+                        : msg.content
+                  }
+                  progress={msg}
+                />
               ))}
             </div>
           )}

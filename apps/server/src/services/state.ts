@@ -9,7 +9,7 @@ import {
 import { createJsonFile } from "@iara/shared/json-file";
 import { gitRemoteUrlSync } from "@iara/shared/git";
 
-export interface StateTree {
+interface StateTree {
   projects: Project[];
   settings: Record<string, string>;
 }

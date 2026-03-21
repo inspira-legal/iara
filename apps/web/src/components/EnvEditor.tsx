@@ -214,6 +214,8 @@ export function EnvEditor({ workspaceId, repos, hasActiveTerminal }: EnvEditorPr
 // EnvSection
 // ---------------------------------------------------------------------------
 
+let nextEntryId = 0;
+
 function EnvSection({
   label,
   sublabel,
@@ -231,6 +233,13 @@ function EnvSection({
   onAdd: () => void;
   onRemove: (index: number) => void;
 }) {
+  const idsRef = useRef<number[]>([]);
+  // Grow ID list to match entries length; new entries get fresh IDs
+  while (idsRef.current.length < entries.length) {
+    idsRef.current.push(nextEntryId++);
+  }
+  // Shrink if entries were removed from the end
+  idsRef.current.length = entries.length;
   return (
     <div className="rounded-lg border border-zinc-700 bg-zinc-800/30 p-3">
       <div className="mb-2 flex items-center gap-2">
@@ -242,14 +251,15 @@ function EnvSection({
         <p className="mb-2 text-xs text-zinc-600">No variables.</p>
       ) : (
         <div className="mb-2 space-y-1">
-          {entries.map((entry, i) => {
+          {entries.map((entry, idx) => {
+            const entryId = idsRef.current[idx];
             const isOverriding = label === "Local" && overriddenKeys.has(entry.key);
             return (
-              <div key={i} className="flex items-center gap-1.5">
+              <div key={entryId} className="flex items-center gap-1.5">
                 <input
                   type="text"
                   value={entry.key}
-                  onChange={(e) => onUpdate(i, "key", e.target.value)}
+                  onChange={(e) => onUpdate(idx, "key", e.target.value)}
                   placeholder="KEY"
                   className={cn(
                     "w-[40%] rounded border bg-zinc-900 px-2 py-1 font-mono text-xs text-zinc-100 placeholder-zinc-600 outline-none focus:border-blue-500",
@@ -260,7 +270,7 @@ function EnvSection({
                 <input
                   type="text"
                   value={entry.value}
-                  onChange={(e) => onUpdate(i, "value", e.target.value)}
+                  onChange={(e) => onUpdate(idx, "value", e.target.value)}
                   placeholder="value"
                   className="min-w-0 flex-1 rounded border border-zinc-700 bg-zinc-900 px-2 py-1 font-mono text-xs text-zinc-100 placeholder-zinc-600 outline-none focus:border-blue-500"
                 />
@@ -273,7 +283,7 @@ function EnvSection({
                 )}
                 <button
                   type="button"
-                  onClick={() => onRemove(i)}
+                  onClick={() => onRemove(idx)}
                   className="shrink-0 rounded p-0.5 text-zinc-600 hover:text-red-400"
                 >
                   <Trash2 size={12} />

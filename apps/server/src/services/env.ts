@@ -7,7 +7,7 @@ import { getProjectsDir } from "./config.js";
 // Paths
 // ---------------------------------------------------------------------------
 
-export function getEnvironmentDir(): string {
+function getEnvironmentDir(): string {
   return path.join(getProjectsDir(), "environment");
 }
 
@@ -20,13 +20,6 @@ export function getLocalEnvPath(projectSlug: string, workspace: string, repo: st
   const workspaceDir =
     workspace === "default" ? path.join(projectDir, "default") : path.join(projectDir, workspace);
   return path.join(workspaceDir, `.env.${repo}.local`);
-}
-
-function getWorkspaceDir(projectSlug: string, workspace: string): string {
-  const projectDir = path.join(getProjectsDir(), projectSlug);
-  return workspace === "default"
-    ? path.join(projectDir, "default")
-    : path.join(projectDir, workspace);
 }
 
 // ---------------------------------------------------------------------------
@@ -111,7 +104,7 @@ export function validateEntries(entries: EnvEntry[]): void {
 // Environment dir
 // ---------------------------------------------------------------------------
 
-export function ensureEnvironmentDir(): void {
+function ensureEnvironmentDir(): void {
   fs.mkdirSync(getEnvironmentDir(), { recursive: true });
 }
 
@@ -225,7 +218,7 @@ export function mergeEnvForWorkspace(
   const merged: Record<string, string> = {};
 
   // Process repos in alphabetical order (last repo wins on conflict)
-  const sorted = [...repoNames].sort();
+  const sorted = [...repoNames].toSorted();
   for (const repo of sorted) {
     const globalEntries = readEnvFile(getGlobalEnvPath(repo));
     const localEntries = readEnvFile(getLocalEnvPath(projectSlug, workspace, repo));

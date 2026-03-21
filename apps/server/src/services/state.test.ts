@@ -567,7 +567,7 @@ describe("AppState", () => {
       createFakeRepo("my-app", "default", "backend", "main");
       const state = new AppState(projectsDir, stateDir);
       const repos = state.discoverRepos("my-app");
-      expect(repos.sort()).toEqual(["backend", "frontend"]);
+      expect(repos.toSorted()).toEqual(["backend", "frontend"]);
     });
 
     it("returns empty array for project without repos", () => {

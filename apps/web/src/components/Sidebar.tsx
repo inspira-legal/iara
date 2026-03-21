@@ -12,8 +12,7 @@ import { transport } from "~/lib/ws-transport";
 
 export function Sidebar() {
   const navigate = useNavigate();
-  const { projects, selectedProjectId, updateProject, deleteProject } = useAppStore();
-  const selectedTaskId = useAppStore((s) => s.selectedWorkspaceId);
+  const { projects, updateProject, deleteProject } = useAppStore();
   const loading = useAppStore((s) => !s.initialized);
   const { hydrateFromStorage } = useSidebarStore();
 
@@ -49,7 +48,7 @@ export function Sidebar() {
             >
               <Plus size={14} />
             </button>
-<button
+            <button
               type="button"
               onClick={() => void navigate({ to: "/settings" })}
               className="rounded p-1 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-300"

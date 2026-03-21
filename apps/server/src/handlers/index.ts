@@ -34,13 +34,7 @@ export interface HandlerDeps {
 
 export function registerAllHandlers(deps: HandlerDeps): void {
   registerAppHandlers(deps.appState);
-  registerProjectHandlers(
-    deps.appState,
-    deps.watcher,
-    deps.pushFn,
-    deps.portAllocator,
-    deps.scriptSupervisor,
-  );
+  registerProjectHandlers(deps.appState, deps.watcher, deps.pushFn);
   registerWorkspaceHandlers(
     deps.appState,
     deps.watcher,

@@ -214,15 +214,17 @@ describe("WsTransport", () => {
     it("queues messages when websocket is not open and flushes on connect", async () => {
       // Patch MockWebSocket so it does NOT auto-fire open
       const origConstructor = MockWebSocket;
-      let capturedWs: MockWebSocket | null = null;
+      let capturedWs: DelayedWebSocket | null = null;
 
       class DelayedWebSocket extends origConstructor {
         constructor(url: string) {
           // Call parent but override readyState before open fires
           super(url);
           this.readyState = 0; // CONNECTING
-          capturedWs = this;
+          // Capture instance via static field to avoid this-alias
+          DelayedWebSocket.lastInstance = this;
         }
+        static lastInstance: DelayedWebSocket | null = null;
       }
       // Suppress the auto-open from the parent constructor's queueMicrotask
       // by overriding fire temporarily
@@ -238,6 +240,7 @@ describe("WsTransport", () => {
 
       const promise = transport.request("terminal.write" as never, { data: "queued" } as never);
       await vi.advanceTimersByTimeAsync(0);
+      capturedWs = DelayedWebSocket.lastInstance;
 
       // The WS was created but in CONNECTING state, so message is queued
       expect(capturedWs).not.toBeNull();

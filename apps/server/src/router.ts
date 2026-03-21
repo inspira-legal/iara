@@ -1,10 +1,4 @@
-import type {
-  WsMethods,
-  WsRequest,
-  WsResponse,
-  WsResponseError,
-  WsResponseOk,
-} from "@iara/contracts";
+import type { WsMethods, WsRequest, WsResponseError, WsResponseOk } from "@iara/contracts";
 
 type Handler<M extends keyof WsMethods = keyof WsMethods> = (
   params: WsMethods[M]["params"],

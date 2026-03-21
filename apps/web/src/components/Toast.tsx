@@ -56,7 +56,7 @@ function ToastMessage({ toast, onDismiss }: { toast: ToastItem; onDismiss: (id: 
   useEffect(() => {
     const timer = setTimeout(() => onDismiss(toast.id), toast.type === "error" ? 4000 : 1500);
     return () => clearTimeout(timer);
-  }, [toast.id, onDismiss]);
+  }, [toast.id, toast.type, onDismiss]);
 
   const Icon =
     toast.type === "success" ? CheckCircle2 : toast.type === "error" ? AlertCircle : Info;

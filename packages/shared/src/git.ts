@@ -111,7 +111,10 @@ export async function gitCloneWithProgress(
 
     proc.on("close", (code) => {
       if (code === 0) resolve();
-      else reject(new GitOperationError(`clone ${url}`, stderrOutput.trim() || `exit code ${code}`, code));
+      else
+        reject(
+          new GitOperationError(`clone ${url}`, stderrOutput.trim() || `exit code ${code}`, code),
+        );
     });
 
     proc.on("error", (err) => {

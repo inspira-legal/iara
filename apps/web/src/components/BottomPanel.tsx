@@ -214,8 +214,6 @@ function ScriptsTab() {
   const discover = useScriptsStore((s) => s.discover);
   const discovering = useIsDiscovering();
   const selectedProjectId = useAppStore((s) => s.selectedProjectId);
-  const workspace = useWorkspace();
-
   if (!selectedProjectId) {
     return <div className="p-4 text-sm text-zinc-600">Select a project to manage scripts</div>;
   }
@@ -518,7 +516,7 @@ function ServiceCard({
 }
 
 function ScriptButton({
-  service,
+  service: _service,
   script,
   icon: Icon,
   status,
@@ -623,6 +621,8 @@ function getWorstHealth(statuses: ScriptStatus[]): string | null {
 // Output Tab
 // ---------------------------------------------------------------------------
 
+let nextLineId = 0;
+
 function OutputTab() {
   const config = useScriptsStore((s) => s.config);
   const logs = useScriptsStore((s) => s.logs);
@@ -630,39 +630,56 @@ function OutputTab() {
   const selectLog = useScriptsStore((s) => s.selectLog);
   const logsEndRef = useRef<HTMLDivElement>(null);
 
-  const allScripts = config?.statuses ?? [];
-
   // Group by script name
   const groups = useMemo(() => {
+    const statuses = config?.statuses ?? [];
     const groupMap = new Map<string, ScriptStatus[]>();
-    for (const s of allScripts) {
+    for (const s of statuses) {
       const list = groupMap.get(s.script) ?? [];
       list.push(s);
       groupMap.set(s.script, list);
     }
     return [...groupMap.entries()].map(([label, scripts]) => ({ label, scripts }));
-  }, [allScripts]);
+  }, [config?.statuses]);
 
   // Auto-select first script if none selected
   useEffect(() => {
-    if (!selectedLog && allScripts.length > 0) {
-      const first = allScripts[0]!;
+    const statuses = config?.statuses ?? [];
+    if (!selectedLog && statuses.length > 0) {
+      const first = statuses[0]!;
       selectLog(first.service, first.script);
     }
-  }, [allScripts, selectedLog, selectLog]);
+  }, [config?.statuses, selectedLog, selectLog]);
 
   // Current log lines — find the status id to look up logs
-  const selectedStatus = selectedLog
-    ? allScripts.find((s) => s.service === selectedLog.service && s.script === selectedLog.script)
-    : null;
-  const currentLines = selectedStatus ? (logs.get(selectedStatus.scriptId) ?? []) : [];
+  const selectedStatus = useMemo(
+    () =>
+      selectedLog
+        ? (config?.statuses ?? []).find(
+            (s) => s.service === selectedLog.service && s.script === selectedLog.script,
+          )
+        : null,
+    [config?.statuses, selectedLog],
+  );
+  const keyedLinesRef = useRef<{ id: number; text: string }[]>([]);
+  const currentLines = useMemo(() => {
+    const raw = selectedStatus ? (logs.get(selectedStatus.scriptId) ?? []) : [];
+    const prev = keyedLinesRef.current;
+    // Reuse existing keyed entries, append new ones with fresh IDs
+    const result: { id: number; text: string }[] = raw.map((text, idx) => {
+      const existing = prev[idx];
+      return existing && existing.text === text ? existing : { id: nextLineId++, text };
+    });
+    keyedLinesRef.current = result;
+    return result;
+  }, [selectedStatus, logs]);
 
   // Auto-scroll
   useEffect(() => {
     logsEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [currentLines]);
 
-  if (allScripts.length === 0 && !selectedLog) {
+  if ((config?.statuses ?? []).length === 0 && !selectedLog) {
     return <div className="p-4 text-sm text-zinc-600">No scripts have been run</div>;
   }
 
@@ -682,14 +699,14 @@ function OutputTab() {
 
       {/* Log output */}
       <div className="flex-1 overflow-y-auto p-2 font-mono text-xs text-zinc-400">
-        {currentLines.map((line, i) => (
+        {currentLines.map(({ id, text }) => (
           <div
-            key={i}
+            key={id}
             className={`whitespace-pre-wrap leading-5 ${
-              line.startsWith("> ") ? "text-zinc-300 font-semibold" : ""
-            } ${line.startsWith("[iara]") ? "text-blue-400/70 italic" : ""}`}
+              text.startsWith("> ") ? "text-zinc-300 font-semibold" : ""
+            } ${text.startsWith("[iara]") ? "text-blue-400/70 italic" : ""}`}
           >
-            {line}
+            {text}
           </div>
         ))}
         <div ref={logsEndRef} />

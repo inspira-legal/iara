@@ -1,13 +1,25 @@
 pre-commit:
-  parallel: true
   commands:
-    fmt-check:
-      run: bun fmt:check
+    knip-fix:
+      priority: 1
+      run: bunx knip --fix --no-progress
+      stage_fixed: true
+    fmt:
+      priority: 2
+      run: bun fmt
+      stage_fixed: true
+    lint-fix:
+      priority: 2
+      run: bunx oxlint --fix --report-unused-disable-directives
+      stage_fixed: true
     lint:
+      priority: 3
       run: bun lint
     typecheck:
+      priority: 3
       run: bun typecheck
     knip:
+      priority: 3
       run: bunx knip --no-progress
 
 pre-push:

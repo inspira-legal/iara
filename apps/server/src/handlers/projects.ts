@@ -1,8 +1,6 @@
 import * as crypto from "node:crypto";
 import * as fs from "node:fs";
 import * as path from "node:path";
-import type { PortAllocator } from "@iara/orchestrator/ports";
-import type { ScriptSupervisor } from "@iara/orchestrator/supervisor";
 import { gitClone } from "@iara/shared/git";
 import { z } from "zod";
 import { registerMethod } from "../router.js";
@@ -41,8 +39,6 @@ export function registerProjectHandlers(
   appState: AppState,
   watcher: ProjectsWatcher,
   pushFn: PushFn,
-  portAllocator: PortAllocator,
-  scriptSupervisor: ScriptSupervisor,
 ): void {
   registerMethod("projects.create", async (params) => {
     const { slug, name, description, repoSources } = params;
@@ -89,16 +85,15 @@ export function registerProjectHandlers(
     }
 
     // readProject requires repos in default/ — skip disk rescan when none were cloned
-    const project =
-      repoSources.length > 0
-        ? appState.rescanProject(slug)
-        : null;
+    const project = repoSources.length > 0 ? appState.rescanProject(slug) : null;
 
-    const result = project ?? appState.createEmptyProject(slug, {
-      name,
-      description: description ?? "",
-      repoSources,
-    });
+    const result =
+      project ??
+      appState.createEmptyProject(slug, {
+        name,
+        description: description ?? "",
+        repoSources,
+      });
 
     pushFn("project:changed", { project: result });
 

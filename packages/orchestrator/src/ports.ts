@@ -61,5 +61,3 @@ export class PortAllocator {
     return ports;
   }
 }
-
-export { PORT_SPACING, PORT_START };

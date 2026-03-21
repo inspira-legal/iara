@@ -16,13 +16,9 @@
     "ws": "^8.18.0"
   },
   "devDependencies": {
-    "@electron/rebuild": "^3.7.1",
-    "@iara/contracts": "workspace:*",
-    "@iara/shared": "workspace:*",
     "@types/node": "catalog:",
     "@types/ws": "^8.18.0",
     "electron": "40.6.0",
-    "electron-builder": "^25.1.8",
     "tsdown": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:",

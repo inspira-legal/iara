@@ -56,7 +56,7 @@ export function listSessions(repoDirs: string[]): SessionInfo[] {
   return sessions;
 }
 
-export function getSessionMetadata(
+function getSessionMetadata(
   filePath: string,
 ): { title: string | null; createdAt: string; lastMessageAt: string; messageCount: number } | null {
   try {
