@@ -50,4 +50,25 @@ describe("killProcessGroup", () => {
     // Should not throw
     cancel();
   });
+
+  it("cancel is no-op after SIGKILL timer has already fired", async () => {
+    // Spawn a process that traps SIGTERM so it survives until SIGKILL
+    const child = spawn("sh", ["-c", "trap '' TERM; sleep 60"], {
+      detached: true,
+      stdio: "ignore",
+    });
+    const pid = child.pid!;
+
+    // Use very short grace so SIGKILL fires quickly
+    const cancel = killProcessGroup(pid, { graceMs: 50 });
+
+    // Wait for SIGKILL timer to fire
+    await new Promise((resolve) => setTimeout(resolve, 200));
+
+    // Process should be dead from SIGKILL
+    expect(() => process.kill(pid, 0)).toThrow();
+
+    // Calling cancel after timer already fired should be safe (timer is null)
+    cancel();
+  });
 });

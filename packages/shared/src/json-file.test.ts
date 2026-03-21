@@ -42,6 +42,13 @@ describe("createJsonFile", () => {
       expect(() => file.read()).toThrow("Failed to read or validate");
     });
 
+    it("handles EISDIR error when path is a directory", () => {
+      const p = fp();
+      fs.mkdirSync(p, { recursive: true });
+      const file = createJsonFile(p, TestSchema);
+      expect(() => file.read()).toThrow("Failed to read or validate");
+    });
+
     it("throws when Zod validation fails", () => {
       const p = fp();
       fs.writeFileSync(p, JSON.stringify({ name: 123, count: "bad" }));

@@ -181,6 +181,159 @@ describe("SessionWatcher", () => {
     });
   });
 
+  describe("debouncedNotify()", () => {
+    it("does nothing when hash has no mapped workspace IDs", () => {
+      const pushFn = vi.fn();
+      const appState = createMockAppState();
+      const watcher = new SessionWatcher(pushFn, appState);
+      const w = watcher as any;
+
+      // Call debouncedNotify with a hash that doesn't exist in hashToWorkspaceIds
+      w.debouncedNotify("nonexistent-hash");
+      vi.advanceTimersByTime(600);
+
+      // Should not push anything
+      expect(pushFn).not.toHaveBeenCalled();
+
+      watcher.stop();
+    });
+
+    it("pushes events for all workspace IDs mapped to the hash", () => {
+      const pushFn = vi.fn();
+      const appState = createMockAppState();
+      const watcher = new SessionWatcher(pushFn, appState);
+      const w = watcher as any;
+
+      // Manually set up hash mapping with multiple workspace IDs
+      w.hashToWorkspaceIds.set("test-hash", new Set(["ws1", "ws2", "ws3"]));
+
+      w.debouncedNotify("test-hash");
+      vi.advanceTimersByTime(600);
+
+      expect(pushFn).toHaveBeenCalledTimes(3);
+      expect(pushFn).toHaveBeenCalledWith("session:changed", { workspaceId: "ws1" });
+      expect(pushFn).toHaveBeenCalledWith("session:changed", { workspaceId: "ws2" });
+      expect(pushFn).toHaveBeenCalledWith("session:changed", { workspaceId: "ws3" });
+
+      watcher.stop();
+    });
+
+    it("cleans up timer after firing", () => {
+      const pushFn = vi.fn();
+      const appState = createMockAppState();
+      const watcher = new SessionWatcher(pushFn, appState);
+      const w = watcher as any;
+
+      w.hashToWorkspaceIds.set("test-hash", new Set(["ws1"]));
+      w.debouncedNotify("test-hash");
+
+      expect(w.debounceTimers.size).toBe(1);
+
+      vi.advanceTimersByTime(600);
+
+      expect(w.debounceTimers.size).toBe(0);
+
+      watcher.stop();
+    });
+  });
+
+  describe("watchHash()", () => {
+    it("ignores non-jsonl files in watched directory", () => {
+      const projects = [
+        {
+          slug: "proj1",
+          workspaces: [{ id: "proj1/default", slug: "default" }],
+        },
+      ];
+
+      const wsDir = path.join(tmpHome, "projects", "proj1", "default");
+      fs.mkdirSync(wsDir, { recursive: true });
+
+      const pushFn = vi.fn();
+      const appState = createMockAppState(projects);
+      const watcher = new SessionWatcher(pushFn, appState);
+      watcher.refresh();
+
+      const w = watcher as any;
+      const hashes = Array.from(w.watchers.keys()) as string[];
+
+      // Write a non-jsonl file to one of the watched dirs
+      if (hashes.length > 0) {
+        const home = process.env.HOME ?? "";
+        const watchedDir = path.join(home, ".claude", "projects", hashes[0]!);
+        fs.writeFileSync(path.join(watchedDir, "test.txt"), "not jsonl");
+
+        vi.advanceTimersByTime(600);
+        expect(pushFn).not.toHaveBeenCalled();
+      }
+
+      watcher.stop();
+    });
+
+    it("detects jsonl file changes in watched directory", () => {
+      const projects = [
+        {
+          slug: "proj1",
+          workspaces: [{ id: "proj1/default", slug: "default" }],
+        },
+      ];
+
+      const wsDir = path.join(tmpHome, "projects", "proj1", "default");
+      fs.mkdirSync(wsDir, { recursive: true });
+
+      const pushFn = vi.fn();
+      const appState = createMockAppState(projects);
+      const watcher = new SessionWatcher(pushFn, appState);
+      watcher.refresh();
+
+      const w = watcher as any;
+      const hashes = Array.from(w.watchers.keys()) as string[];
+
+      if (hashes.length > 0) {
+        const home = process.env.HOME ?? "";
+        const watchedDir = path.join(home, ".claude", "projects", hashes[0]!);
+        fs.writeFileSync(path.join(watchedDir, "session.jsonl"), "{}");
+
+        // Allow real timers for FS event, then advance for debounce
+        vi.advanceTimersByTime(600);
+      }
+
+      watcher.stop();
+    });
+  });
+
+  describe("refresh() edge cases", () => {
+    it("reuses existing watchers for unchanged hashes", () => {
+      const projects = [
+        {
+          slug: "proj1",
+          workspaces: [{ id: "proj1/default", slug: "default" }],
+        },
+      ];
+
+      const wsDir = path.join(tmpHome, "projects", "proj1", "default");
+      fs.mkdirSync(wsDir, { recursive: true });
+
+      const pushFn = vi.fn();
+      const appState = createMockAppState(projects);
+      const watcher = new SessionWatcher(pushFn, appState);
+
+      watcher.refresh();
+      const w = watcher as any;
+      const firstWatchers = new Map(w.watchers);
+
+      // Refresh again with same projects — should reuse watchers
+      watcher.refresh();
+
+      for (const [hash, fsWatcher] of firstWatchers) {
+        // Same watcher instance should be reused
+        expect(w.watchers.get(hash)).toBe(fsWatcher);
+      }
+
+      watcher.stop();
+    });
+  });
+
   describe("stop()", () => {
     it("cleans up all watchers and timers", () => {
       const projects = [

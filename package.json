@@ -24,6 +24,7 @@
     "typecheck": "turbo run typecheck",
     "lint": "oxlint --report-unused-disable-directives",
     "test": "turbo run test",
+    "test:coverage": "turbo run test:coverage",
     "fmt": "oxfmt",
     "fmt:check": "oxfmt --check",
     "smoke-test": "turbo run smoke-test --filter=@iara/desktop",
@@ -43,6 +44,7 @@
   },
   "devDependencies": {
     "@types/node": "catalog:",
+    "@vitest/coverage-v8": "^4.1.0",
     "knip": "^6.0.1",
     "lefthook": "^2.1.4",
     "oxfmt": "^0.40.0",

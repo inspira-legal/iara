@@ -20,6 +20,11 @@
       "dependsOn": ["^build"],
       "cache": false,
       "outputs": []
+    },
+    "test:coverage": {
+      "dependsOn": ["^build"],
+      "cache": false,
+      "outputs": []
     }
   }
 }
