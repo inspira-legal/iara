@@ -1,6 +1,6 @@
 import { useCallback } from "react";
 import { GitBranch, Pencil, Copy, Trash2, Circle } from "lucide-react";
-import type { Task } from "@iara/contracts";
+import type { Workspace } from "@iara/contracts";
 import { SidebarContextMenu, type ContextMenuItem } from "./SidebarContextMenu";
 import { isScriptActive, isScriptUnhealthy } from "~/lib/script-status";
 import { useScriptsStore } from "~/stores/scripts";
@@ -10,7 +10,7 @@ import { useInlineEdit } from "~/hooks/useInlineEdit";
 import { useContextMenu } from "~/hooks/useContextMenu";
 
 interface TaskNodeProps {
-  task: Task;
+  task: Workspace;
   isSelected: boolean;
   onSelect: () => void;
   onDelete: () => void;
@@ -38,7 +38,7 @@ export function TaskNode({
   const { position: contextMenu, handleContextMenu, close: closeContextMenu } = useContextMenu();
 
   const handleCopyBranch = useCallback(() => {
-    writeClipboard(task.branch);
+    if (task.branch) writeClipboard(task.branch);
   }, [task.branch]);
 
   const contextMenuItems: ContextMenuItem[] = [
@@ -88,17 +88,19 @@ export function TaskNode({
               <span className="block truncate text-sm">{task.name}</span>
             )}
           </div>
-          <div className="flex items-center gap-1">
-            <GitBranch size={10} className="shrink-0 text-zinc-600" />
-            <span className="truncate text-xs text-zinc-600">{task.branch}</span>
-          </div>
+          {task.branch && (
+            <div className="flex items-center gap-1">
+              <GitBranch size={10} className="shrink-0 text-zinc-600" />
+              <span className="truncate text-xs text-zinc-600">{task.branch}</span>
+            </div>
+          )}
         </div>
 
         <span
           className="shrink-0 pt-0.5 text-xs text-zinc-600"
-          title={formatAbsoluteTime(task.updatedAt)}
+          title={formatAbsoluteTime(task.createdAt)}
         >
-          {formatRelativeTime(task.updatedAt)}
+          {formatRelativeTime(task.createdAt)}
         </span>
       </button>
 

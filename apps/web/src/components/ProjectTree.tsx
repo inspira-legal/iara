@@ -13,8 +13,7 @@ import { GripVertical } from "lucide-react";
 import type { Project } from "@iara/contracts";
 import { ProjectNode } from "./ProjectNode";
 import { useSidebarStore } from "~/stores/sidebar";
-import { useTaskStore } from "~/stores/tasks";
-import { useProjectStore } from "~/stores/projects";
+import { useAppStore } from "~/stores/app";
 
 interface ProjectTreeProps {
   projects: Project[];
@@ -46,8 +45,11 @@ export function ProjectTree({
     collapseProject,
     setProjectOrder,
   } = useSidebarStore();
-  const { selectedTaskId, selectTask, getTasksForProject } = useTaskStore();
-  const { selectProject, selectedProjectId } = useProjectStore();
+  const selectedTaskId = useAppStore((s) => s.selectedWorkspaceId);
+  const selectTask = useAppStore((s) => s.selectWorkspace);
+  const getTasksForProject = useAppStore((s) => s.getWorkspacesForProject);
+  const selectProject = useAppStore((s) => s.selectProject);
+  const selectedProjectId = useAppStore((s) => s.selectedProjectId);
   const containerRef = useRef<HTMLDivElement>(null);
 
   // Sort projects by persisted order, unordered ones go to the end

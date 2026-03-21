@@ -2,7 +2,6 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import type { EnvEntry, EnvRepoEntries } from "@iara/contracts";
 import { getProjectsDir } from "./config.js";
-import { getProjectDir } from "./projects.js";
 
 // ---------------------------------------------------------------------------
 // Paths
@@ -17,14 +16,14 @@ export function getGlobalEnvPath(repo: string): string {
 }
 
 export function getLocalEnvPath(projectSlug: string, workspace: string, repo: string): string {
-  const projectDir = getProjectDir(projectSlug);
+  const projectDir = path.join(getProjectsDir(), projectSlug);
   const workspaceDir =
     workspace === "default" ? path.join(projectDir, "default") : path.join(projectDir, workspace);
   return path.join(workspaceDir, `.env.${repo}.local`);
 }
 
 function getWorkspaceDir(projectSlug: string, workspace: string): string {
-  const projectDir = getProjectDir(projectSlug);
+  const projectDir = path.join(getProjectsDir(), projectSlug);
   return workspace === "default"
     ? path.join(projectDir, "default")
     : path.join(projectDir, workspace);

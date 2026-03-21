@@ -4,7 +4,6 @@ import { createServer, pushAll } from "./ws.js";
 import { registerAllHandlers } from "./handlers/index.js";
 import { ScriptSupervisor } from "@iara/orchestrator/supervisor";
 import { PortAllocator } from "@iara/orchestrator/ports";
-import { createPortStore } from "./services/port-store.js";
 import { NotificationService } from "./services/notifications.js";
 import { TerminalManager, TERMINAL_KILL_GRACE_MS } from "./services/terminal.js";
 import { SocketServer, registerSocketHandlers } from "./socket.js";
@@ -13,6 +12,10 @@ import { mergeHooks, removeHooks } from "./services/hooks.js";
 import { generatePluginDir, cleanupPluginDir } from "./services/plugins.js";
 import { SessionWatcher } from "./services/session-watcher.js";
 import { syncEnvSymlinks } from "./services/env.js";
+import { AppState } from "./services/state.js";
+import { ProjectsWatcher } from "./services/watcher.js";
+import { getProjectsDir } from "./services/config.js";
+import { stateDir } from "./env.js";
 
 syncShellEnvironment();
 syncEnvSymlinks();
@@ -24,21 +27,29 @@ const authToken =
   process.env.IARA_AUTH_TOKEN ??
   process.argv.find((_, i, a) => a[i - 1] === "--auth-token") ??
   crypto.randomBytes(24).toString("hex");
-// stateDir is in env.ts to avoid circular imports (db.ts needs it)
 const webDir =
   process.env.IARA_WEB_DIR ?? process.argv.find((_, i, a) => a[i - 1] === "--web-dir") ?? undefined;
 
+// Core state
+const appState = new AppState(getProjectsDir(), stateDir);
+
 // Services
 const scriptSupervisor = new ScriptSupervisor(pushAll);
-const portAllocator = new PortAllocator(createPortStore());
+const portAllocator = new PortAllocator();
 const notificationService = new NotificationService(pushAll);
 const terminalManager = new TerminalManager(pushAll);
 const socketServer = new SocketServer();
 registerSocketHandlers(socketServer, pushAll);
-const sessionWatcher = new SessionWatcher(pushAll);
+const sessionWatcher = new SessionWatcher(pushAll, appState);
+
+// FS watcher
+const watcher = new ProjectsWatcher(getProjectsDir(), appState, pushAll);
+watcher.start();
 
 // Register all WS handlers
 registerAllHandlers({
+  appState,
+  watcher,
   scriptSupervisor,
   portAllocator,
   notificationService,
@@ -88,6 +99,9 @@ httpServer.on("listening", async () => {
 // Graceful shutdown
 function shutdown() {
   console.log("Shutting down...");
+  try {
+    watcher.stop();
+  } catch {}
   try {
     terminalManager.destroyAll();
   } catch {}

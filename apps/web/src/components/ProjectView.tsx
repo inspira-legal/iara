@@ -10,7 +10,7 @@ import {
   ArrowDown,
 } from "lucide-react";
 import type { Project, RepoInfo } from "@iara/contracts";
-import { useProjectStore } from "~/stores/projects";
+import { useAppStore } from "~/stores/app";
 import { transport } from "~/lib/ws-transport.js";
 import { EditableName } from "./EditableName";
 import { AddRepoDialog } from "./AddRepoDialog";
@@ -92,7 +92,7 @@ export function ProjectView({ project }: ProjectViewProps) {
   const [loading, setLoading] = useState(true);
   const [showAddRepo, setShowAddRepo] = useState(false);
   const [repoToDelete, setRepoToDelete] = useState<string | null>(null);
-  const { updateProject } = useProjectStore();
+  const { updateProject } = useAppStore();
 
   useEffect(() => {
     let cancelled = false;

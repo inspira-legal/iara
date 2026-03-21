@@ -27,19 +27,10 @@ export const useNotificationStore = create<NotificationState & NotificationActio
   unreadCount: 0,
 
   loadNotifications: async () => {
-    try {
-      const [notifications, unreadCount] = await Promise.all([
-        transport.request("notifications.list", {}),
-        transport.request("notifications.unreadCount", {}),
-      ]);
-      set({ notifications, unreadCount });
-    } catch {
-      // transport not ready
-    }
+    // no-op: notifications are received via push events
   },
 
   markRead: async (id) => {
-    await transport.request("notifications.markRead", { id });
     set((state) => ({
       notifications: state.notifications.map((n) => (n.id === id ? { ...n, read: true } : n)),
       unreadCount: Math.max(0, state.unreadCount - 1),
@@ -47,7 +38,6 @@ export const useNotificationStore = create<NotificationState & NotificationActio
   },
 
   markAllRead: async () => {
-    await transport.request("notifications.markAllRead", {});
     set((state) => ({
       notifications: state.notifications.map((n) => ({ ...n, read: true })),
       unreadCount: 0,
@@ -55,14 +45,12 @@ export const useNotificationStore = create<NotificationState & NotificationActio
   },
 
   subscribePush: () => {
-    const unsub = transport.subscribe("notification", () => {
-      // Reload notifications when a new push arrives
-      void transport.request("notifications.list", {}).then((notifications) => {
-        set({ notifications });
-      });
-      void transport.request("notifications.unreadCount", {}).then((unreadCount) => {
-        set({ unreadCount });
-      });
+    const unsub = transport.subscribe("notification", (params) => {
+      const notification = params as unknown as AppNotification;
+      set((state) => ({
+        notifications: [...state.notifications, notification],
+        unreadCount: state.unreadCount + 1,
+      }));
     });
     return unsub;
   },

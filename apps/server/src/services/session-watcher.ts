@@ -2,9 +2,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import type { WsPushEvents } from "@iara/contracts";
 import { computeProjectHash } from "./sessions.js";
-import { getProjectDir } from "./projects.js";
-import { listTasks } from "./tasks.js";
-import { db, schema } from "../db.js";
+import type { AppState } from "./state.js";
 
 type PushFn = <E extends keyof WsPushEvents>(event: E, params: WsPushEvents[E]) => void;
 
@@ -16,42 +14,44 @@ const DEBOUNCE_MS = 500;
  */
 export class SessionWatcher {
   private watchers = new Map<string, fs.FSWatcher>();
-  private hashToTaskIds = new Map<string, Set<string>>();
+  private hashToWorkspaceIds = new Map<string, Set<string>>();
   private debounceTimers = new Map<string, ReturnType<typeof setTimeout>>();
   private pushAll: PushFn;
+  private appState: AppState;
 
-  constructor(pushAll: PushFn) {
+  constructor(pushAll: PushFn, appState: AppState) {
     this.pushAll = pushAll;
+    this.appState = appState;
   }
 
   /**
-   * Rebuild watches for all tasks and project roots across all projects.
-   * Call on startup and when tasks/projects change.
+   * Rebuild watches for all workspaces across all projects.
+   * Call on startup and when workspaces/projects change.
    */
   refresh(): void {
-    const allProjects = db.select().from(schema.projects).all();
+    const { projects } = this.appState.getState();
     const newHashes = new Map<string, Set<string>>();
 
-    for (const project of allProjects) {
-      const projectDir = getProjectDir(project.slug);
+    for (const project of projects) {
+      const projectDir = this.appState.getProjectDir(project.slug);
 
-      // Watch default workspace sessions (default:<projectId>)
-      const rootHash = computeProjectHash(projectDir);
-      if (!newHashes.has(rootHash)) {
-        newHashes.set(rootHash, new Set());
-      }
-      newHashes.get(rootHash)!.add(`default:${project.id}`);
-
-      const tasks = listTasks(project.id);
-
-      for (const task of tasks) {
-        const taskDir = path.join(projectDir, task.slug);
-        const hash = computeProjectHash(taskDir);
+      for (const workspace of project.workspaces) {
+        const wsDir = this.appState.getWorkspaceDir(workspace.id);
+        const hash = computeProjectHash(wsDir);
 
         if (!newHashes.has(hash)) {
           newHashes.set(hash, new Set());
         }
-        newHashes.get(hash)!.add(task.id);
+        newHashes.get(hash)!.add(workspace.id);
+
+        // Also watch the project root for default workspace
+        if (workspace.slug === "default") {
+          const rootHash = computeProjectHash(projectDir);
+          if (!newHashes.has(rootHash)) {
+            newHashes.set(rootHash, new Set());
+          }
+          newHashes.get(rootHash)!.add(workspace.id);
+        }
       }
     }
 
@@ -63,7 +63,7 @@ export class SessionWatcher {
       }
     }
 
-    this.hashToTaskIds = newHashes;
+    this.hashToWorkspaceIds = newHashes;
 
     // Add watchers for new hashes
     for (const hash of newHashes.keys()) {
@@ -105,10 +105,10 @@ export class SessionWatcher {
       hash,
       setTimeout(() => {
         this.debounceTimers.delete(hash);
-        const taskIds = this.hashToTaskIds.get(hash);
-        if (taskIds) {
-          for (const taskId of taskIds) {
-            this.pushAll("session:changed", { taskId });
+        const workspaceIds = this.hashToWorkspaceIds.get(hash);
+        if (workspaceIds) {
+          for (const workspaceId of workspaceIds) {
+            this.pushAll("session:changed", { workspaceId });
           }
         }
       }, DEBOUNCE_MS),

@@ -3,7 +3,7 @@ export type {
   AppInfo,
   AppNotification,
   CreateProjectInput,
-  CreateTaskInput,
+  CreateWorkspaceInput,
   DesktopBridge,
   EssencialKey,
   GitStatusResult,
@@ -25,7 +25,7 @@ export type {
   EnvRepoEntries,
   Project,
   RepoInfo,
-  Task,
+  Workspace,
 } from "./models.js";
 export type {
   WsClientMessage,
@@ -38,3 +38,5 @@ export type {
   WsResponseOk,
   WsServerMessage,
 } from "./ws.js";
+export { ProjectFileSchema, SettingsFileSchema, WorkspaceFileSchema } from "./schemas.js";
+export type { ProjectFile, SettingsFile, WorkspaceFile } from "./schemas.js";

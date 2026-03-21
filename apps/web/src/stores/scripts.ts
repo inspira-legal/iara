@@ -8,8 +8,7 @@ export type PanelTab = "scripts" | "output";
 
 interface ScriptsState {
   config: ScriptsConfig | null;
-  currentProjectId: string | null;
-  currentWorkspace: string | null;
+  currentWorkspaceId: string | null;
   loading: boolean;
   discovering: boolean;
   /** Projects currently running discovery */
@@ -23,10 +22,10 @@ interface ScriptsState {
 }
 
 interface ScriptsActions {
-  loadConfig(projectId: string, workspace: string): Promise<void>;
-  runScript(projectId: string, workspace: string, service: string, script: string): Promise<void>;
+  loadConfig(workspaceId: string): Promise<void>;
+  runScript(workspaceId: string, service: string, script: string): Promise<void>;
   stopScript(scriptId: string): Promise<void>;
-  runAll(projectId: string, workspace: string, category: EssencialKey): Promise<void>;
+  runAll(workspaceId: string, category: EssencialKey): Promise<void>;
   stopAll(): Promise<void>;
   discover(projectId: string): Promise<void>;
   selectLog(service: string, script: string): void;
@@ -36,10 +35,16 @@ interface ScriptsActions {
   subscribePush(): () => void;
 }
 
+/** Extract the projectId portion from a workspaceId like "projectId/workspaceSlug" */
+function projectIdFromWorkspaceId(workspaceId: string | null): string | null {
+  if (!workspaceId) return null;
+  const idx = workspaceId.indexOf("/");
+  return idx >= 0 ? workspaceId.slice(0, idx) : workspaceId;
+}
+
 export const useScriptsStore = create<ScriptsState & ScriptsActions>((set, get) => ({
   config: null,
-  currentProjectId: null as string | null,
-  currentWorkspace: null as string | null,
+  currentWorkspaceId: null as string | null,
   loading: false,
   discovering: false,
   discoveringProjects: new Set<string>(),
@@ -48,32 +53,31 @@ export const useScriptsStore = create<ScriptsState & ScriptsActions>((set, get) 
   activeTab: "scripts",
   collapsed: false,
 
-  loadConfig: async (projectId, workspace) => {
+  loadConfig: async (workspaceId) => {
     set({
       loading: true,
       selectedLog: null,
       activeTab: "scripts",
-      currentProjectId: projectId,
-      currentWorkspace: workspace,
+      currentWorkspaceId: workspaceId,
     });
     try {
-      const config = await transport.request("scripts.load", { projectId, workspace });
+      const config = await transport.request("scripts.load", { workspaceId });
       set({ config, loading: false });
     } catch {
       set({ loading: false });
     }
   },
 
-  runScript: async (projectId, workspace, service, script) => {
-    await transport.request("scripts.run", { projectId, workspace, service, script });
+  runScript: async (workspaceId, service, script) => {
+    await transport.request("scripts.run", { workspaceId, service, script });
   },
 
   stopScript: async (scriptId) => {
     await transport.request("scripts.stop", { scriptId });
   },
 
-  runAll: async (projectId, workspace, category) => {
-    await transport.request("scripts.runAll", { projectId, workspace, category });
+  runAll: async (workspaceId, category) => {
+    await transport.request("scripts.runAll", { workspaceId, category });
   },
 
   stopAll: async () => {
@@ -83,15 +87,17 @@ export const useScriptsStore = create<ScriptsState & ScriptsActions>((set, get) 
   discover: async (projectId) => {
     const next = new Set(get().discoveringProjects);
     next.add(projectId);
-    set({ discovering: true, discoveringProjects: next });
+    const currentProjectId = projectIdFromWorkspaceId(get().currentWorkspaceId);
+    set({ discovering: next.has(currentProjectId ?? ""), discoveringProjects: next });
     try {
       await transport.request("scripts.discover", { projectId });
     } catch {
       const cleared = new Set(get().discoveringProjects);
       cleared.delete(projectId);
+      const curProjId = projectIdFromWorkspaceId(get().currentWorkspaceId);
       set({
         discoveringProjects: cleared,
-        discovering: cleared.has(get().currentProjectId ?? ""),
+        discovering: cleared.has(curProjId ?? ""),
       });
     }
   },
@@ -124,10 +130,11 @@ export const useScriptsStore = create<ScriptsState & ScriptsActions>((set, get) 
     const unsubStatus = transport.subscribe(
       "scripts:status",
       ({ status }: { service: string; script: string; status: ScriptStatus }) => {
-        const { config, currentProjectId, currentWorkspace } = get();
+        const { config, currentWorkspaceId } = get();
         if (!config) return;
-        // Ignore statuses from other projects/workspaces
-        if (status.projectId !== currentProjectId || status.workspace !== currentWorkspace) return;
+        // Ignore statuses from other workspaces
+        const wsId = `${status.projectId}/${status.workspace}`;
+        if (wsId !== currentWorkspaceId) return;
         const existing = config.statuses.findIndex((s) => s.scriptId === status.scriptId);
         if (existing >= 0) {
           const prev = config.statuses[existing]!;
@@ -163,9 +170,10 @@ export const useScriptsStore = create<ScriptsState & ScriptsActions>((set, get) 
     const unsubReload = transport.subscribe("scripts:reload", ({ projectId }) => {
       const next = new Set(get().discoveringProjects);
       next.delete(projectId);
+      const currentProjectId = projectIdFromWorkspaceId(get().currentWorkspaceId);
       set({
         discoveringProjects: next,
-        discovering: next.has(get().currentProjectId ?? ""),
+        discovering: next.has(currentProjectId ?? ""),
       });
     });
 

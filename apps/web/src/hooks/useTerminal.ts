@@ -13,7 +13,7 @@ interface UseTerminalReturn {
   destroy: () => Promise<void>;
 }
 
-export function useTerminal(taskId: string): UseTerminalReturn {
+export function useTerminal(workspaceId: string): UseTerminalReturn {
   const [terminalId, setTerminalId] = useState<string | null>(null);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [status, setStatus] = useState<TerminalStatus>("idle");
@@ -26,7 +26,7 @@ export function useTerminal(taskId: string): UseTerminalReturn {
       try {
         setStatus("connecting");
         setExitCode(null);
-        const params: { taskId: string; resumeSessionId?: string } = { taskId };
+        const params: { workspaceId: string; resumeSessionId?: string } = { workspaceId };
         if (resumeSessionId !== undefined) {
           params.resumeSessionId = resumeSessionId;
         }
@@ -42,7 +42,7 @@ export function useTerminal(taskId: string): UseTerminalReturn {
         setExitCode(-1);
       }
     },
-    [taskId],
+    [workspaceId],
   );
 
   const destroy = useCallback(async () => {

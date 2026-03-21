@@ -5,28 +5,32 @@ import { mergeEnvForWorkspace } from "../services/env.js";
 import type { RepoContext } from "../services/launcher.js";
 import { buildRootPrompt } from "../services/launcher.js";
 import { registerMethod } from "../router.js";
-import { getProject, getProjectDir } from "../services/projects.js";
-import { getSetting } from "../services/settings.js";
-import { getTask } from "../services/tasks.js";
+import type { AppState } from "../services/state.js";
 import type { TerminalManager } from "../services/terminal.js";
 
-function getAutocompactEnv(): Record<string, string> {
-  const pct = getSetting("claude.autocompact_pct");
+function getAutocompactEnv(appState: AppState): Record<string, string> {
+  const pct = appState.getSetting("claude.autocompact_pct");
   if (pct) {
     return { CLAUDE_AUTOCOMPACT_PCT_OVERRIDE: pct };
   }
   return {};
 }
 
-export function registerTerminalHandlers(manager: TerminalManager): void {
+export function registerTerminalHandlers(appState: AppState, manager: TerminalManager): void {
   registerMethod("terminal.create", async (params) => {
-    // Default workspace mode: launch Claude at the project level (no task)
-    if ("default" in params && params.default) {
-      const project = getProject(params.projectId);
-      if (!project) throw new Error(`Project not found: ${params.projectId}`);
+    const workspace = appState.getWorkspace(params.workspaceId);
+    if (!workspace) throw new Error(`Workspace not found: ${params.workspaceId}`);
 
-      const projectDir = getProjectDir(project.slug);
-      const reposDir = path.join(projectDir, "default");
+    const projectSlug = workspace.projectId;
+    const project = appState.getProject(projectSlug);
+    if (!project) throw new Error(`Project not found: ${projectSlug}`);
+
+    const projectDir = appState.getProjectDir(projectSlug);
+    const workspaceDir = appState.getWorkspaceDir(params.workspaceId);
+
+    if (workspace.type === "default") {
+      // Default workspace mode: launch Claude at the project level
+      const reposDir = workspaceDir;
 
       const repoDirs: string[] = [];
       const repos: Array<{ name: string; branch: string; repoPath: string }> = [];
@@ -65,7 +69,7 @@ export function registerTerminalHandlers(manager: TerminalManager): void {
 
       // Merge env files (global + local) for all repos
       const repoNames = repoDirs.map((d) => path.basename(d));
-      const envVars = mergeEnvForWorkspace(project.slug, "default", repoNames);
+      const envVars = mergeEnvForWorkspace(projectSlug, workspace.slug, repoNames);
 
       // Use reposDir as cwd so Claude opens directly where repos live.
       // When resuming a session, honour sessionCwd so the hash matches the original.
@@ -73,33 +77,22 @@ export function registerTerminalHandlers(manager: TerminalManager): void {
       const rootCwd = params.resumeSessionId && params.sessionCwd ? params.sessionCwd : defaultCwd;
 
       return manager.create({
-        taskId: `default:${params.projectId}`,
+        taskId: `default:${projectSlug}`,
         taskDir: rootCwd,
         repoDirs,
         appendSystemPrompt: systemPrompt,
         ...(params.resumeSessionId != null ? { resumeSessionId: params.resumeSessionId } : {}),
         env: {
           ...envVars,
-          ...getAutocompactEnv(),
+          ...getAutocompactEnv(appState),
           IARA_ROOT: "1",
-          IARA_PROJECT_ID: project.id,
+          IARA_PROJECT_ID: projectSlug,
           IARA_PROJECT_DIR: projectDir,
         },
       });
     }
 
-    // Task mode (existing behavior)
-    const taskParams = params as { taskId: string; resumeSessionId?: string; sessionCwd?: string };
-    const task = getTask(taskParams.taskId);
-    if (!task) throw new Error(`Task not found: ${taskParams.taskId}`);
-
-    const project = getProject(task.projectId);
-    if (!project) throw new Error(`Project not found: ${task.projectId}`);
-
-    const projectDir = getProjectDir(project.slug);
-    const taskDir = path.join(projectDir, task.slug);
-
-    // Resolve repo dirs (worktrees inside task dir)
+    // Task workspace mode
     const repoDirs: string[] = [];
     const repos: RepoContext[] = [];
     const reposDir = path.join(projectDir, "default");
@@ -108,7 +101,7 @@ export function registerTerminalHandlers(manager: TerminalManager): void {
         .readdirSync(reposDir)
         .filter((name) => fs.statSync(path.join(reposDir, name)).isDirectory());
       for (const name of repoNames) {
-        const wtDir = path.join(taskDir, name);
+        const wtDir = path.join(workspaceDir, name);
         if (fs.existsSync(wtDir)) {
           repoDirs.push(wtDir);
           repos.push({
@@ -121,35 +114,35 @@ export function registerTerminalHandlers(manager: TerminalManager): void {
     }
 
     if (repoDirs.length === 0) {
-      repoDirs.push(taskDir);
+      repoDirs.push(workspaceDir);
     }
 
     // Merge env files (global + local) for all repos
     const repoNames = repos.map((r) => r.name);
-    const envVars = mergeEnvForWorkspace(project.slug, task.slug, repoNames);
+    const envVars = mergeEnvForWorkspace(projectSlug, workspace.slug, repoNames);
 
     // When resuming a session, honour sessionCwd so the hash matches the original
     const effectiveCwd =
-      taskParams.resumeSessionId && taskParams.sessionCwd ? taskParams.sessionCwd : taskDir;
+      params.resumeSessionId && params.sessionCwd ? params.sessionCwd : workspaceDir;
 
     return manager.create({
-      taskId: taskParams.taskId,
+      taskId: params.workspaceId,
       taskDir: effectiveCwd,
       repoDirs,
       taskContext: {
         taskDir: effectiveCwd,
         projectName: project.name,
-        taskName: task.name,
-        taskDescription: task.description,
-        branch: task.branch,
+        taskName: workspace.name,
+        taskDescription: workspace.description,
+        branch: workspace.branch ?? "main",
         repos,
       },
       ...(params.resumeSessionId != null ? { resumeSessionId: params.resumeSessionId } : {}),
       env: {
         ...envVars,
-        ...getAutocompactEnv(),
-        IARA_TASK_ID: task.id,
-        IARA_PROJECT_ID: project.id,
+        ...getAutocompactEnv(appState),
+        IARA_TASK_ID: params.workspaceId,
+        IARA_PROJECT_ID: projectSlug,
         IARA_PROJECT_DIR: projectDir,
       },
     });

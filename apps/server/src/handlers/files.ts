@@ -3,8 +3,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { cleanEnv } from "@iara/shared/env";
 import { registerMethod } from "../router.js";
-import { getProject, getProjectDir } from "../services/projects.js";
-import { getTask, getTaskDir } from "../services/tasks.js";
+import type { AppState } from "../services/state.js";
 
 const GUI_EDITORS = ["cursor", "code", "zed", "subl", "atom"] as const;
 
@@ -31,7 +30,7 @@ function commandExists(cmd: string): boolean {
   }
 }
 
-export function registerFileHandlers(): void {
+export function registerFileHandlers(appState: AppState): void {
   registerMethod("files.open", async (params) => {
     let { filePath, line, col } = params;
 
@@ -67,7 +66,7 @@ export function registerFileHandlers(): void {
   });
 
   registerMethod("files.openInEditor", async (params) => {
-    const dir = resolveContextDir(params.projectId, params.taskId);
+    const dir = appState.getWorkspaceDir(params.workspaceId);
     for (const editor of GUI_EDITORS) {
       if (commandExists(editor)) {
         const child = nodeSpawn(editor, [dir], {
@@ -82,7 +81,7 @@ export function registerFileHandlers(): void {
   });
 
   registerMethod("files.openInExplorer", async (params) => {
-    const dir = resolveContextDir(params.projectId, params.taskId);
+    const dir = appState.getWorkspaceDir(params.workspaceId);
     const platform = os.platform();
     const cmd = platform === "darwin" ? "open" : platform === "win32" ? "explorer" : "xdg-open";
     const child = nodeSpawn(cmd, [dir], {
@@ -92,17 +91,4 @@ export function registerFileHandlers(): void {
     });
     child.unref();
   });
-}
-
-function resolveContextDir(projectId: string, taskId?: string): string {
-  if (taskId) {
-    const task = getTask(taskId);
-    if (!task) throw new Error(`Task not found: ${taskId}`);
-    const project = getProject(task.projectId);
-    if (!project) throw new Error(`Project not found: ${task.projectId}`);
-    return getTaskDir(project.slug, task.slug);
-  }
-  const project = getProject(projectId);
-  if (!project) throw new Error(`Project not found: ${projectId}`);
-  return path.join(getProjectDir(project.slug), "default");
 }

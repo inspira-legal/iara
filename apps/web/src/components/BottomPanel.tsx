@@ -20,7 +20,7 @@ import {
 import type { EssencialKey, ResolvedServiceDef, ScriptStatus } from "@iara/contracts";
 import { isScriptActive, isScriptUnhealthy } from "~/lib/script-status";
 import { useScriptsStore } from "~/stores/scripts";
-import { useProjectStore } from "~/stores/projects";
+import { useAppStore } from "~/stores/app";
 import { useWorkspace } from "~/lib/workspace";
 import { transport } from "~/lib/ws-transport";
 
@@ -49,7 +49,7 @@ export function BottomPanel({ panelRef }: { panelRef: RefObject<PanelImperativeH
     loadConfig,
     discover,
   } = useScriptsStore();
-  const { selectedProjectId } = useProjectStore();
+  const selectedProjectId = useAppStore((s) => s.selectedProjectId);
   const workspace = useWorkspace();
 
   // Subscribe to push events (global, always active)
@@ -61,7 +61,7 @@ export function BottomPanel({ panelRef }: { panelRef: RefObject<PanelImperativeH
   // Load config when project/workspace changes
   useEffect(() => {
     if (selectedProjectId) {
-      void loadConfig(selectedProjectId, workspace);
+      void loadConfig(workspace);
     }
   }, [selectedProjectId, workspace, loadConfig]);
 
@@ -69,7 +69,7 @@ export function BottomPanel({ panelRef }: { panelRef: RefObject<PanelImperativeH
   useEffect(() => {
     const unsub = transport.subscribe("scripts:reload", ({ projectId }) => {
       if (selectedProjectId && projectId === selectedProjectId) {
-        void loadConfig(selectedProjectId, workspace);
+        void loadConfig(workspace);
       }
     });
     return unsub;
@@ -204,7 +204,7 @@ function TabButton({
 
 function ScriptsTab() {
   const { config, discovering, discover } = useScriptsStore();
-  const { selectedProjectId } = useProjectStore();
+  const selectedProjectId = useAppStore((s) => s.selectedProjectId);
   const workspace = useWorkspace();
 
   if (!selectedProjectId) {
@@ -275,7 +275,7 @@ function getCategoryState(
 
 /** Toolbar with all essencial commands + edit + rediscover */
 function CommandBar() {
-  const { selectedProjectId } = useProjectStore();
+  const selectedProjectId = useAppStore((s) => s.selectedProjectId);
   const { config, runAll, stopAll, discover, discovering } = useScriptsStore();
   const workspace = useWorkspace();
   const statuses = config?.statuses ?? [];
@@ -293,7 +293,7 @@ function CommandBar() {
           key={key}
           category={key}
           state={getCategoryState(key, statuses, config?.services ?? [])}
-          onRun={() => selectedProjectId && void runAll(selectedProjectId, workspace, key)}
+          onRun={() => void runAll(workspace, key)}
           onStop={() => void stopAll()}
         />
       ))}
@@ -427,7 +427,6 @@ function ServiceCard({
   statuses: ScriptStatus[];
 }) {
   const [showOthers, setShowOthers] = useState(false);
-  const { selectedProjectId } = useProjectStore();
   const { runScript, stopScript } = useScriptsStore();
   const workspace = useWorkspace();
 
@@ -462,9 +461,7 @@ function ServiceCard({
               script={key}
               icon={Icon}
               status={serviceStatuses.find((s) => s.script === key)}
-              onRun={() =>
-                selectedProjectId && void runScript(selectedProjectId, workspace, service.name, key)
-              }
+              onRun={() => void runScript(workspace, service.name, key)}
               onStop={(scriptId) => void stopScript(scriptId)}
             />
           );
@@ -494,10 +491,7 @@ function ServiceCard({
                   script={key}
                   status={serviceStatuses.find((s) => s.script === key)}
                   variant="advanced"
-                  onRun={() =>
-                    selectedProjectId &&
-                    void runScript(selectedProjectId, workspace, service.name, key)
-                  }
+                  onRun={() => void runScript(workspace, service.name, key)}
                   onStop={(scriptId) => void stopScript(scriptId)}
                 />
               ))}

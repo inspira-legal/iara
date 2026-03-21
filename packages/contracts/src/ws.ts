@@ -1,9 +1,8 @@
 import type {
   AddRepoInput,
   AppInfo,
-  AppNotification,
   CreateProjectInput,
-  CreateTaskInput,
+  CreateWorkspaceInput,
   EssencialKey,
   GitStatusResult,
   LaunchClaudeInput,
@@ -20,7 +19,7 @@ import type {
   EnvRepoEntries,
   Project,
   RepoInfo,
-  Task,
+  Workspace,
 } from "./models.js";
 
 // ---------------------------------------------------------------------------
@@ -31,14 +30,22 @@ export type WsMethods = {
   // App
   "app.info": { params: Record<string, never>; result: AppInfo };
 
+  // State
+  "state.init": {
+    params: Record<string, never>;
+    result: { projects: Project[]; settings: Record<string, string> };
+  };
+
   // Projects
-  "projects.list": { params: Record<string, never>; result: Project[] };
-  "projects.get": { params: { id: string }; result: Project | null };
   "projects.create": { params: CreateProjectInput; result: Project };
   "projects.update": { params: { id: string } & UpdateProjectInput; result: void };
   "projects.delete": { params: { id: string }; result: void };
   "projects.suggest": {
     params: { userGoal: string };
+    result: { requestId: string };
+  };
+  "projects.analyze": {
+    params: { projectId: string; description: string };
     result: { requestId: string };
   };
 
@@ -47,18 +54,22 @@ export type WsMethods = {
   "repos.add": { params: { projectId: string } & AddRepoInput; result: void };
   "repos.fetch": { params: { projectId: string }; result: void };
 
-  // Tasks
-  "tasks.list": { params: { projectId: string }; result: Task[] };
-  "tasks.get": { params: { id: string }; result: Task | null };
-  "tasks.create": { params: { projectId: string } & CreateTaskInput; result: Task };
-  "tasks.suggest": {
+  // Workspaces
+  "workspaces.create": {
+    params: { projectId: string } & CreateWorkspaceInput;
+    result: Workspace;
+  };
+  "workspaces.delete": { params: { workspaceId: string }; result: void };
+  "workspaces.suggest": {
     params: { projectId: string; userGoal: string };
     result: { requestId: string };
   };
-  "tasks.regenerate": { params: { taskId: string }; result: { requestId: string } };
-  "tasks.delete": { params: { id: string }; result: void };
-  "tasks.renameBranch": {
-    params: { taskId: string; repoName: string; newBranch: string };
+  "workspaces.regenerate": {
+    params: { workspaceId: string };
+    result: { requestId: string };
+  };
+  "workspaces.renameBranch": {
+    params: { workspaceId: string; repoName: string; newBranch: string };
     result: void;
   };
 
@@ -66,14 +77,8 @@ export type WsMethods = {
   "launcher.launch": { params: LaunchClaudeInput; result: LaunchResult };
 
   // Sessions
-  "sessions.list": { params: { taskId: string }; result: SessionInfo[] };
+  "sessions.list": { params: { workspaceId: string }; result: SessionInfo[] };
   "sessions.listByProject": { params: { projectId: string }; result: SessionInfo[] };
-
-  // Projects - Claude
-  "projects.analyze": {
-    params: { projectId: string; description: string };
-    result: { requestId: string };
-  };
 
   // Claude
   "claude.cancel": { params: { requestId: string }; result: void };
@@ -87,29 +92,28 @@ export type WsMethods = {
   };
 
   // Scripts
-  "scripts.load": { params: { projectId: string; workspace: string }; result: ScriptsConfig };
+  "scripts.load": { params: { workspaceId: string }; result: ScriptsConfig };
   "scripts.run": {
-    params: { projectId: string; workspace: string; service: string; script: string };
+    params: { workspaceId: string; service: string; script: string };
     result: void;
   };
   "scripts.stop": { params: { scriptId: string }; result: void };
   "scripts.runAll": {
-    params: { projectId: string; workspace: string; category: EssencialKey };
+    params: { workspaceId: string; category: EssencialKey };
     result: void;
   };
   "scripts.stopAll": { params: Record<string, never>; result: void };
-  "scripts.status": { params: { projectId: string; workspace: string }; result: ScriptStatus[] };
+  "scripts.status": { params: { workspaceId: string }; result: ScriptStatus[] };
   "scripts.logs": { params: { scriptId: string; limit?: number }; result: string[] };
   "scripts.discover": { params: { projectId: string }; result: { requestId: string } };
 
   // Env
-  "env.list": { params: { projectId: string; workspace: string }; result: EnvRepoEntries[] };
+  "env.list": { params: { workspaceId: string }; result: EnvRepoEntries[] };
   "env.write": {
     params: {
       repo: string;
       level: "global" | "local";
-      projectId?: string;
-      workspace?: string;
+      workspaceId?: string;
       entries: EnvEntry[];
     };
     result: void;
@@ -118,8 +122,7 @@ export type WsMethods = {
     params: {
       repo: string;
       level: "global" | "local";
-      projectId?: string;
-      workspace?: string;
+      workspaceId?: string;
     };
     result: void;
   };
@@ -127,33 +130,23 @@ export type WsMethods = {
   // Files
   "files.open": { params: { filePath: string; line?: number; col?: number }; result: void };
   "files.openInEditor": {
-    params: { projectId: string; taskId?: string };
+    params: { workspaceId: string };
     result: void;
   };
   "files.openInExplorer": {
-    params: { projectId: string; taskId?: string };
+    params: { workspaceId: string };
     result: void;
   };
 
   // Git
   "git.status": { params: { cwd: string }; result: GitStatusResult };
 
-  // Notifications
-  "notifications.list": { params: Record<string, never>; result: AppNotification[] };
-  "notifications.unreadCount": { params: Record<string, never>; result: number };
-  "notifications.markRead": { params: { id: string }; result: void };
-  "notifications.markAllRead": { params: Record<string, never>; result: void };
-
   // Settings
-  "settings.getAll": { params: Record<string, never>; result: Record<string, string> };
-  "settings.get": { params: { key: string }; result: string | null };
   "settings.set": { params: { key: string; value: string }; result: void };
 
   // Terminal
   "terminal.create": {
-    params:
-      | { taskId: string; resumeSessionId?: string; sessionCwd?: string }
-      | { projectId: string; default: true; resumeSessionId?: string; sessionCwd?: string };
+    params: { workspaceId: string; resumeSessionId?: string; sessionCwd?: string };
     result: { terminalId: string; sessionId: string };
   };
   "terminal.write": { params: { terminalId: string; data: string }; result: void };
@@ -174,12 +167,15 @@ export type WsPushEvents = {
   "scripts:reload": { projectId: string };
   notification: { title: string; body: string; type?: string };
   "clone:progress": CloneProgress;
-  "session:changed": { taskId: string };
+  "session:changed": { workspaceId: string };
   "env:changed": { repo: string; level: "global" | "local" };
   "settings:changed": { key: string; value: string };
   "claude:progress": { requestId: string; progress: ClaudeProgress };
   "claude:result": { requestId: string; result: unknown };
   "claude:error": { requestId: string; error: string };
+  "project:changed": { project: Project };
+  "workspace:changed": { workspace: Workspace };
+  "state:resync": { state: { projects: Project[]; settings: Record<string, string> } };
 };
 
 // ---------------------------------------------------------------------------

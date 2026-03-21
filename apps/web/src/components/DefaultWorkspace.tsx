@@ -8,7 +8,7 @@ import {
 } from "lucide-react";
 import type { Project, RepoInfo } from "@iara/contracts";
 import { transport } from "~/lib/ws-transport.js";
-import { useProjectStore } from "~/stores/projects";
+import { useAppStore } from "~/stores/app";
 import { useTerminalStore } from "~/stores/terminal";
 import { useRegenerate } from "~/hooks/useRegenerate";
 import { EnvEditor } from "./EnvEditor";
@@ -30,10 +30,10 @@ interface DefaultWorkspaceProps {
 }
 
 export function DefaultWorkspace({ project }: DefaultWorkspaceProps) {
-  const defaultKey = `default:${project.id}`;
+  const defaultKey = `${project.id}/default`;
   const terminalEntry = useTerminalStore((s) => s.getEntry(defaultKey));
   const resetToSessions = useTerminalStore((s) => s.resetToSessions);
-  const createDefault = useTerminalStore((s) => s.createDefault);
+  const createTerminal = useTerminalStore((s) => s.create);
   const [repoInfo, setRepoInfo] = useState<RepoInfo[]>([]);
   const [repoLoading, setRepoLoading] = useState(true);
 
@@ -77,7 +77,7 @@ export function DefaultWorkspace({ project }: DefaultWorkspaceProps) {
 
   const handleLaunchSession = (resumeSessionId?: string, sessionCwd?: string) => {
     setPendingResumeSessionId(resumeSessionId);
-    void createDefault(project.id, resumeSessionId, sessionCwd);
+    void createTerminal(defaultKey, resumeSessionId, sessionCwd);
   };
 
   const handleBack = () => {
@@ -102,7 +102,9 @@ export function DefaultWorkspace({ project }: DefaultWorkspaceProps) {
           <Button
             variant="ghost"
             size="icon-md"
-            onClick={() => void transport.request("files.openInEditor", { projectId: project.id })}
+            onClick={() =>
+              void transport.request("files.openInEditor", { workspaceId: defaultKey })
+            }
             title="Open in editor"
           >
             <Code size={14} />
@@ -111,7 +113,7 @@ export function DefaultWorkspace({ project }: DefaultWorkspaceProps) {
             variant="ghost"
             size="icon-md"
             onClick={() =>
-              void transport.request("files.openInExplorer", { projectId: project.id })
+              void transport.request("files.openInExplorer", { workspaceId: defaultKey })
             }
             title="Open in file explorer"
           >
@@ -153,7 +155,7 @@ function DefaultWorkspaceDetailView({
 }) {
   const [showAddRepo, setShowAddRepo] = useState(false);
   const [repoToDelete, setRepoToDelete] = useState<string | null>(null);
-  const { updateProject } = useProjectStore();
+  const { updateProject } = useAppStore();
 
   const {
     isRegenerating,
@@ -239,7 +241,7 @@ function DefaultWorkspaceDetailView({
       </div>
 
       <div className="mb-6">
-        <EnvEditor projectId={project.id} workspace="default" repos={repoInfo.map((r) => r.name)} />
+        <EnvEditor workspaceId={`${project.id}/default`} repos={repoInfo.map((r) => r.name)} />
       </div>
 
       <div>

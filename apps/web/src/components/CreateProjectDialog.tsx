@@ -9,7 +9,7 @@ import {
   X,
 } from "lucide-react";
 import type { AddRepoInput } from "@iara/contracts";
-import { useProjectStore } from "~/stores/projects";
+import { useAppStore } from "~/stores/app";
 import { useSidebarStore } from "~/stores/sidebar";
 import { useRegenerateStore } from "~/stores/regenerate";
 import { transport } from "~/lib/ws-transport.js";
@@ -61,7 +61,7 @@ export function CreateProjectDialog({ open, onClose }: CreateProjectDialogProps)
   const [submitting, setSubmitting] = useState(false);
   const [progress, setProgress] = useState("");
 
-  const { projects, createProject, loadProjects } = useProjectStore();
+  const { projects, createProject } = useAppStore();
   const { expandProject } = useSidebarStore();
   const { toast } = useToast();
 
@@ -145,7 +145,6 @@ export function CreateProjectDialog({ open, onClose }: CreateProjectDialogProps)
         await transport.request("repos.add", { projectId: project.id, ...repo.input });
       }
 
-      await loadProjects();
       expandProject(project.id);
 
       void useRegenerateStore

@@ -1,7 +1,7 @@
 import { useState, useCallback } from "react";
 import { Sparkles, AlertTriangle } from "lucide-react";
 import type { Project } from "@iara/contracts";
-import { useTaskStore } from "~/stores/tasks";
+import { useAppStore } from "~/stores/app";
 import { useRegenerateStore } from "~/stores/regenerate";
 import { transport } from "~/lib/ws-transport.js";
 import { toSlug } from "~/lib/utils";
@@ -34,7 +34,7 @@ export function CreateTaskDialog({ open, onClose, projectId, project }: CreateTa
 
   const [submitting, setSubmitting] = useState(false);
 
-  const { createTask } = useTaskStore();
+  const { createWorkspace } = useAppStore();
   const { toast } = useToast();
 
   const computedSlug = toSlug(name);
@@ -97,13 +97,13 @@ export function CreateTaskDialog({ open, onClose, projectId, project }: CreateTa
         Object.keys(branches).length > 0
           ? { name: name.trim(), slug: computedSlug, description: userGoal.trim(), branches }
           : { name: name.trim(), slug: computedSlug, description: userGoal.trim() };
-      const task = await createTask(projectId, input);
+      const task = await createWorkspace(projectId, input);
 
       const projectSlug = project?.slug ?? "";
       void useRegenerateStore
         .getState()
         .startRegenerate(task.id, `${projectSlug}/${task.slug}/TASK.md`, () =>
-          transport.request("tasks.regenerate", { taskId: task.id }),
+          transport.request("workspaces.regenerate", { workspaceId: task.id }),
         );
 
       toast("Task created", "success");

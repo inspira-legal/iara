@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import {
   ChevronRight,
   FolderOpen,
@@ -7,14 +7,13 @@ import {
   Plus,
   Pencil,
   Trash2,
-  RefreshCw,
   Circle,
 } from "lucide-react";
-import type { Project, Task } from "@iara/contracts";
+import type { Project, Workspace } from "@iara/contracts";
 import { TaskNode } from "./TaskNode";
 import { SidebarContextMenu, type ContextMenuItem } from "./SidebarContextMenu";
 import { isScriptActive, isScriptUnhealthy } from "~/lib/script-status";
-import { useTaskStore } from "~/stores/tasks";
+import { useAppStore } from "~/stores/app";
 import { useScriptsStore } from "~/stores/scripts";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { useInlineEdit } from "~/hooks/useInlineEdit";
@@ -47,22 +46,18 @@ export function ProjectNode({
   onRenameProject,
   onAddRepo,
 }: ProjectNodeProps) {
-  const { loadTasks, getTasksForProject, deleteTask, loading, error } = useTaskStore();
+  const { getWorkspacesForProject, deleteWorkspace } = useAppStore();
+  const loading = false;
+  const error = null;
   const hasRunning = useScriptsStore((s) => s.config?.statuses.some(isScriptActive) ?? false);
   const hasUnhealthy = useScriptsStore((s) => s.config?.statuses.some(isScriptUnhealthy) ?? false);
 
-  const tasks = getTasksForProject(project.id);
+  const tasks = getWorkspacesForProject(project.id).filter((w) => !w.id.endsWith("/default"));
   const [showAll, setShowAll] = useState(false);
-  const [deleteTarget, setDeleteTarget] = useState<Task | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<Workspace | null>(null);
 
   const { editing, startEditing, inputProps } = useInlineEdit(project.name, onRenameProject);
   const { position: contextMenu, handleContextMenu, close: closeContextMenu } = useContextMenu();
-
-  useEffect(() => {
-    if (isExpanded) {
-      void loadTasks(project.id);
-    }
-  }, [isExpanded, project.id, loadTasks]);
 
   const visibleTasks = showAll ? tasks : tasks.slice(0, MAX_VISIBLE_TASKS);
   const hiddenCount = tasks.length - MAX_VISIBLE_TASKS;
@@ -140,14 +135,6 @@ export function ProjectNode({
             ) : error ? (
               <div className="flex items-center gap-1 px-2 py-2">
                 <p className="text-xs text-red-400">Failed to load</p>
-                <button
-                  type="button"
-                  onClick={() => void loadTasks(project.id)}
-                  className="rounded p-0.5 text-zinc-500 hover:text-zinc-300"
-                  title="Retry"
-                >
-                  <RefreshCw size={12} />
-                </button>
               </div>
             ) : (
               <>
@@ -204,7 +191,7 @@ export function ProjectNode({
         confirmVariant="danger"
         onConfirm={() => {
           if (deleteTarget) {
-            void deleteTask(deleteTarget.id);
+            void deleteWorkspace(deleteTarget.id);
             setDeleteTarget(null);
           }
         }}

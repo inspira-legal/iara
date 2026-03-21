@@ -3,15 +3,14 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import type { AddRepoInput, CloneProgress, RepoInfo } from "@iara/contracts";
 import { gitCloneWithProgress, gitFetch, gitPull, gitWorktreeAdd } from "@iara/shared/git";
-import { discoverRepos, getProjectDir } from "./projects.js";
-import { listTasks } from "./tasks.js";
+import type { AppState } from "./state.js";
 
-export async function getRepoInfo(projectSlug: string): Promise<RepoInfo[]> {
-  const repos = discoverRepos(projectSlug);
-  const projectDir = getProjectDir(projectSlug);
+export async function getRepoInfo(appState: AppState, projectSlug: string): Promise<RepoInfo[]> {
+  const repos = appState.discoverRepos(projectSlug);
+  const projectDir = appState.getProjectDir(projectSlug);
   const reposDir = path.join(projectDir, "default");
 
-  return repos.map((name) => {
+  return repos.map((name: string) => {
     const repoPath = path.join(reposDir, name);
     const { ahead, behind } = getGitAheadBehind(repoPath);
     return {
@@ -25,12 +24,13 @@ export async function getRepoInfo(projectSlug: string): Promise<RepoInfo[]> {
 }
 
 export async function addRepo(
+  appState: AppState,
   projectId: string,
   projectSlug: string,
   input: AddRepoInput,
   onProgress?: (progress: CloneProgress) => void,
 ): Promise<void> {
-  const projectDir = getProjectDir(projectSlug);
+  const projectDir = appState.getProjectDir(projectSlug);
   const reposDir = path.join(projectDir, "default");
   fs.mkdirSync(reposDir, { recursive: true });
   const dest = path.join(reposDir, input.name);
@@ -87,14 +87,16 @@ export async function addRepo(
     throw err;
   }
 
-  // Create worktrees for active tasks
-  const activeTasks = listTasks(projectId);
-  for (const task of activeTasks) {
-    const taskDir = path.join(projectDir, task.slug);
-    const wtDir = path.join(taskDir, input.name);
-    if (fs.existsSync(taskDir) && !fs.existsSync(wtDir)) {
+  // Create worktrees for active workspaces
+  const project = appState.getProject(projectSlug);
+  const workspaces = project?.workspaces ?? [];
+  for (const ws of workspaces) {
+    if (ws.slug === "default") continue;
+    const wsDir = path.join(projectDir, ws.slug);
+    const wtDir = path.join(wsDir, input.name);
+    if (fs.existsSync(wsDir) && !fs.existsSync(wtDir) && ws.branch) {
       try {
-        await gitWorktreeAdd(dest, wtDir, task.branch);
+        await gitWorktreeAdd(dest, wtDir, ws.branch);
       } catch {
         // Best effort — branch may not exist yet
       }
@@ -106,22 +108,26 @@ export async function addRepo(
  * Pull default branch on all repos in default/ (updates base for new worktrees).
  * Best-effort: skips repos that fail (no upstream, network error, etc).
  */
-export async function pullRepos(projectSlug: string): Promise<void> {
-  const repos = discoverRepos(projectSlug);
-  const reposDir = path.join(getProjectDir(projectSlug), "default");
+export async function pullRepos(appState: AppState, projectSlug: string): Promise<void> {
+  const repos = appState.discoverRepos(projectSlug);
+  const reposDir = path.join(appState.getProjectDir(projectSlug), "default");
 
-  await Promise.all(repos.map((name) => gitPull(path.join(reposDir, name)).catch(() => {})));
+  await Promise.all(
+    repos.map((name: string) => gitPull(path.join(reposDir, name)).catch(() => {})),
+  );
 }
 
 /**
  * Fetch origin on all repos in default/ (updates ahead/behind without merging).
  * Best-effort: silently skips failures.
  */
-export async function fetchRepos(projectSlug: string): Promise<void> {
-  const repos = discoverRepos(projectSlug);
-  const reposDir = path.join(getProjectDir(projectSlug), "default");
+export async function fetchRepos(appState: AppState, projectSlug: string): Promise<void> {
+  const repos = appState.discoverRepos(projectSlug);
+  const reposDir = path.join(appState.getProjectDir(projectSlug), "default");
 
-  await Promise.all(repos.map((name) => gitFetch(path.join(reposDir, name)).catch(() => {})));
+  await Promise.all(
+    repos.map((name: string) => gitFetch(path.join(reposDir, name)).catch(() => {})),
+  );
 }
 
 function getGitBranch(repoPath: string): string {

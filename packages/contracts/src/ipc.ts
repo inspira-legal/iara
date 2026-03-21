@@ -1,4 +1,4 @@
-import type { CloneProgress, Project, RepoInfo, Task } from "./models.js";
+import type { CloneProgress, Project, RepoInfo, Workspace } from "./models.js";
 
 export interface AppInfo {
   version: string;
@@ -30,7 +30,7 @@ export interface UpdateProjectInput {
   repoSources?: string[];
 }
 
-export interface CreateTaskInput {
+export interface CreateWorkspaceInput {
   slug: string;
   name: string;
   description?: string;
@@ -38,9 +38,10 @@ export interface CreateTaskInput {
   branches?: Record<string, string>;
 }
 
-export type LaunchClaudeInput =
-  | { taskId: string; resumeSessionId?: string }
-  | { projectId: string; root: true; resumeSessionId?: string };
+export type LaunchClaudeInput = {
+  workspaceId: string;
+  resumeSessionId?: string;
+};
 
 export interface LaunchResult {
   pid: number | null;
@@ -126,9 +127,13 @@ export interface DesktopBridge {
   // App
   getAppInfo(): Promise<AppInfo>;
 
+  // State
+  stateInit(): Promise<{
+    projects: Project[];
+    settings: Record<string, string>;
+  }>;
+
   // Projects
-  listProjects(): Promise<Project[]>;
-  getProject(id: string): Promise<Project | null>;
   createProject(input: CreateProjectInput): Promise<Project>;
   updateProject(id: string, input: UpdateProjectInput): Promise<void>;
   deleteProject(id: string): Promise<void>;
@@ -136,31 +141,28 @@ export interface DesktopBridge {
   addRepo(projectId: string, input: AddRepoInput): Promise<void>;
   fetchRepos(projectId: string): Promise<void>;
 
-  // Tasks
-  listTasks(projectId: string): Promise<Task[]>;
-  getTask(id: string): Promise<Task | null>;
-  createTask(projectId: string, input: CreateTaskInput): Promise<Task>;
-
-  deleteTask(id: string): Promise<void>;
+  // Workspaces
+  createWorkspace(projectId: string, input: CreateWorkspaceInput): Promise<Workspace>;
+  deleteWorkspace(workspaceId: string): Promise<void>;
 
   // Launcher
   launchClaude(input: LaunchClaudeInput): Promise<LaunchResult>;
 
   // Sessions
-  listSessions(taskId: string): Promise<SessionInfo[]>;
+  listSessions(workspaceId: string): Promise<SessionInfo[]>;
 
   // Prompts
   readPrompt(filePath: string): Promise<string>;
   writePrompt(filePath: string, content: string): Promise<void>;
 
   // Scripts
-  scriptsLoad(projectId: string, workspace: string): Promise<ScriptsConfig>;
-  scriptsRun(projectId: string, workspace: string, service: string, script: string): Promise<void>;
-  scriptsStop(service: string, script: string): Promise<void>;
-  scriptsRunAll(projectId: string, workspace: string, category: EssencialKey): Promise<void>;
+  scriptsLoad(workspaceId: string): Promise<ScriptsConfig>;
+  scriptsRun(workspaceId: string, service: string, script: string): Promise<void>;
+  scriptsStop(scriptId: string): Promise<void>;
+  scriptsRunAll(workspaceId: string, category: EssencialKey): Promise<void>;
   scriptsStopAll(): Promise<void>;
-  scriptsStatus(): Promise<ScriptStatus[]>;
-  scriptsLogs(service: string, script: string, limit?: number): Promise<string[]>;
+  scriptsStatus(workspaceId: string): Promise<ScriptStatus[]>;
+  scriptsLogs(scriptId: string, limit?: number): Promise<string[]>;
   scriptsDiscover(projectId: string): Promise<{ requestId: string }>;
 
   // Browser Panel
@@ -173,19 +175,12 @@ export interface DesktopBridge {
   browserClick(selector: string): Promise<void>;
   browserFill(selector: string, value: string): Promise<void>;
 
-  // Notifications
-  sendNotification(title: string, body: string, type?: string): Promise<AppNotification>;
-  getNotifications(): Promise<AppNotification[]>;
-  getUnreadCount(): Promise<number>;
-  markNotificationRead(id: string): Promise<void>;
-  markAllRead(): Promise<void>;
-
   // Git
   getGitStatus(cwd: string): Promise<GitStatusResult>;
 
   // Terminal
   terminalCreate(
-    taskId: string,
+    workspaceId: string,
     resumeSessionId?: string,
   ): Promise<{ terminalId: string; sessionId: string }>;
   terminalWrite(terminalId: string, data: string): Promise<void>;

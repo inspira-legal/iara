@@ -4,8 +4,19 @@ export interface Project {
   name: string;
   description: string;
   repoSources: string[];
+  workspaces: Workspace[];
   createdAt: string;
-  updatedAt: string;
+}
+
+export interface Workspace {
+  id: string;
+  projectId: string;
+  slug: string;
+  type: "default" | "task";
+  name: string;
+  description: string;
+  branch?: string;
+  createdAt: string;
 }
 
 export type ClaudeProgress =
@@ -19,18 +30,6 @@ export interface RepoInfo {
   dirtyCount: number;
   ahead: number;
   behind: number;
-}
-
-export interface Task {
-  id: string;
-  projectId: string;
-  slug: string;
-  name: string;
-  description: string;
-  branch: string;
-
-  createdAt: string;
-  updatedAt: string;
 }
 
 export interface EnvEntry {

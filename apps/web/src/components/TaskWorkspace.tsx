@@ -6,7 +6,7 @@ import {
   FolderOpen,
   Sparkles,
 } from "lucide-react";
-import type { Task, Project, RepoInfo } from "@iara/contracts";
+import type { Workspace, Project, RepoInfo } from "@iara/contracts";
 import { transport } from "~/lib/ws-transport.js";
 import { useTerminalStore } from "~/stores/terminal";
 import { useRegenerate } from "~/hooks/useRegenerate";
@@ -24,7 +24,7 @@ const FETCH_INTERVAL_MS = 5 * 60 * 1000;
 
 interface TaskWorkspaceProps {
   project: Project;
-  task: Task;
+  task: Workspace;
 }
 
 export function TaskWorkspace({ project, task }: TaskWorkspaceProps) {
@@ -95,10 +95,12 @@ export function TaskWorkspace({ project, task }: TaskWorkspaceProps) {
             <div className="text-xs text-zinc-500">{project.name}</div>
             <div className="text-sm font-medium text-zinc-100">{task.name}</div>
           </div>
-          <div className="flex items-center gap-1.5 text-xs text-zinc-500">
-            <GitBranch size={12} />
-            <code className="rounded bg-zinc-800 px-1 py-0.5">{task.branch}</code>
-          </div>
+          {task.branch && (
+            <div className="flex items-center gap-1.5 text-xs text-zinc-500">
+              <GitBranch size={12} />
+              <code className="rounded bg-zinc-800 px-1 py-0.5">{task.branch}</code>
+            </div>
+          )}
         </div>
         <div className="ml-auto flex items-center gap-1">
           <Button
@@ -106,8 +108,7 @@ export function TaskWorkspace({ project, task }: TaskWorkspaceProps) {
             size="icon-md"
             onClick={() =>
               void transport.request("files.openInEditor", {
-                projectId: project.id,
-                taskId: task.id,
+                workspaceId: task.id,
               })
             }
             title="Open in editor"
@@ -119,8 +120,7 @@ export function TaskWorkspace({ project, task }: TaskWorkspaceProps) {
             size="icon-md"
             onClick={() =>
               void transport.request("files.openInExplorer", {
-                projectId: project.id,
-                taskId: task.id,
+                workspaceId: task.id,
               })
             }
             title="Open in file explorer"
@@ -158,7 +158,7 @@ function TaskDetailView({
   onLaunchSession,
 }: {
   project: Project;
-  task: Task;
+  task: Workspace;
   repoInfo: RepoInfo[];
   repoLoading: boolean;
   hasActiveTerminal: boolean;
@@ -175,7 +175,7 @@ function TaskDetailView({
   } = useRegenerate({
     entityId: task.id,
     filePath: `${project.slug}/${task.slug}/TASK.md`,
-    regenerateFn: () => transport.request("tasks.regenerate", { taskId: task.id }),
+    regenerateFn: () => transport.request("workspaces.regenerate", { workspaceId: task.id }),
   });
 
   return (
@@ -240,8 +240,7 @@ function TaskDetailView({
 
       <div className="mb-6">
         <EnvEditor
-          projectId={task.projectId}
-          workspace={task.id}
+          workspaceId={task.id}
           repos={repoInfo.map((r) => r.name)}
           hasActiveTerminal={hasActiveTerminal}
         />

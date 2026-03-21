@@ -8,28 +8,29 @@ import { parseScriptsYaml } from "@iara/orchestrator/parser";
 import { interpolateCommands, interpolateEnv } from "@iara/orchestrator/interpolation";
 import { buildDiscoveryPrompt, BUILD_CONFIG_FILES } from "@iara/orchestrator/discovery";
 import { registerMethod } from "../router.js";
-import { getProject, getProjectDir, discoverRepos } from "../services/projects.js";
 import { runClaude, activeRuns, streamClaudeRun } from "../services/claude-runner.js";
 import { mergeEnvForWorkspace } from "../services/env.js";
+import type { AppState } from "../services/state.js";
 
 type PushFn = <E extends keyof WsPushEvents>(event: E, params: WsPushEvents[E]) => void;
 
-function getScriptsYamlPath(projectSlug: string): string {
-  return path.join(getProjectDir(projectSlug), "scripts.yaml");
+function getScriptsYamlPath(appState: AppState, projectSlug: string): string {
+  return path.join(appState.getProjectDir(projectSlug), "scripts.yaml");
 }
 
 function getWorkspaceCwd(
+  appState: AppState,
   projectSlug: string,
-  workspace: string,
+  workspaceSlug: string,
   serviceName: string,
   repoNames: string[],
 ): string {
-  const base = path.join(getProjectDir(projectSlug), workspace);
+  const base = path.join(appState.getProjectDir(projectSlug), workspaceSlug);
 
   if (repoNames.includes(serviceName)) {
     return path.join(base, serviceName);
   }
-  return getProjectDir(projectSlug);
+  return appState.getProjectDir(projectSlug);
 }
 
 interface ResolvedConfig {
@@ -39,21 +40,22 @@ interface ResolvedConfig {
 }
 
 function loadResolvedConfig(
+  appState: AppState,
   projectSlug: string,
-  projectId: string,
-  workspace: string,
+  workspaceId: string,
+  workspaceSlug: string,
   portAllocator: PortAllocator,
 ): ResolvedConfig {
-  const yamlPath = getScriptsYamlPath(projectSlug);
+  const yamlPath = getScriptsYamlPath(appState, projectSlug);
   const content = fs.readFileSync(yamlPath, "utf-8");
-  const repoNames = discoverRepos(projectSlug);
+  const repoNames = appState.discoverRepos(projectSlug);
   const services = parseScriptsYaml(content, repoNames);
 
-  const basePort = portAllocator.allocate(projectId, workspace);
+  const basePort = portAllocator.allocate(workspaceId);
   const ports = portAllocator.resolve(services, basePort);
 
   // Merge project env files (global + local) as base
-  const projectEnv = mergeEnvForWorkspace(projectSlug, workspace, repoNames);
+  const projectEnv = mergeEnvForWorkspace(projectSlug, workspaceSlug, repoNames);
 
   const resolved: ResolvedServiceDef[] = services.map((svc) => {
     const resolvedPort = ports.get(svc.name) ?? 0;
@@ -69,15 +71,15 @@ function loadResolvedConfig(
 }
 
 export function triggerDiscovery(
-  projectId: string,
+  appState: AppState,
   projectSlug: string,
   pushFn: PushFn,
   existingYaml?: string,
 ): string | null {
-  const repoNames = discoverRepos(projectSlug);
+  const repoNames = appState.discoverRepos(projectSlug);
   if (repoNames.length === 0) return null;
 
-  const projectDir = getProjectDir(projectSlug);
+  const projectDir = appState.getProjectDir(projectSlug);
 
   const repos = repoNames.map((name) => {
     const repoDir = path.join(projectDir, "default", name);
@@ -107,50 +109,55 @@ export function triggerDiscovery(
 }
 
 export function registerScriptHandlers(
+  appState: AppState,
   supervisor: ScriptSupervisor,
   portAllocator: PortAllocator,
   pushFn: PushFn,
 ): void {
   registerMethod("scripts.load", async (params) => {
-    const project = getProject(params.projectId);
-    if (!project) throw new Error("Project not found");
+    const workspace = appState.getWorkspace(params.workspaceId);
+    if (!workspace) throw new Error(`Workspace not found: ${params.workspaceId}`);
 
-    const yamlPath = getScriptsYamlPath(project.slug);
+    const projectSlug = workspace.projectId;
+    const yamlPath = getScriptsYamlPath(appState, projectSlug);
     if (!fs.existsSync(yamlPath)) {
       return {
         services: [],
-        statuses: supervisor.status(params.projectId, params.workspace),
+        statuses: supervisor.status(params.workspaceId, workspace.slug),
         hasFile: false,
         filePath: yamlPath,
       };
     }
 
     const { services } = loadResolvedConfig(
-      project.slug,
-      params.projectId,
-      params.workspace,
+      appState,
+      projectSlug,
+      params.workspaceId,
+      workspace.slug,
       portAllocator,
     );
 
     // Auto-detect services already running on their ports
-    await supervisor.autoDetect(params.projectId, params.workspace, services);
+    await supervisor.autoDetect(params.workspaceId, workspace.slug, services);
 
     return {
       services,
-      statuses: supervisor.status(params.projectId, params.workspace),
+      statuses: supervisor.status(params.workspaceId, workspace.slug),
       hasFile: true,
       filePath: yamlPath,
     };
   });
 
   registerMethod("scripts.run", async (params) => {
-    const project = getProject(params.projectId);
-    if (!project) throw new Error("Project not found");
+    const workspace = appState.getWorkspace(params.workspaceId);
+    if (!workspace) throw new Error(`Workspace not found: ${params.workspaceId}`);
 
+    const projectSlug = workspace.projectId;
     const { services, repoNames, ports } = loadResolvedConfig(
-      project.slug,
-      params.projectId,
-      params.workspace,
+      appState,
+      projectSlug,
+      params.workspaceId,
+      workspace.slug,
       portAllocator,
     );
 
@@ -161,12 +168,12 @@ export function registerScriptHandlers(
     if (!script)
       throw new Error(`Script "${params.script}" not found in service "${params.service}"`);
 
-    const cwd = getWorkspaceCwd(project.slug, params.workspace, params.service, repoNames);
+    const cwd = getWorkspaceCwd(appState, projectSlug, workspace.slug, params.service, repoNames);
     const resolvedCommands = interpolateCommands(script.run, ports);
 
     await supervisor.startChecked({
-      projectId: params.projectId,
-      workspace: params.workspace,
+      projectId: params.workspaceId,
+      workspace: workspace.slug,
       service: params.service,
       script: params.script,
       commands: resolvedCommands,
@@ -185,23 +192,26 @@ export function registerScriptHandlers(
   });
 
   registerMethod("scripts.runAll", async (params) => {
-    const project = getProject(params.projectId);
-    if (!project) throw new Error("Project not found");
+    const workspace = appState.getWorkspace(params.workspaceId);
+    if (!workspace) throw new Error(`Workspace not found: ${params.workspaceId}`);
 
+    const projectSlug = workspace.projectId;
     const { services, repoNames, ports } = loadResolvedConfig(
-      project.slug,
-      params.projectId,
-      params.workspace,
+      appState,
+      projectSlug,
+      params.workspaceId,
+      workspace.slug,
       portAllocator,
     );
 
     await supervisor.runAll({
-      projectId: params.projectId,
-      workspace: params.workspace,
+      projectId: params.workspaceId,
+      workspace: workspace.slug,
       category: params.category,
       services,
       ports,
-      cwd: (serviceName) => getWorkspaceCwd(project.slug, params.workspace, serviceName, repoNames),
+      cwd: (serviceName) =>
+        getWorkspaceCwd(appState, projectSlug, workspace.slug, serviceName, repoNames),
     });
   });
 
@@ -210,7 +220,10 @@ export function registerScriptHandlers(
   });
 
   registerMethod("scripts.status", async (params) => {
-    return supervisor.status(params.projectId, params.workspace);
+    const workspace = appState.getWorkspace(params.workspaceId);
+    if (!workspace) throw new Error(`Workspace not found: ${params.workspaceId}`);
+
+    return supervisor.status(params.workspaceId, workspace.slug);
   });
 
   registerMethod("scripts.logs", async (params) => {
@@ -218,13 +231,13 @@ export function registerScriptHandlers(
   });
 
   registerMethod("scripts.discover", async (params) => {
-    const project = getProject(params.projectId);
+    const project = appState.getProject(params.projectId);
     if (!project) throw new Error("Project not found");
 
-    const yamlPath = getScriptsYamlPath(project.slug);
+    const yamlPath = getScriptsYamlPath(appState, project.slug);
     const existingYaml = fs.existsSync(yamlPath) ? fs.readFileSync(yamlPath, "utf-8") : undefined;
 
-    const requestId = triggerDiscovery(params.projectId, project.slug, pushFn, existingYaml) ?? "";
+    const requestId = triggerDiscovery(appState, project.slug, pushFn, existingYaml) ?? "";
     return { requestId };
   });
 

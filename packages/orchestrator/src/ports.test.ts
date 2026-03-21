@@ -1,28 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { PortAllocator } from "./ports.js";
-import type { PortStore } from "./ports.js";
+import { PortAllocator, deriveBasePort } from "./ports.js";
 import type { ServiceDef } from "@iara/contracts";
-
-function createMockStore(): PortStore {
-  const data = new Map<string, number>();
-  let nextBase = 3000;
-
-  return {
-    get(projectId, workspace) {
-      return data.get(`${projectId}:${workspace}`) ?? null;
-    },
-    set(projectId, workspace, basePort) {
-      data.set(`${projectId}:${workspace}`, basePort);
-    },
-    remove(projectId, workspace) {
-      data.delete(`${projectId}:${workspace}`);
-    },
-    getNextBase: () => nextBase,
-    setNextBase: (port) => {
-      nextBase = port;
-    },
-  };
-}
 
 function makeService(name: string, port: number | null = null): ServiceDef {
   return {
@@ -37,40 +15,59 @@ function makeService(name: string, port: number | null = null): ServiceDef {
   };
 }
 
+describe("deriveBasePort", () => {
+  it("returns a deterministic port for the same workspaceId", () => {
+    const a = deriveBasePort("proj1:default");
+    const b = deriveBasePort("proj1:default");
+    expect(a).toBe(b);
+  });
+
+  it("returns a port within the expected range", () => {
+    const port = deriveBasePort("proj1:default");
+    expect(port).toBeGreaterThanOrEqual(3000);
+    expect(port).toBeLessThan(4000);
+    expect((port - 3000) % 20).toBe(0);
+  });
+});
+
 describe("PortAllocator", () => {
   it("allocates a base port for a new workspace", () => {
-    const allocator = new PortAllocator(createMockStore());
-    const port = allocator.allocate("proj1", "default");
-    expect(port).toBe(3000);
+    const allocator = new PortAllocator();
+    const port = allocator.allocate("proj1:default");
+    expect(port).toBe(deriveBasePort("proj1:default"));
   });
 
   it("reuses existing allocation", () => {
-    const allocator = new PortAllocator(createMockStore());
-    const first = allocator.allocate("proj1", "default");
-    const second = allocator.allocate("proj1", "default");
+    const allocator = new PortAllocator();
+    const first = allocator.allocate("proj1:default");
+    const second = allocator.allocate("proj1:default");
     expect(first).toBe(second);
   });
 
-  it("increments by 20 for each new workspace", () => {
-    const allocator = new PortAllocator(createMockStore());
-    const a = allocator.allocate("proj1", "default");
-    const b = allocator.allocate("proj1", "task-1");
-    const c = allocator.allocate("proj2", "default");
-    expect(a).toBe(3000);
-    expect(b).toBe(3020);
-    expect(c).toBe(3040);
+  it("handles collisions via linear probing", () => {
+    const allocator = new PortAllocator();
+    // Allocate two different workspaceIds that might collide
+    const a = allocator.allocate("ws-a");
+    const b = allocator.allocate("ws-b");
+    // They should never be the same
+    if (deriveBasePort("ws-a") === deriveBasePort("ws-b")) {
+      expect(b).toBe(a + 20);
+    } else {
+      expect(b).toBe(deriveBasePort("ws-b"));
+    }
   });
 
   it("releases a workspace allocation", () => {
-    const store = createMockStore();
-    const allocator = new PortAllocator(store);
-    allocator.allocate("proj1", "task-1");
-    allocator.release("proj1", "task-1");
-    expect(store.get("proj1", "task-1")).toBeNull();
+    const allocator = new PortAllocator();
+    allocator.allocate("proj1:task-1");
+    allocator.release("proj1:task-1");
+    // After release, re-allocating should derive from hash again
+    const port = allocator.allocate("proj1:task-1");
+    expect(port).toBe(deriveBasePort("proj1:task-1"));
   });
 
   it("resolves ports for services", () => {
-    const allocator = new PortAllocator(createMockStore());
+    const allocator = new PortAllocator();
     const services = [makeService("db", 5432), makeService("backend"), makeService("frontend")];
     const ports = allocator.resolve(services, 3000);
     expect(ports.get("db")).toBe(5432);
@@ -95,7 +92,7 @@ describe("PortAllocator", () => {
   });
 
   it("pinned ports do not consume offsets", () => {
-    const allocator = new PortAllocator(createMockStore());
+    const allocator = new PortAllocator();
     const services = [
       makeService("db", 5432),
       makeService("redis", 6379),

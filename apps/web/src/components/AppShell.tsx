@@ -3,8 +3,7 @@ import { Group, Panel, Separator, useDefaultLayout } from "react-resizable-panel
 import { Sidebar } from "./Sidebar";
 import { MainPanel } from "./MainPanel";
 import { useKeyboardShortcuts } from "~/hooks/useKeyboardShortcuts";
-import { useTaskStore } from "~/stores/tasks";
-import { useProjectStore } from "~/stores/projects";
+import { useAppStore } from "~/stores/app";
 import { useSidebarStore } from "~/stores/sidebar";
 import { isElectron } from "~/env";
 
@@ -13,8 +12,11 @@ type NavigableItem =
   | { type: "task"; projectId: string; taskId: string };
 
 export function AppShell({ children }: { children: ReactNode }) {
-  const { getTasksForProject, selectTask, tasksByProject } = useTaskStore();
-  const { projects, selectProject } = useProjectStore();
+  const projects = useAppStore((s) => s.projects);
+  const selectedWorkspaceId = useAppStore((s) => s.selectedWorkspaceId);
+  const selectProject = useAppStore((s) => s.selectProject);
+  const selectWorkspace = useAppStore((s) => s.selectWorkspace);
+  const getWorkspacesForProject = useAppStore((s) => s.getWorkspacesForProject);
   const { expandedProjectIds, projectOrder } = useSidebarStore();
 
   // Build flat list of navigable items from expanded projects (same order as sidebar)
@@ -33,13 +35,13 @@ export function AppShell({ children }: { children: ReactNode }) {
     for (const project of sorted) {
       if (!expandedProjectIds.has(project.id)) continue;
       items.push({ type: "root", projectId: project.id });
-      const tasks = getTasksForProject(project.id);
-      for (const task of tasks) {
-        items.push({ type: "task", projectId: project.id, taskId: task.id });
+      const workspaces = getWorkspacesForProject(project.id);
+      for (const ws of workspaces) {
+        items.push({ type: "task", projectId: project.id, taskId: ws.id });
       }
     }
     return items;
-  }, [projects, projectOrder, expandedProjectIds, getTasksForProject, tasksByProject]);
+  }, [projects, projectOrder, expandedProjectIds, getWorkspacesForProject, selectedWorkspaceId]);
 
   const selectByIndex = useCallback(
     (index: number) => {
@@ -48,9 +50,9 @@ export function AppShell({ children }: { children: ReactNode }) {
       const item = navigableItems[idx];
       if (!item) return;
       selectProject(item.projectId);
-      selectTask(item.type === "task" ? item.taskId : null);
+      selectWorkspace(item.type === "task" ? item.taskId : null);
     },
-    [navigableItems, selectProject, selectTask],
+    [navigableItems, selectProject, selectWorkspace],
   );
 
   const shortcuts = useMemo(

@@ -4,13 +4,13 @@ import { AppShell } from "~/components/AppShell";
 import { ErrorBoundary } from "~/components/ErrorBoundary";
 import { ToastProvider } from "~/components/Toast";
 import { useNotificationStore } from "~/stores/notifications";
-import { useSettingsStore } from "~/stores/settings";
+import { useAppStore } from "~/stores/app";
 // Import terminal store to register global terminal:exit listener
 import "~/stores/terminal";
 
 function RootComponent() {
   const { loadNotifications, subscribePush } = useNotificationStore();
-  const { loadSettings, subscribePush: subscribeSettingsPush } = useSettingsStore();
+  const { init, subscribePush: subscribeAppPush } = useAppStore();
 
   useEffect(() => {
     void loadNotifications();
@@ -19,10 +19,10 @@ function RootComponent() {
   }, [loadNotifications, subscribePush]);
 
   useEffect(() => {
-    void loadSettings();
-    const unsub = subscribeSettingsPush();
+    void init();
+    const unsub = subscribeAppPush();
     return unsub;
-  }, [loadSettings, subscribeSettingsPush]);
+  }, [init, subscribeAppPush]);
 
   return (
     <ErrorBoundary>

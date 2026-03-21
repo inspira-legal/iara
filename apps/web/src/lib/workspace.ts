@@ -1,8 +1,8 @@
-import { useTaskStore } from "~/stores/tasks";
+import { useAppStore } from "~/stores/app";
 
 export const DEFAULT_WORKSPACE = "default";
 
 export function useWorkspace(): string {
-  const { selectedTaskId } = useTaskStore();
-  return selectedTaskId ?? DEFAULT_WORKSPACE;
+  const selectedWorkspaceId = useAppStore((s) => s.selectedWorkspaceId);
+  return selectedWorkspaceId ?? DEFAULT_WORKSPACE;
 }

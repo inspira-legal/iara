@@ -3,47 +3,47 @@ import type { SessionInfo } from "@iara/contracts";
 import { transport } from "../lib/ws-transport.js";
 
 interface SessionState {
-  sessionsByTask: Map<string, SessionInfo[]>;
+  sessionsByWorkspace: Map<string, SessionInfo[]>;
   sessionsByProject: Map<string, SessionInfo[]>;
   loading: Map<string, boolean>;
 }
 
 interface SessionActions {
-  loadForTask(taskId: string): Promise<void>;
+  loadForWorkspace(workspaceId: string): Promise<void>;
   loadForProject(projectId: string): Promise<void>;
-  getForTask(taskId: string): SessionInfo[];
+  getForWorkspace(workspaceId: string): SessionInfo[];
   getForProject(projectId: string): SessionInfo[];
   isLoading(key: string): boolean;
-  invalidateTask(taskId: string): void;
+  invalidateWorkspace(workspaceId: string): void;
 }
 
 export const useSessionStore = create<SessionState & SessionActions>((set, get) => ({
-  sessionsByTask: new Map(),
+  sessionsByWorkspace: new Map(),
   sessionsByProject: new Map(),
   loading: new Map(),
 
-  loadForTask: async (taskId) => {
+  loadForWorkspace: async (workspaceId) => {
     set((state) => {
       const next = new Map(state.loading);
-      next.set(`task:${taskId}`, true);
+      next.set(`ws:${workspaceId}`, true);
       return { loading: next };
     });
     try {
-      const sessions = await transport.request("sessions.list", { taskId });
+      const sessions = await transport.request("sessions.list", { workspaceId });
       set((state) => {
-        const nextSessions = new Map(state.sessionsByTask);
-        nextSessions.set(taskId, sessions);
+        const nextSessions = new Map(state.sessionsByWorkspace);
+        nextSessions.set(workspaceId, sessions);
         const nextLoading = new Map(state.loading);
-        nextLoading.set(`task:${taskId}`, false);
-        return { sessionsByTask: nextSessions, loading: nextLoading };
+        nextLoading.set(`ws:${workspaceId}`, false);
+        return { sessionsByWorkspace: nextSessions, loading: nextLoading };
       });
     } catch {
       set((state) => {
-        const nextSessions = new Map(state.sessionsByTask);
-        nextSessions.set(taskId, []);
+        const nextSessions = new Map(state.sessionsByWorkspace);
+        nextSessions.set(workspaceId, []);
         const nextLoading = new Map(state.loading);
-        nextLoading.set(`task:${taskId}`, false);
-        return { sessionsByTask: nextSessions, loading: nextLoading };
+        nextLoading.set(`ws:${workspaceId}`, false);
+        return { sessionsByWorkspace: nextSessions, loading: nextLoading };
       });
     }
   },
@@ -74,19 +74,18 @@ export const useSessionStore = create<SessionState & SessionActions>((set, get) 
     }
   },
 
-  getForTask: (taskId) => get().sessionsByTask.get(taskId) ?? [],
+  getForWorkspace: (workspaceId) => get().sessionsByWorkspace.get(workspaceId) ?? [],
 
   getForProject: (projectId) => get().sessionsByProject.get(projectId) ?? [],
 
   isLoading: (key) => get().loading.get(key) ?? false,
 
-  invalidateTask: (taskId) => {
-    // Reload sessions for this task
-    void get().loadForTask(taskId);
+  invalidateWorkspace: (workspaceId) => {
+    void get().loadForWorkspace(workspaceId);
   },
 }));
 
 // Auto-refresh sessions when server detects file changes
-transport.subscribe("session:changed", ({ taskId }: { taskId: string }) => {
-  useSessionStore.getState().invalidateTask(taskId);
+transport.subscribe("session:changed", ({ workspaceId }: { workspaceId: string }) => {
+  useSessionStore.getState().invalidateWorkspace(workspaceId);
 });

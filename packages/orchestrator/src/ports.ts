@@ -1,34 +1,41 @@
+import { createHash } from "node:crypto";
 import type { ServiceDef } from "@iara/contracts";
 
 const PORT_SPACING = 20;
 const PORT_START = 3000;
+const PORT_RANGE = 1000;
 
-/** Injected persistence — package has no DB dependency */
-export interface PortStore {
-  get(projectId: string, workspace: string): number | null;
-  set(projectId: string, workspace: string, basePort: number): void;
-  remove(projectId: string, workspace: string): void;
-  getNextBase(): number;
-  setNextBase(port: number): void;
+/** Derive a deterministic base port from a workspace identifier. */
+export function deriveBasePort(workspaceId: string): number {
+  const hash = createHash("md5").update(workspaceId).digest();
+  const num = hash.readUInt32BE(0);
+  const slot = num % Math.floor(PORT_RANGE / PORT_SPACING);
+  return PORT_START + slot * PORT_SPACING;
 }
 
 export class PortAllocator {
-  constructor(private readonly store: PortStore) {}
+  private allocated = new Map<string, number>();
 
   /** Get or create port allocation for a workspace. */
-  allocate(projectId: string, workspace: string): number {
-    const existing = this.store.get(projectId, workspace);
-    if (existing !== null) return existing;
+  allocate(workspaceId: string): number {
+    const existing = this.allocated.get(workspaceId);
+    if (existing !== undefined) return existing;
 
-    const base = this.store.getNextBase();
-    this.store.set(projectId, workspace, base);
-    this.store.setNextBase(base + PORT_SPACING);
+    let base = deriveBasePort(workspaceId);
+
+    // Linear probing to handle hash collisions
+    const usedPorts = new Set(this.allocated.values());
+    while (usedPorts.has(base)) {
+      base += PORT_SPACING;
+    }
+
+    this.allocated.set(workspaceId, base);
     return base;
   }
 
   /** Release ports when a task/workspace is deleted. */
-  release(projectId: string, workspace: string): void {
-    this.store.remove(projectId, workspace);
+  release(workspaceId: string): void {
+    this.allocated.delete(workspaceId);
   }
 
   /**

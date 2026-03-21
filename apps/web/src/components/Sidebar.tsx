@@ -1,8 +1,7 @@
 import { useEffect, useState } from "react";
 import { Plus, Settings } from "lucide-react";
 import { useNavigate } from "@tanstack/react-router";
-import { useProjectStore } from "~/stores/projects";
-import { useTaskStore } from "~/stores/tasks";
+import { useAppStore } from "~/stores/app";
 import { useSidebarStore } from "~/stores/sidebar";
 import { ProjectTree } from "./ProjectTree";
 import { CreateProjectDialog } from "./CreateProjectDialog";
@@ -15,9 +14,9 @@ import { transport } from "~/lib/ws-transport";
 
 export function Sidebar() {
   const navigate = useNavigate();
-  const { projects, selectedProjectId, loading, loadProjects, updateProject, deleteProject } =
-    useProjectStore();
-  const { selectedTaskId } = useTaskStore();
+  const { projects, selectedProjectId, updateProject, deleteProject } = useAppStore();
+  const selectedTaskId = useAppStore((s) => s.selectedWorkspaceId);
+  const loading = useAppStore((s) => !s.initialized);
   const { hydrateFromStorage } = useSidebarStore();
 
   const [showCreateProject, setShowCreateProject] = useState(false);
@@ -29,10 +28,6 @@ export function Sidebar() {
   useEffect(() => {
     hydrateFromStorage();
   }, [hydrateFromStorage]);
-
-  useEffect(() => {
-    void loadProjects();
-  }, [loadProjects]);
 
   const deleteTargetProject = deleteProjectId
     ? projects.find((p) => p.id === deleteProjectId)

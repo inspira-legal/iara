@@ -3,23 +3,21 @@ import * as path from "node:path";
 import { mergeEnvForWorkspace } from "../services/env.js";
 import { registerMethod } from "../router.js";
 import { launchClaude, type RepoContext } from "../services/launcher.js";
-import { getProject, getProjectDir } from "../services/projects.js";
-import { getSetting } from "../services/settings.js";
-import { getTask } from "../services/tasks.js";
+import type { AppState } from "../services/state.js";
 
-export function registerLauncherHandlers(): void {
+export function registerLauncherHandlers(appState: AppState): void {
   registerMethod("launcher.launch", async (params) => {
-    const { taskId } = params as { taskId: string; resumeSessionId?: string };
-    const task = getTask(taskId);
-    if (!task) throw new Error(`Task not found: ${taskId}`);
+    const workspace = appState.getWorkspace(params.workspaceId);
+    if (!workspace) throw new Error(`Workspace not found: ${params.workspaceId}`);
 
-    const project = getProject(task.projectId);
-    if (!project) throw new Error(`Project not found: ${task.projectId}`);
+    const projectSlug = workspace.projectId;
+    const project = appState.getProject(projectSlug);
+    if (!project) throw new Error(`Project not found: ${projectSlug}`);
 
-    const projectDir = getProjectDir(project.slug);
-    const taskDir = path.join(projectDir, task.slug);
+    const projectDir = appState.getProjectDir(projectSlug);
+    const workspaceDir = appState.getWorkspaceDir(params.workspaceId);
 
-    // Resolve repo dirs (worktrees inside task dir)
+    // Resolve repo dirs (worktrees inside workspace dir)
     const repoDirs: string[] = [];
     const repos: RepoContext[] = [];
     const reposDir = path.join(projectDir, "default");
@@ -28,7 +26,7 @@ export function registerLauncherHandlers(): void {
         .readdirSync(reposDir)
         .filter((name) => fs.statSync(path.join(reposDir, name)).isDirectory());
       for (const name of repoNames) {
-        const wtDir = path.join(taskDir, name);
+        const wtDir = path.join(workspaceDir, name);
         if (fs.existsSync(wtDir)) {
           repoDirs.push(wtDir);
           repos.push({
@@ -41,35 +39,35 @@ export function registerLauncherHandlers(): void {
     }
 
     if (repoDirs.length === 0) {
-      repoDirs.push(taskDir);
+      repoDirs.push(workspaceDir);
     }
 
     // Merge env files (global + local) for all repos
     const repoNames = repos.map((r) => r.name);
-    const envVars = mergeEnvForWorkspace(project.slug, task.slug, repoNames);
+    const envVars = mergeEnvForWorkspace(projectSlug, workspace.slug, repoNames);
 
-    const autocompactPct = getSetting("claude.autocompact_pct");
+    const autocompactPct = appState.getSetting("claude.autocompact_pct");
     const autocompactEnv = autocompactPct
       ? { CLAUDE_AUTOCOMPACT_PCT_OVERRIDE: autocompactPct }
       : {};
 
     return launchClaude({
-      taskDir,
+      taskDir: workspaceDir,
       repoDirs,
       resumeSessionId: params.resumeSessionId,
       env: {
         ...envVars,
         ...autocompactEnv,
-        IARA_TASK_ID: task.id,
-        IARA_PROJECT_ID: project.id,
+        IARA_TASK_ID: params.workspaceId,
+        IARA_PROJECT_ID: projectSlug,
         IARA_PROJECT_DIR: projectDir,
       },
       taskContext: {
-        taskDir,
+        taskDir: workspaceDir,
         projectName: project.name,
-        taskName: task.name,
-        taskDescription: task.description,
-        branch: task.branch,
+        taskName: workspace.name,
+        taskDescription: workspace.description,
+        branch: workspace.branch ?? "main",
         repos,
       },
     });

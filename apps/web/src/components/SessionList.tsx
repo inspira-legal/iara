@@ -8,23 +8,23 @@ type SessionListProps = {
 } & ({ taskId: string; projectId?: never } | { projectId: string; taskId?: never });
 
 export function SessionList({ taskId, projectId, onLaunch }: SessionListProps) {
-  const loadForTask = useSessionStore((s) => s.loadForTask);
+  const loadForWorkspace = useSessionStore((s) => s.loadForWorkspace);
   const loadForProject = useSessionStore((s) => s.loadForProject);
   const isLoading = useSessionStore((s) => s.isLoading);
-  const getForTask = useSessionStore((s) => s.getForTask);
+  const getForWorkspace = useSessionStore((s) => s.getForWorkspace);
   const getForProject = useSessionStore((s) => s.getForProject);
 
-  const key = taskId ? `task:${taskId}` : `project:${projectId}`;
+  const key = taskId ? `ws:${taskId}` : `project:${projectId}`;
   const loading = isLoading(key);
-  const sessions = taskId ? getForTask(taskId) : getForProject(projectId!);
+  const sessions = taskId ? getForWorkspace(taskId) : getForProject(projectId!);
 
   useEffect(() => {
     if (taskId) {
-      void loadForTask(taskId);
+      void loadForWorkspace(taskId);
     } else {
       void loadForProject(projectId!);
     }
-  }, [taskId, projectId, loadForTask, loadForProject]);
+  }, [taskId, projectId, loadForWorkspace, loadForProject]);
 
   return (
     <div>
@@ -48,7 +48,7 @@ export function SessionList({ taskId, projectId, onLaunch }: SessionListProps) {
         <p className="py-2 text-xs text-zinc-600">No sessions yet.</p>
       ) : (
         <ul className="space-y-1">
-          {sessions.map((session, index) => (
+          {sessions.map((session: SessionInfo, index: number) => (
             <li key={session.id}>
               {onLaunch ? (
                 <button

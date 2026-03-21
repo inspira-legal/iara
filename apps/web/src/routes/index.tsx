@@ -1,6 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useProjectStore } from "~/stores/projects";
-import { useTaskStore } from "~/stores/tasks";
+import { useAppStore } from "~/stores/app";
 import { TaskWorkspace } from "~/components/TaskWorkspace";
 import { DefaultWorkspace } from "~/components/DefaultWorkspace";
 
@@ -9,16 +8,18 @@ export const Route = createFileRoute("/")({
 });
 
 function HomePage() {
-  const { projects, selectedProjectId } = useProjectStore();
-  const { selectedTaskId, findTask } = useTaskStore();
+  const projects = useAppStore((s) => s.projects);
+  const selectedProjectId = useAppStore((s) => s.selectedProjectId);
+  const selectedWorkspaceId = useAppStore((s) => s.selectedWorkspaceId);
+  const getWorkspace = useAppStore((s) => s.getWorkspace);
 
-  const task = selectedTaskId ? findTask(selectedTaskId) : undefined;
-  const project = task
-    ? projects.find((p) => p.id === task.projectId)
+  const workspace = selectedWorkspaceId ? getWorkspace(selectedWorkspaceId) : undefined;
+  const project = workspace
+    ? projects.find((p) => p.id === workspace.projectId)
     : projects.find((p) => p.id === selectedProjectId);
 
-  if (task && project) {
-    return <TaskWorkspace key={task.id} project={project} task={task} />;
+  if (workspace && workspace.type === "task" && project) {
+    return <TaskWorkspace key={workspace.id} project={project} task={workspace} />;
   }
 
   if (project) {

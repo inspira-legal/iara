@@ -4,6 +4,8 @@ import type { PortAllocator } from "@iara/orchestrator/ports";
 import type { NotificationService } from "../services/notifications.js";
 import type { SessionWatcher } from "../services/session-watcher.js";
 import type { TerminalManager } from "../services/terminal.js";
+import type { AppState } from "../services/state.js";
+import type { ProjectsWatcher } from "../services/watcher.js";
 import { registerAppHandlers } from "./app.js";
 import { registerScriptHandlers } from "./scripts.js";
 import { registerEnvHandlers } from "./env.js";
@@ -14,31 +16,47 @@ import { registerProjectHandlers } from "./projects.js";
 import { registerPromptHandlers } from "./prompts.js";
 import { registerSessionHandlers } from "./sessions.js";
 import { registerSettingsHandlers } from "./settings.js";
-import { registerTaskHandlers } from "./tasks.js";
+import { registerWorkspaceHandlers } from "./workspaces.js";
 import { registerFileHandlers } from "./files.js";
 import { registerTerminalHandlers } from "./terminal.js";
 
+export type PushFn = <E extends keyof WsPushEvents>(event: E, params: WsPushEvents[E]) => void;
+
 export interface HandlerDeps {
+  appState: AppState;
+  watcher: ProjectsWatcher;
   scriptSupervisor: ScriptSupervisor;
   portAllocator: PortAllocator;
   notificationService: NotificationService;
   terminalManager: TerminalManager;
   sessionWatcher: SessionWatcher;
-  pushFn: <E extends keyof WsPushEvents>(event: E, params: WsPushEvents[E]) => void;
+  pushFn: PushFn;
 }
 
 export function registerAllHandlers(deps: HandlerDeps): void {
-  registerAppHandlers();
-  registerProjectHandlers(deps.pushFn, deps.portAllocator, deps.scriptSupervisor);
-  registerTaskHandlers(deps.sessionWatcher, deps.pushFn, deps.portAllocator);
-  registerLauncherHandlers();
-  registerSessionHandlers();
+  registerAppHandlers(deps.appState);
+  registerProjectHandlers(
+    deps.appState,
+    deps.watcher,
+    deps.pushFn,
+    deps.portAllocator,
+    deps.scriptSupervisor,
+  );
+  registerWorkspaceHandlers(
+    deps.appState,
+    deps.watcher,
+    deps.sessionWatcher,
+    deps.pushFn,
+    deps.portAllocator,
+  );
+  registerLauncherHandlers(deps.appState);
+  registerSessionHandlers(deps.appState);
   registerPromptHandlers();
-  registerScriptHandlers(deps.scriptSupervisor, deps.portAllocator, deps.pushFn);
-  registerEnvHandlers();
+  registerScriptHandlers(deps.appState, deps.scriptSupervisor, deps.portAllocator, deps.pushFn);
+  registerEnvHandlers(deps.appState);
   registerGitHandlers();
   registerNotificationHandlers(deps.notificationService);
-  registerFileHandlers();
-  registerTerminalHandlers(deps.terminalManager);
-  registerSettingsHandlers(deps.pushFn);
+  registerFileHandlers(deps.appState);
+  registerTerminalHandlers(deps.appState, deps.terminalManager);
+  registerSettingsHandlers(deps.appState, deps.pushFn);
 }

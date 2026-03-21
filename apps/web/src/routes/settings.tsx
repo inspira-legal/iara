@@ -2,7 +2,7 @@ import { useState, useCallback } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { ArrowLeft } from "lucide-react";
 import { useNavigate } from "@tanstack/react-router";
-import { useSettingsStore } from "~/stores/settings";
+import { useAppStore } from "~/stores/app";
 
 export const Route = createFileRoute("/settings")({
   component: SettingsPage,
@@ -10,7 +10,7 @@ export const Route = createFileRoute("/settings")({
 
 function SettingsPage() {
   const navigate = useNavigate();
-  const { settings, updateSetting } = useSettingsStore();
+  const { settings, updateSetting } = useAppStore();
 
   const osNotificationsEnabled = settings["notifications.os_enabled"] !== "false";
   const autocompactPct = settings["claude.autocompact_pct"] ?? "";

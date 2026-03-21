@@ -5,13 +5,12 @@ import { transport } from "~/lib/ws-transport.js";
 import { cn } from "~/lib/utils";
 
 interface EnvEditorProps {
-  projectId: string;
-  workspace: string; // "default" | taskId
+  workspaceId: string;
   repos: string[];
   hasActiveTerminal?: boolean;
 }
 
-export function EnvEditor({ projectId, workspace, repos, hasActiveTerminal }: EnvEditorProps) {
+export function EnvEditor({ workspaceId, repos, hasActiveTerminal }: EnvEditorProps) {
   const [data, setData] = useState<EnvRepoEntries[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeRepo, setActiveRepo] = useState<string>(repos[0] ?? "");
@@ -29,13 +28,13 @@ export function EnvEditor({ projectId, workspace, repos, hasActiveTerminal }: En
 
   const load = useCallback(() => {
     transport
-      .request("env.list", { projectId, workspace })
+      .request("env.list", { workspaceId })
       .then((result) => {
         setData(result);
         setLoading(false);
       })
       .catch(() => setLoading(false));
-  }, [projectId, workspace]);
+  }, [workspaceId]);
 
   useEffect(() => {
     setLoading(true);
@@ -56,13 +55,11 @@ export function EnvEditor({ projectId, workspace, repos, hasActiveTerminal }: En
       if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
       saveTimerRef.current = setTimeout(() => {
         const params =
-          level === "global"
-            ? { repo, level, entries }
-            : { repo, level, projectId, workspace, entries };
+          level === "global" ? { repo, level, entries } : { repo, level, workspaceId, entries };
         void transport.request("env.write", params);
       }, 500);
     },
-    [projectId, workspace],
+    [workspaceId],
   );
 
   const updateEntry = (
@@ -197,7 +194,9 @@ export function EnvEditor({ projectId, workspace, repos, hasActiveTerminal }: En
           <EnvSection
             label="Local"
             sublabel={
-              workspace === "default" ? "this Default Workspace only" : "this Task Workspace only"
+              workspaceId.endsWith("/default")
+                ? "this Default Workspace only"
+                : "this Task Workspace only"
             }
             entries={repoData?.local ?? []}
             overriddenKeys={globalKeys}
