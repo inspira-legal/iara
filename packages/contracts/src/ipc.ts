@@ -38,16 +38,6 @@ export interface CreateWorkspaceInput {
   branches?: Record<string, string>;
 }
 
-export type LaunchClaudeInput = {
-  workspaceId: string;
-  resumeSessionId?: string;
-};
-
-export interface LaunchResult {
-  pid: number | null;
-  sessionId: string;
-}
-
 export interface SessionInfo {
   id: string;
   filePath: string;
@@ -144,9 +134,6 @@ export interface DesktopBridge {
   // Workspaces
   createWorkspace(projectId: string, input: CreateWorkspaceInput): Promise<Workspace>;
   deleteWorkspace(workspaceId: string): Promise<void>;
-
-  // Launcher
-  launchClaude(input: LaunchClaudeInput): Promise<LaunchResult>;
 
   // Sessions
   listSessions(workspaceId: string): Promise<SessionInfo[]>;

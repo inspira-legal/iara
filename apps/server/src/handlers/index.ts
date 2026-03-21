@@ -9,7 +9,6 @@ import { registerAppHandlers } from "./app.js";
 import { registerScriptHandlers } from "./scripts.js";
 import { registerEnvHandlers } from "./env.js";
 import { registerGitHandlers } from "./git.js";
-import { registerLauncherHandlers } from "./launcher.js";
 import { registerNotificationHandlers } from "./notifications.js";
 import { registerProjectHandlers } from "./projects.js";
 import { registerPromptHandlers } from "./prompts.js";
@@ -49,7 +48,6 @@ export function registerAllHandlers(deps: HandlerDeps): void {
     deps.pushFn,
     deps.portAllocator,
   );
-  registerLauncherHandlers(deps.appState);
   registerSessionHandlers(deps.appState);
   registerPromptHandlers();
   registerScriptHandlers(deps.appState, deps.scriptSupervisor, deps.portAllocator, deps.pushFn);

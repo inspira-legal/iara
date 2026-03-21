@@ -8,6 +8,7 @@ import type {
   WsPushEvents,
 } from "@iara/contracts";
 import { cleanEnv } from "@iara/shared/env";
+import { killProcessGroup } from "@iara/shared/process";
 import { interpolate } from "./interpolation.js";
 
 type PushFn = <E extends keyof WsPushEvents>(event: E, params: WsPushEvents[E]) => void;
@@ -24,11 +25,15 @@ interface RunningScript {
   output: ScriptOutputLevel;
   logs: string[];
   kill: () => void;
+  /** Cancels the pending SIGKILL escalation timer. */
+  cancelKill: (() => void) | null;
   healthCheckTimer?: ReturnType<typeof setInterval>;
 }
 
 const MAX_LOG_LINES = 1000;
 const HEALTH_CHECK_INTERVAL = 3000;
+/** Re-check healthy services every 30s to detect freezes. */
+const HEALTH_RECHECK_INTERVAL = 30_000;
 
 export class ScriptSupervisor {
   private running = new Map<string, RunningScript>();
@@ -103,8 +108,6 @@ export class ScriptSupervisor {
       detached: true,
     });
 
-    let killTimer: ReturnType<typeof setTimeout> | null = null;
-
     const entry: RunningScript = {
       scriptId: key,
       projectId: opts.projectId,
@@ -116,21 +119,10 @@ export class ScriptSupervisor {
       exitCode: null,
       output: opts.output,
       logs: [`> ${fullCommand}`],
+      cancelKill: null,
       kill: () => {
         if (child.pid) {
-          try {
-            // Kill the entire process group (shell + children)
-            process.kill(-child.pid, "SIGTERM");
-            killTimer = setTimeout(() => {
-              try {
-                process.kill(-child.pid!, "SIGKILL");
-              } catch {
-                // Already dead
-              }
-            }, 3000);
-          } catch {
-            // Process already exited
-          }
+          entry.cancelKill = killProcessGroup(child.pid, { graceMs: 3000 });
         }
       },
     };
@@ -151,20 +143,35 @@ export class ScriptSupervisor {
       });
     };
 
-    child.stdout?.on("data", (data: Buffer) => {
-      for (const line of data.toString().split("\n").filter(Boolean)) {
-        appendLog(line);
-      }
-    });
+    // Handle stdout/stderr with error handlers to prevent unhandled stream errors
+    if (child.stdout) {
+      child.stdout.on("data", (data: Buffer) => {
+        for (const line of data.toString().split("\n").filter(Boolean)) {
+          appendLog(line);
+        }
+      });
+      child.stdout.on("error", (err) => {
+        console.error(`[supervisor] stdout error for ${key}:`, err.message);
+      });
+    }
 
-    child.stderr?.on("data", (data: Buffer) => {
-      for (const line of data.toString().split("\n").filter(Boolean)) {
-        appendLog(line);
-      }
-    });
+    if (child.stderr) {
+      child.stderr.on("data", (data: Buffer) => {
+        for (const line of data.toString().split("\n").filter(Boolean)) {
+          appendLog(line);
+        }
+      });
+      child.stderr.on("error", (err) => {
+        console.error(`[supervisor] stderr error for ${key}:`, err.message);
+      });
+    }
 
     child.on("exit", (code) => {
-      if (killTimer) clearTimeout(killTimer);
+      // Cancel any pending SIGKILL timer from a prior kill() call
+      if (entry.cancelKill) {
+        entry.cancelKill();
+        entry.cancelKill = null;
+      }
       if (entry.healthCheckTimer) clearInterval(entry.healthCheckTimer);
       entry.pid = null;
       entry.exitCode = code ?? 1;
@@ -182,16 +189,42 @@ export class ScriptSupervisor {
       const timeout = (opts.timeout ?? 30) * 1000;
       const maxRetries = Math.ceil(timeout / HEALTH_CHECK_INTERVAL);
       let retries = 0;
+      let becameHealthy = false;
 
       entry.healthCheckTimer = setInterval(() => {
         retries++;
         checkPort(opts.port)
           .then((ok) => {
-            if (ok && entry.health !== "healthy") {
+            if (ok && !becameHealthy) {
+              // First time healthy — switch to slower re-check interval
+              becameHealthy = true;
               entry.health = "healthy";
               this.pushStatus(entry);
               if (entry.healthCheckTimer) clearInterval(entry.healthCheckTimer);
-            } else if (!ok && retries >= maxRetries) {
+
+              // Start periodic re-checks to detect frozen services
+              entry.healthCheckTimer = setInterval(() => {
+                checkPort(opts.port)
+                  .then((stillOk) => {
+                    if (!stillOk && entry.health === "healthy") {
+                      entry.health = "unhealthy";
+                      this.pushStatus(entry);
+                    } else if (stillOk && entry.health === "unhealthy") {
+                      entry.health = "healthy";
+                      this.pushStatus(entry);
+                    }
+                  })
+                  .catch(() => {
+                    // ignore re-check errors
+                  });
+              }, HEALTH_RECHECK_INTERVAL);
+            } else if (ok && becameHealthy) {
+              // Still healthy on re-check — recover if previously unhealthy
+              if (entry.health === "unhealthy") {
+                entry.health = "healthy";
+                this.pushStatus(entry);
+              }
+            } else if (!ok && retries >= maxRetries && !becameHealthy) {
               entry.health = "unhealthy";
               this.pushStatus(entry);
               if (entry.healthCheckTimer) clearInterval(entry.healthCheckTimer);
@@ -237,6 +270,7 @@ export class ScriptSupervisor {
           exitCode: null,
           output: opts.output,
           logs: [`[iara] Port ${attachedPort} already in use — attached to existing service`],
+          cancelKill: null,
           kill: () => killByPort(attachedPort),
         };
         this.running.set(key, entry);
@@ -331,22 +365,8 @@ export class ScriptSupervisor {
           exitCode: null,
           output: "always",
           logs: [`[iara] Detected service running on port ${attachedPort}`],
-          kill: () => {
-            try {
-              const { execSync } =
-                require("node:child_process") as typeof import("node:child_process");
-              const result = execSync(`lsof -ti:${attachedPort}`, { encoding: "utf-8" }).trim();
-              for (const pid of result.split("\n").filter(Boolean)) {
-                try {
-                  process.kill(Number(pid), "SIGTERM");
-                } catch {
-                  // Already dead
-                }
-              }
-            } catch {
-              // No process found on port
-            }
-          },
+          cancelKill: null,
+          kill: () => killByPort(attachedPort),
         };
         this.running.set(key, entry);
         if (svc.port !== null) {
