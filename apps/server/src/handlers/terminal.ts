@@ -16,6 +16,14 @@ function getAutocompactEnv(appState: AppState): Record<string, string> {
   return {};
 }
 
+function getGuardrailsEnv(appState: AppState): Record<string, string> {
+  const enabled = appState.getSetting("guardrails.enabled");
+  if (enabled === "false") {
+    return { IARA_GUARDRAILS: "off" };
+  }
+  return {};
+}
+
 export function registerTerminalHandlers(appState: AppState, manager: TerminalManager): void {
   registerMethod("terminal.create", async (params) => {
     const workspace = appState.getWorkspace(params.workspaceId);
@@ -85,6 +93,7 @@ export function registerTerminalHandlers(appState: AppState, manager: TerminalMa
         env: {
           ...envVars,
           ...getAutocompactEnv(appState),
+          ...getGuardrailsEnv(appState),
           IARA_WORKSPACE_TYPE: "default",
           IARA_WORKSPACE_ID: params.workspaceId,
           IARA_WORKSPACE_DIR: rootCwd,
@@ -143,6 +152,7 @@ export function registerTerminalHandlers(appState: AppState, manager: TerminalMa
       env: {
         ...envVars,
         ...getAutocompactEnv(appState),
+        ...getGuardrailsEnv(appState),
         IARA_WORKSPACE_TYPE: "task",
         IARA_WORKSPACE_ID: params.workspaceId,
         IARA_WORKSPACE_DIR: workspaceDir,

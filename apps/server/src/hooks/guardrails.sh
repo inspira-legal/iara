@@ -1,18 +1,30 @@
 #!/usr/bin/env sh
-# Claude Code PreToolUse hook — task workspace guardrails.
+# Claude Code PreToolUse hook — workspace guardrails.
 #
 # Reads hook input from stdin (JSON) and blocks:
-#   - Edit/Write to file paths outside the workspace directory
-#   - Bash commands containing `git checkout`
-#   - Bash commands with absolute paths outside the workspace directory
+#   - Edit/Write to file paths outside the workspace directory (all workspaces)
+#   - Bash commands with absolute paths outside the workspace directory (all workspaces)
+#   - Bash commands containing `git checkout` (task workspaces only)
 #
-# Only active when IARA_WORKSPACE_TYPE=task.
 # Disabled when IARA_GUARDRAILS=off.
 #
 # Exit 0 = allow, Exit 2 + stderr = block with message to Claude.
 
-# Only enforce in task workspaces
-[ "$IARA_WORKSPACE_TYPE" != "task" ] && exit 0
+# Expand ~ to $HOME (shell doesn't expand ~ in variables)
+expand_path() {
+  case "$1" in
+    "~/"*) echo "${HOME}${1#"~"}" ;;
+    "~") echo "$HOME" ;;
+    *) echo "$1" ;;
+  esac
+}
+
+# Resolve a path: expand ~, then resolve with realpath
+resolve_path() {
+  EXPANDED=$(expand_path "$1")
+  realpath -m "$EXPANDED" 2>/dev/null || echo "$EXPANDED"
+}
+
 # Respect opt-out
 [ "$IARA_GUARDRAILS" = "off" ] && exit 0
 # Need workspace dir to check paths
@@ -29,11 +41,10 @@ if [ "$TOOL_NAME" = "Edit" ] || [ "$TOOL_NAME" = "Write" ]; then
   FILE_PATH=$(echo "$INPUT" | grep -o '"file_path"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed 's/.*"file_path"[[:space:]]*:[[:space:]]*"//;s/"//')
 
   if [ -n "$FILE_PATH" ]; then
-    # Resolve path (handle ../ traversal)
-    RESOLVED=$(realpath -m "$FILE_PATH" 2>/dev/null || echo "$FILE_PATH")
+    RESOLVED=$(resolve_path "$FILE_PATH")
     case "$RESOLVED" in
       "$IARA_WORKSPACE_DIR"/*|"$IARA_WORKSPACE_DIR") ;;
-      *) echo "$TOOL_NAME blocked: file path \"$FILE_PATH\" is outside the task workspace \"$IARA_WORKSPACE_DIR\". Only files within your workspace directory can be modified." >&2; exit 2 ;;
+      *) echo "$TOOL_NAME blocked: file path \"$FILE_PATH\" is outside the workspace \"$IARA_WORKSPACE_DIR\". Only files within your workspace directory can be modified." >&2; exit 2 ;;
     esac
   fi
   exit 0
@@ -44,20 +55,22 @@ if [ "$TOOL_NAME" = "Bash" ]; then
   # Extract command value — may contain escaped quotes, grab between first ": " and end
   COMMAND=$(echo "$INPUT" | grep -o '"command"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed 's/.*"command"[[:space:]]*:[[:space:]]*"//;s/"$//')
 
-  # Block git checkout (worktrees are locked to their branch)
-  if echo "$COMMAND" | grep -qE '\bgit\b.*\bcheckout\b'; then
-    echo "Bash blocked: \"git checkout\" is not allowed in task workspaces. Each worktree is locked to its feature branch." >&2
-    exit 2
+  # Block git checkout in task workspaces (worktrees are locked to their branch)
+  if [ "$IARA_WORKSPACE_TYPE" = "task" ]; then
+    if echo "$COMMAND" | grep -qE '\bgit\b.*\bcheckout\b'; then
+      echo "Bash blocked: \"git checkout\" is not allowed in task workspaces. Each worktree is locked to its feature branch." >&2
+      exit 2
+    fi
   fi
 
-  # Check absolute paths in the command
-  ABS_PATHS=$(echo "$COMMAND" | grep -oE '(^|[[:space:]="])(/[^[:space:]"'\''|;&><()]+)' | grep -oE '/[^[:space:]"'\''|;&><()]+')
+  # Check absolute paths and ~/paths in the command
+  ABS_PATHS=$(echo "$COMMAND" | grep -oE '(^|[[:space:]="])(~?/[^[:space:]"'\''|;&><()]+)' | grep -oE '~?/[^[:space:]"'\''|;&><()]+')
   echo "$ABS_PATHS" | while IFS= read -r P; do
     [ -z "$P" ] && continue
-    RESOLVED=$(realpath -m "$P" 2>/dev/null || echo "$P")
+    RESOLVED=$(resolve_path "$P")
     case "$RESOLVED" in
       "$IARA_WORKSPACE_DIR"/*|"$IARA_WORKSPACE_DIR") ;;
-      *) echo "Bash blocked: command references path \"$P\" which is outside the task workspace \"$IARA_WORKSPACE_DIR\". Only operations within your workspace directory are allowed." >&2; exit 2 ;;
+      *) echo "Bash blocked: command references path \"$P\" which is outside the workspace \"$IARA_WORKSPACE_DIR\". Only operations within your workspace directory are allowed." >&2; exit 2 ;;
     esac
   done
   # Propagate subshell exit code (pipe creates subshell)

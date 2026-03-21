@@ -14,6 +14,7 @@ function SettingsPage() {
 
   const osNotificationsEnabled = settings["notifications.os_enabled"] !== "false";
   const autocompactPct = settings["claude.autocompact_pct"] ?? "";
+  const guardrailsEnabled = settings["guardrails.enabled"] !== "false";
 
   const handleToggleNotifications = useCallback(() => {
     const newValue = osNotificationsEnabled ? "false" : "true";
@@ -49,6 +50,16 @@ function SettingsPage() {
         {/* Claude Code */}
         <SettingsSection title="Claude Code">
           <AutocompactInput value={autocompactPct} onSave={updateSetting} />
+          <div className="mt-3 border-t border-zinc-800 pt-3">
+            <ToggleRow
+              label="Workspace guardrails"
+              description="Impede que Claude escreva arquivos ou execute comandos fora do diretório do workspace"
+              checked={guardrailsEnabled}
+              onChange={() => {
+                void updateSetting("guardrails.enabled", guardrailsEnabled ? "false" : "true");
+              }}
+            />
+          </div>
         </SettingsSection>
 
         {/* Appearance placeholder */}
