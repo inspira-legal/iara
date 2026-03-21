@@ -10,11 +10,11 @@ pre-commit:
       stage_fixed: true
     lint-fix:
       priority: 2
-      run: bunx oxlint --fix --report-unused-disable-directives
+      run: bunx oxlint --fix --deny-warnings --report-unused-disable-directives
       stage_fixed: true
     lint:
       priority: 3
-      run: bun lint
+      run: bunx oxlint --deny-warnings --report-unused-disable-directives
     typecheck:
       priority: 3
       run: bun typecheck
