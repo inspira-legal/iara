@@ -90,10 +90,13 @@ afterEach(() => {
 describe("WsTransport", () => {
   describe("request", () => {
     it("sends a JSON message and resolves on response", async () => {
-      const promise = transport.request("terminal.write" as never, {
-        terminalId: "t1",
-        data: "hello",
-      } as never);
+      const promise = transport.request(
+        "terminal.write" as never,
+        {
+          terminalId: "t1",
+          data: "hello",
+        } as never,
+      );
 
       // Wait for init + open
       await vi.advanceTimersByTimeAsync(0);

@@ -119,7 +119,13 @@ export class AppState {
           data = { type: "default" as const, name: "Default", description: "", createdAt: now };
         } else {
           const branch = this.detectBranch(wsDir) ?? entry.name;
-          data = { type: "task" as const, name: entry.name, description: "", branch, createdAt: now };
+          data = {
+            type: "task" as const,
+            name: entry.name,
+            description: "",
+            branch,
+            createdAt: now,
+          };
         }
         wsFile.write(data);
       }
@@ -301,7 +307,10 @@ export class AppState {
   }
 
   /** Update project.json for an existing project (preserves createdAt). */
-  updateProject(slug: string, updates: { name?: string; description?: string; repoSources?: string[] }): void {
+  updateProject(
+    slug: string,
+    updates: { name?: string; description?: string; repoSources?: string[] },
+  ): void {
     const projectDir = this.getProjectDir(slug);
     const file = new JsonFile(path.join(projectDir, "project.json"), ProjectFileSchema);
     const existing = file.readOrThrow();

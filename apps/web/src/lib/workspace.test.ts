@@ -51,7 +51,7 @@ describe("useWorkspace", () => {
     expect(result).toBe("ws-specific");
   });
 
-  it('returns null when workspaceId is empty string and projectId is null', () => {
+  it("returns null when workspaceId is empty string and projectId is null", () => {
     // biome-ignore lint: test mock
     mockedUseAppStore.mockImplementation(((selector: any) =>
       selector({ selectedWorkspaceId: "", selectedProjectId: null })) as any);

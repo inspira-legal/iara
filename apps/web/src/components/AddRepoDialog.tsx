@@ -174,10 +174,7 @@ export function AddRepoDialog({ open, onClose, onAdd }: AddRepoDialogProps) {
           <div>
             <Label>Folder</Label>
             <div className="flex items-center gap-2">
-              <Button
-                variant="secondary"
-                onClick={() => void handlePickFolder()}
-              >
+              <Button variant="secondary" onClick={() => void handlePickFolder()}>
                 <FolderOpen size={14} />
                 Select Folder
               </Button>

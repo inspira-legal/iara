@@ -4,8 +4,8 @@ import { resolve } from "node:path";
 const root = resolve(import.meta.dirname, "..");
 const port = Number(process.env.PORT ?? 5173);
 
-// Build contracts + orchestrator first (sync — fast, cached)
-execSync("turbo run build --filter=@iara/contracts --filter=@iara/orchestrator", {
+// Build packages first (sync — fast, cached)
+execSync("turbo run build --filter='./packages/*'", {
   cwd: root,
   stdio: "inherit",
 });

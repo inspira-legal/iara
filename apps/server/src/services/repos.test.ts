@@ -115,14 +115,27 @@ describe("addRepo()", () => {
       const appState = createMockAppState(projectSlug);
       const onProgress = vi.fn();
 
-      await addRepo(appState, "proj-id", projectSlug, { method: "empty", name: "new-repo" }, onProgress);
+      await addRepo(
+        appState,
+        "proj-id",
+        projectSlug,
+        { method: "empty", name: "new-repo" },
+        onProgress,
+      );
 
-      expect(onProgress).toHaveBeenCalledWith({ repo: "new-repo", status: "started", message: "Creating repo..." });
+      expect(onProgress).toHaveBeenCalledWith({
+        repo: "new-repo",
+        status: "started",
+        message: "Creating repo...",
+      });
       expect(onProgress).toHaveBeenCalledWith({ repo: "new-repo", status: "done" });
 
       const dest = path.join(projectDir, "default", "new-repo");
       expect(fs.existsSync(dest)).toBe(true);
-      expect(vi.mocked(execSync)).toHaveBeenCalledWith("git init", expect.objectContaining({ cwd: dest }));
+      expect(vi.mocked(execSync)).toHaveBeenCalledWith(
+        "git init",
+        expect.objectContaining({ cwd: dest }),
+      );
     });
   });
 
@@ -247,10 +260,14 @@ describe("addRepo()", () => {
     // Create workspace directory
     fs.mkdirSync(path.join(projectDir, "feature-1"), { recursive: true });
 
-    const appState = createMockAppState(projectSlug, [], [
-      { slug: "default", branch: "main" },
-      { slug: "feature-1", branch: "feature-1" },
-    ]);
+    const appState = createMockAppState(
+      projectSlug,
+      [],
+      [
+        { slug: "default", branch: "main" },
+        { slug: "feature-1", branch: "feature-1" },
+      ],
+    );
 
     await addRepo(appState, "id", projectSlug, { method: "empty", name: "my-repo" });
 

@@ -193,9 +193,12 @@ describe("useTerminalStore", () => {
 
       // Should NOT have called terminal.destroy
       expect(mockRequest).not.toHaveBeenCalledWith("terminal.destroy", expect.anything());
-      expect(mockRequest).toHaveBeenCalledWith("terminal.create", expect.objectContaining({
-        workspaceId: "proj1/ws1",
-      }));
+      expect(mockRequest).toHaveBeenCalledWith(
+        "terminal.create",
+        expect.objectContaining({
+          workspaceId: "proj1/ws1",
+        }),
+      );
     });
 
     it("ignores destroy errors and still creates new terminal", async () => {

@@ -208,7 +208,11 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
       const nextWorkspaces =
         wIdx === -1
           ? [...project.workspaces, workspace]
-          : [...project.workspaces.slice(0, wIdx), workspace, ...project.workspaces.slice(wIdx + 1)];
+          : [
+              ...project.workspaces.slice(0, wIdx),
+              workspace,
+              ...project.workspaces.slice(wIdx + 1),
+            ];
       const next = [...state.projects];
       next[pIdx] = { ...project, workspaces: nextWorkspaces };
       return { projects: next };

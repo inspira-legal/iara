@@ -188,7 +188,10 @@ describe("useScriptsStore", () => {
 
       useScriptsStore.getState().selectLog("api", "dev");
 
-      expect(mockRequest).toHaveBeenCalledWith("scripts.logs", { scriptId: "8080:api:dev", limit: 200 });
+      expect(mockRequest).toHaveBeenCalledWith("scripts.logs", {
+        scriptId: "8080:api:dev",
+        limit: 200,
+      });
     });
 
     it("does not fetch logs if already loaded", () => {
@@ -297,7 +300,11 @@ describe("useScriptsStore", () => {
       // biome-ignore lint: test mock
       mockSubscribe.mockImplementation((event: string, cb: (...args: any[]) => void) => {
         if (event === "scripts:status") {
-          cb({ service: "api", script: "dev", status: { ...status, health: "running", pid: 1234 } });
+          cb({
+            service: "api",
+            script: "dev",
+            status: { ...status, health: "running", pid: 1234 },
+          });
         }
         return vi.fn();
       });
@@ -436,7 +443,11 @@ describe("useScriptsStore", () => {
 
     it("scripts:reload clears discovering flag", () => {
       const discoveringProjects = new Set(["proj1"]);
-      useScriptsStore.setState({ discovering: true, discoveringProjects, currentWorkspaceId: "proj1/default" });
+      useScriptsStore.setState({
+        discovering: true,
+        discoveringProjects,
+        currentWorkspaceId: "proj1/default",
+      });
 
       // biome-ignore lint: test mock
       mockSubscribe.mockImplementation((event: string, cb: (...args: any[]) => void) => {

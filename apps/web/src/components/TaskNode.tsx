@@ -17,13 +17,7 @@ interface TaskNodeProps {
   onRename: (newName: string) => Promise<void> | void;
 }
 
-export function TaskNode({
-  task,
-  isSelected,
-  onSelect,
-  onDelete,
-  onRename,
-}: TaskNodeProps) {
+export function TaskNode({ task, isSelected, onSelect, onDelete, onRename }: TaskNodeProps) {
   const runningInTask = useScriptsStore(
     (s) =>
       s.config?.statuses.filter((st) => st.workspace === task.slug && isScriptActive(st)).length ??
@@ -83,7 +77,11 @@ export function TaskNode({
               />
             )}
             {editing ? (
-              <input type="text" {...inputProps} className="w-full rounded border border-zinc-600 bg-zinc-800 px-1 py-0 text-sm text-zinc-100 outline-none focus:border-blue-500" />
+              <input
+                type="text"
+                {...inputProps}
+                className="w-full rounded border border-zinc-600 bg-zinc-800 px-1 py-0 text-sm text-zinc-100 outline-none focus:border-blue-500"
+              />
             ) : (
               <span className="block truncate text-sm">{task.name}</span>
             )}

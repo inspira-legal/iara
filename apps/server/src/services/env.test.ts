@@ -165,9 +165,7 @@ describe("validateEntries()", () => {
   });
 
   it("throws for invalid key", () => {
-    expect(() => validateEntries([{ key: "invalid-key", value: "v" }])).toThrow(
-      /Invalid env key/,
-    );
+    expect(() => validateEntries([{ key: "invalid-key", value: "v" }])).toThrow(/Invalid env key/);
   });
 });
 
@@ -195,7 +193,10 @@ describe("mergeEnvForWorkspace()", () => {
     // Set up global env
     const envDir = path.join(tmpDir, "environment");
     fs.mkdirSync(envDir, { recursive: true });
-    fs.writeFileSync(path.join(envDir, ".env.repo1.global"), "API_KEY=global-key\nDB_HOST=global-db\n");
+    fs.writeFileSync(
+      path.join(envDir, ".env.repo1.global"),
+      "API_KEY=global-key\nDB_HOST=global-db\n",
+    );
 
     // Set up local env
     const localDir = path.join(tmpDir, "proj", "default");

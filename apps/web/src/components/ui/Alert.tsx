@@ -1,12 +1,9 @@
 import { cn } from "~/lib/utils";
 
 const variantStyles = {
-  error:
-    "border-red-700/50 bg-red-900/20",
-  warning:
-    "border-yellow-700/50 bg-yellow-900/20",
-  info:
-    "border-blue-700/50 bg-blue-900/20",
+  error: "border-red-700/50 bg-red-900/20",
+  warning: "border-yellow-700/50 bg-yellow-900/20",
+  info: "border-blue-700/50 bg-blue-900/20",
 } as const;
 
 interface AlertProps {

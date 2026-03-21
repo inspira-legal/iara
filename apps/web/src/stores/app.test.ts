@@ -106,7 +106,10 @@ describe("useAppStore", () => {
     });
 
     it("selecting project clears workspace if workspace does not belong to it", () => {
-      const proj1 = makeProject({ id: "proj1", workspaces: [makeWorkspace({ id: "proj1/ws1", projectId: "proj1" })] });
+      const proj1 = makeProject({
+        id: "proj1",
+        workspaces: [makeWorkspace({ id: "proj1/ws1", projectId: "proj1" })],
+      });
       const proj2 = makeProject({ id: "proj2", workspaces: [] });
       useAppStore.setState({
         projects: [proj1, proj2],

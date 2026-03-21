@@ -1,11 +1,5 @@
 import { useState, useEffect } from "react";
-import {
-  GitBranch,
-  ChevronLeft,
-  Code,
-  FolderOpen,
-  Sparkles,
-} from "lucide-react";
+import { GitBranch, ChevronLeft, Code, FolderOpen, Sparkles } from "lucide-react";
 import type { Workspace, Project, RepoInfo } from "@iara/contracts";
 import { transport } from "~/lib/ws-transport.js";
 import { useTerminalStore } from "~/stores/terminal";

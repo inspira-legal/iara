@@ -1,12 +1,5 @@
 import { useState } from "react";
-import {
-  GitBranch,
-  CheckCircle2,
-  AlertCircle,
-  ArrowUp,
-  ArrowDown,
-  X,
-} from "lucide-react";
+import { GitBranch, CheckCircle2, AlertCircle, ArrowUp, ArrowDown, X } from "lucide-react";
 import type { RepoInfo } from "@iara/contracts";
 import { transport } from "~/lib/ws-transport.js";
 import { StatusBadge } from "./ui/StatusBadge";
@@ -71,9 +64,7 @@ export function RepoCard({ repo, onRemove, taskId }: RepoCardProps) {
 
   return (
     <div className="flex items-center gap-3 rounded-lg border border-zinc-700 bg-zinc-800/50 px-4 py-3">
-      <span className="min-w-0 shrink truncate text-sm font-bold text-zinc-100">
-        {repo.name}
-      </span>
+      <span className="min-w-0 shrink truncate text-sm font-bold text-zinc-100">{repo.name}</span>
 
       <span className="flex shrink-0 items-center gap-1 text-xs text-zinc-400">
         <GitBranch size={13} />

@@ -80,10 +80,7 @@ describe("useSidebarStore", () => {
 
     it("saves to localStorage after toggle", () => {
       useSidebarStore.getState().toggleProject("proj1");
-      expect(localStorageMock.setItem).toHaveBeenCalledWith(
-        STORAGE_KEY,
-        expect.any(String),
-      );
+      expect(localStorageMock.setItem).toHaveBeenCalledWith(STORAGE_KEY, expect.any(String));
       const saved = JSON.parse(localStorageMock.setItem.mock.calls[0]![1] as string);
       expect(saved.expandedProjectIds).toContain("proj1");
     });

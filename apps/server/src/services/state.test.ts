@@ -209,9 +209,9 @@ describe("AppState", () => {
       expect(ws).not.toBeNull();
       expect(ws!.type).toBe("default");
       expect(ws!.name).toBe("Default");
-      expect(
-        fs.existsSync(path.join(projectsDir, "my-app", "default", "workspace.json")),
-      ).toBe(true);
+      expect(fs.existsSync(path.join(projectsDir, "my-app", "default", "workspace.json"))).toBe(
+        true,
+      );
     });
 
     it("auto-creates workspace.json for task dir with worktrees, detecting branch", () => {
@@ -228,9 +228,9 @@ describe("AppState", () => {
       expect(ws).not.toBeNull();
       expect(ws!.type).toBe("task");
       expect(ws!.branch).toBe("feat/fix-login");
-      expect(
-        fs.existsSync(path.join(projectsDir, "my-app", "fix-login", "workspace.json")),
-      ).toBe(true);
+      expect(fs.existsSync(path.join(projectsDir, "my-app", "fix-login", "workspace.json"))).toBe(
+        true,
+      );
     });
 
     it("does NOT auto-create task workspace.json if dir has repos instead of worktrees", () => {
@@ -641,7 +641,13 @@ describe("AppState", () => {
       // Create a worktree with an unreadable HEAD
       const wsDir = path.join(projectsDir, "my-app", "broken-task", "repo");
       fs.mkdirSync(wsDir, { recursive: true });
-      const worktreeDataDir = path.join(projectsDir, "my-app", ".worktree-data", "broken-task", "repo");
+      const worktreeDataDir = path.join(
+        projectsDir,
+        "my-app",
+        ".worktree-data",
+        "broken-task",
+        "repo",
+      );
       fs.mkdirSync(worktreeDataDir, { recursive: true });
       fs.writeFileSync(path.join(wsDir, ".git"), `gitdir: ${worktreeDataDir}\n`);
       // No HEAD file in worktree data dir

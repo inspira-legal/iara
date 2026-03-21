@@ -11,19 +11,13 @@ files:
   - "!dist-electron/**/*.map"
 
 asarUnpack:
-  - "node_modules/better-sqlite3/**"
   - "node_modules/node-pty/**"
   - "node_modules/bindings/**"
-  - "node_modules/prebuild-install/**"
   - "node_modules/file-uri-to-path/**"
 
 extraResources:
   - from: ../server/dist
     to: apps/server/dist
-  - from: ../server/drizzle
-    to: apps/server/drizzle
-  - from: ../server/node_modules/better-sqlite3
-    to: apps/server/node_modules/better-sqlite3
   - from: ../server/node_modules/node-pty
     to: apps/server/node_modules/node-pty
   - from: ../server/node_modules/bindings

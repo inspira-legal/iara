@@ -216,9 +216,7 @@ export function CreateTaskDialog({ open, onClose, projectId, project }: CreateTa
               <div className="space-y-2">
                 {repoNames.map((repoName) => (
                   <div key={repoName} className="flex items-center gap-2">
-                    <span className="w-28 shrink-0 truncate text-xs text-zinc-500">
-                      {repoName}
-                    </span>
+                    <span className="w-28 shrink-0 truncate text-xs text-zinc-500">{repoName}</span>
                     <Input
                       type="text"
                       value={branches[repoName] ?? `feat/${computedSlug || "..."}`}
@@ -232,11 +230,7 @@ export function CreateTaskDialog({ open, onClose, projectId, project }: CreateTa
           )}
 
           <div className="flex gap-2">
-            <Button
-              variant="secondary"
-              className="flex-1"
-              onClick={() => void handleAskClaude()}
-            >
+            <Button variant="secondary" className="flex-1" onClick={() => void handleAskClaude()}>
               <Sparkles size={14} />
               Re-generate
             </Button>

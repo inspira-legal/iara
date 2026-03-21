@@ -1,11 +1,5 @@
 import { useState, useEffect } from "react";
-import {
-  ChevronLeft,
-  Plus,
-  Sparkles,
-  Code,
-  FolderOpen,
-} from "lucide-react";
+import { ChevronLeft, Plus, Sparkles, Code, FolderOpen } from "lucide-react";
 import type { Project, RepoInfo } from "@iara/contracts";
 import { transport } from "~/lib/ws-transport.js";
 import { useAppStore } from "~/stores/app";
@@ -229,12 +223,7 @@ function DefaultWorkspaceDetailView({
           )}
         </div>
 
-        <Button
-          variant="dashed"
-          size="sm"
-          className="mt-3"
-          onClick={() => setShowAddRepo(true)}
-        >
+        <Button variant="dashed" size="sm" className="mt-3" onClick={() => setShowAddRepo(true)}>
           <Plus size={14} />
           Add Repo
         </Button>

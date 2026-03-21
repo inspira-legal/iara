@@ -58,9 +58,8 @@ vi.mock("./clipboard.js", () => ({
   readClipboard: vi.fn().mockResolvedValue(""),
 }));
 
-const { getOrCreateTerminal, destroyTerminal, getCachedTerminal } = await import(
-  "./terminal-cache"
-);
+const { getOrCreateTerminal, destroyTerminal, getCachedTerminal } =
+  await import("./terminal-cache");
 
 describe("terminal-cache", () => {
   beforeEach(() => {

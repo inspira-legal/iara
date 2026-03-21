@@ -32,7 +32,28 @@ let ws: WebSocket | null = null;
 let quitting = false;
 let osNotificationsEnabled = true;
 
+const RENDERER_LOG_TAGS: Record<string, string> = {
+  debug: "[renderer]",
+  info: "[renderer]",
+  warning: "[renderer:warn]",
+  error: "[renderer:error]",
+};
+
 const browserPanel = new BrowserPanel();
+
+// Must be called before app.whenReady() — enables localStorage, fetch, etc. for the custom protocol.
+protocol.registerSchemesAsPrivileged([
+  {
+    scheme: APP_SCHEME,
+    privileges: {
+      standard: true,
+      secure: true,
+      supportFetchAPI: true,
+      corsEnabled: true,
+      codeCache: true,
+    },
+  },
+]);
 
 // ---------------------------------------------------------------------------
 // Window state persistence (position, size, maximized)
@@ -365,10 +386,10 @@ function createWindow(): BrowserWindow {
   });
 
   // Forward renderer console to terminal
-  win.webContents.on("console-message", (_event, level, message, line, sourceId) => {
-    const tag = ["[renderer]", "[renderer:warn]", "[renderer:error]"][level] ?? "[renderer]";
-    const source = sourceId ? ` (${sourceId}:${line})` : "";
-    console.log(`${tag} ${message}${source}`);
+  win.webContents.on("console-message", (event) => {
+    const tag = RENDERER_LOG_TAGS[event.level] ?? "[renderer]";
+    const source = event.sourceId ? ` (${event.sourceId}:${event.lineNumber})` : "";
+    console.log(`${tag} ${event.message}${source}`);
   });
 
   if (isDevelopment && process.env.VITE_DEV_SERVER_URL) {

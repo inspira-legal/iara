@@ -2,9 +2,7 @@ import { describe, it, expect } from "vitest";
 import { isScriptActive, isScriptUnhealthy } from "./script-status";
 import type { ScriptStatus } from "@iara/contracts";
 
-function makeStatus(
-  health: ScriptStatus["health"],
-): ScriptStatus {
+function makeStatus(health: ScriptStatus["health"]): ScriptStatus {
   return {
     scriptId: "test:svc:script",
     projectId: "proj-1",

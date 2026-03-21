@@ -1,13 +1,5 @@
 import { useState, useCallback } from "react";
-import {
-  Plus,
-  Sparkles,
-  AlertTriangle,
-  GitBranch,
-  FolderOpen,
-  FileText,
-  X,
-} from "lucide-react";
+import { Plus, Sparkles, AlertTriangle, GitBranch, FolderOpen, FileText, X } from "lucide-react";
 import type { AddRepoInput } from "@iara/contracts";
 import { useAppStore } from "~/stores/app";
 import { useSidebarStore } from "~/stores/sidebar";
@@ -174,9 +166,11 @@ export function CreateProjectDialog({ open, onClose }: CreateProjectDialogProps)
   };
 
   const backButton =
-    step === "input" ? () => setStep("repos") :
-    step === "review" ? () => setStep("input") :
-    undefined;
+    step === "input"
+      ? () => setStep("repos")
+      : step === "review"
+        ? () => setStep("input")
+        : undefined;
 
   return (
     <DialogShell
@@ -220,11 +214,7 @@ export function CreateProjectDialog({ open, onClose }: CreateProjectDialogProps)
             </ul>
           )}
 
-          <Button
-            variant="dashed"
-            fullWidth
-            onClick={() => setShowAddRepo(true)}
-          >
+          <Button variant="dashed" fullWidth onClick={() => setShowAddRepo(true)}>
             <Plus size={14} />
             Add Repo
           </Button>
@@ -319,11 +309,7 @@ export function CreateProjectDialog({ open, onClose }: CreateProjectDialogProps)
           </div>
 
           <div className="flex gap-2">
-            <Button
-              variant="secondary"
-              className="flex-1"
-              onClick={() => void handleAskClaude()}
-            >
+            <Button variant="secondary" className="flex-1" onClick={() => void handleAskClaude()}>
               <Sparkles size={14} />
               Re-generate
             </Button>
