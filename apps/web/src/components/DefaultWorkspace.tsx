@@ -1,13 +1,7 @@
 import { useState, useEffect } from "react";
 import {
-  GitBranch,
   ChevronLeft,
-  CheckCircle2,
-  AlertCircle,
-  ArrowUp,
-  ArrowDown,
   Plus,
-  X,
   Sparkles,
   Code,
   FolderOpen,
@@ -24,8 +18,12 @@ import { AddRepoDialog } from "./AddRepoDialog";
 import { RegenerationBanner } from "./RegenerationBanner";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { PromptPreview } from "./PromptPreview";
+import { RepoCard, RepoSkeleton } from "./RepoCard";
+import { Button } from "./ui/Button";
+import { SectionHeader } from "./ui/SectionHeader";
+import { EmptyState } from "./ui/EmptyState";
 
-const FETCH_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
+const FETCH_INTERVAL_MS = 5 * 60 * 1000;
 
 interface DefaultWorkspaceProps {
   project: Project;
@@ -43,7 +41,6 @@ export function DefaultWorkspace({ project }: DefaultWorkspaceProps) {
 
   const [pendingResumeSessionId, setPendingResumeSessionId] = useState<string | undefined>();
 
-  // Auto-fetch repos every 5 minutes
   useEffect(() => {
     const doFetch = () => {
       void transport.request("repos.fetch", { projectId: project.id }).catch(() => {});
@@ -54,7 +51,6 @@ export function DefaultWorkspace({ project }: DefaultWorkspaceProps) {
     return () => clearInterval(id);
   }, [project.id]);
 
-  // Load repo info
   useEffect(() => {
     let cancelled = false;
     setRepoLoading(true);
@@ -91,46 +87,39 @@ export function DefaultWorkspace({ project }: DefaultWorkspaceProps) {
 
   return (
     <div className="flex h-full flex-col">
-      {/* Header */}
       <div className="flex h-12 items-center border-b border-zinc-800 px-4">
         <div className="flex items-center gap-3">
           {hasTerminal && (
-            <button
-              type="button"
-              onClick={handleBack}
-              className="rounded p-1 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-300"
-              title="Back to sessions"
-            >
+            <Button variant="ghost" size="icon" onClick={handleBack} title="Back to sessions">
               <ChevronLeft size={16} />
-            </button>
+            </Button>
           )}
           <div>
             <div className="text-sm font-medium text-zinc-100">{project.name}</div>
           </div>
         </div>
         <div className="ml-auto flex items-center gap-1">
-          <button
-            type="button"
+          <Button
+            variant="ghost"
+            size="icon-md"
             onClick={() => void transport.request("files.openInEditor", { projectId: project.id })}
-            className="rounded p-1.5 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-300"
             title="Open in editor"
           >
             <Code size={14} />
-          </button>
-          <button
-            type="button"
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon-md"
             onClick={() =>
               void transport.request("files.openInExplorer", { projectId: project.id })
             }
-            className="rounded p-1.5 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-300"
             title="Open in file explorer"
           >
             <FolderOpen size={14} />
-          </button>
+          </Button>
         </div>
       </div>
 
-      {/* Content */}
       {hasTerminal ? (
         <TerminalView
           taskId={defaultKey}
@@ -148,10 +137,6 @@ export function DefaultWorkspace({ project }: DefaultWorkspaceProps) {
     </div>
   );
 }
-
-// ---------------------------------------------------------------------------
-// Default Workspace Detail View (sessions screen)
-// ---------------------------------------------------------------------------
 
 function DefaultWorkspaceDetailView({
   project,
@@ -200,10 +185,9 @@ function DefaultWorkspaceDetailView({
         onCancel={cancel}
       />
 
-      {/* System Prompts */}
       {!showEmptyBanner && !isRegenerating && (
         <div className="mb-6">
-          <h3 className="mb-3 text-sm font-medium text-zinc-300">System Prompts</h3>
+          <SectionHeader title="System Prompts" />
           <PromptPreview
             filePath={`${project.slug}/PROJECT.md`}
             label="PROJECT.md"
@@ -212,29 +196,30 @@ function DefaultWorkspaceDetailView({
         </div>
       )}
 
-      {/* Repos */}
       <div className="mb-6">
-        <div className="mb-3 flex items-center justify-between">
-          <h3 className="text-sm font-medium text-zinc-300">Repos</h3>
-          {!isRegenerating && !showEmptyBanner && (
-            <button
-              type="button"
-              onClick={() => void handleStartRegenerate()}
-              className="flex items-center gap-1.5 rounded-md border border-zinc-700 px-2 py-1 text-xs text-zinc-500 hover:border-zinc-500 hover:text-zinc-300"
-              title="Regenerate PROJECT.md"
-            >
-              <Sparkles size={12} />
-              Regenerate PROJECT.md
-            </button>
-          )}
-        </div>
+        <SectionHeader
+          title="Repos"
+          action={
+            !isRegenerating && !showEmptyBanner ? (
+              <Button
+                variant="action"
+                size="sm"
+                onClick={() => void handleStartRegenerate()}
+                title="Regenerate PROJECT.md"
+              >
+                <Sparkles size={12} />
+                Regenerate PROJECT.md
+              </Button>
+            ) : undefined
+          }
+        />
         <div className="space-y-2">
           {repoLoading ? (
             Array.from({ length: project.repoSources.length || 1 }, (_, i) => (
               <RepoSkeleton key={i} />
             ))
           ) : repoInfo.length === 0 ? (
-            <p className="text-xs text-zinc-600">No repos yet. Add a repo to get started.</p>
+            <EmptyState message="No repos yet. Add a repo to get started." />
           ) : (
             repoInfo.map((repo) => (
               <RepoCard key={repo.name} repo={repo} onRemove={() => setRepoToDelete(repo.name)} />
@@ -242,22 +227,21 @@ function DefaultWorkspaceDetailView({
           )}
         </div>
 
-        <button
-          type="button"
+        <Button
+          variant="dashed"
+          size="sm"
+          className="mt-3"
           onClick={() => setShowAddRepo(true)}
-          className="mt-3 flex items-center gap-1.5 rounded-md border border-dashed border-zinc-700 px-3 py-2 text-xs text-zinc-500 hover:border-zinc-500 hover:text-zinc-300"
         >
           <Plus size={14} />
           Add Repo
-        </button>
+        </Button>
       </div>
 
-      {/* Environment */}
       <div className="mb-6">
         <EnvEditor projectId={project.id} workspace="default" repos={repoInfo.map((r) => r.name)} />
       </div>
 
-      {/* Sessions */}
       <div>
         <SessionList projectId={project.id} onLaunch={onLaunchSession} />
       </div>
@@ -303,76 +287,6 @@ function DefaultWorkspaceDetailView({
         }}
         onCancel={() => setRepoToDelete(null)}
       />
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Repo components
-// ---------------------------------------------------------------------------
-
-function RepoSkeleton() {
-  return (
-    <div className="animate-pulse rounded-lg border border-zinc-700 bg-zinc-800/50 px-4 py-3">
-      <div className="flex items-center gap-3">
-        <div className="h-4 w-32 rounded bg-zinc-700" />
-        <div className="h-4 w-20 rounded bg-zinc-700" />
-        <div className="ml-auto h-4 w-16 rounded bg-zinc-700" />
-      </div>
-    </div>
-  );
-}
-
-function RepoCard({ repo, onRemove }: { repo: RepoInfo; onRemove: () => void }) {
-  const isClean = repo.dirtyCount === 0;
-  const showAheadBehind = repo.ahead > 0 || repo.behind > 0;
-
-  return (
-    <div className="flex items-center gap-3 rounded-lg border border-zinc-700 bg-zinc-800/50 px-4 py-3">
-      <span className="min-w-0 shrink truncate text-sm font-bold text-zinc-100">{repo.name}</span>
-
-      <span className="flex shrink-0 items-center gap-1 text-xs text-zinc-400">
-        <GitBranch size={13} />
-        {repo.branch}
-      </span>
-
-      {isClean ? (
-        <span className="flex shrink-0 items-center gap-1 text-xs text-green-400">
-          <CheckCircle2 size={13} />
-          clean
-        </span>
-      ) : (
-        <span className="flex shrink-0 items-center gap-1 text-xs text-red-400">
-          <AlertCircle size={13} />
-          {repo.dirtyCount} modified
-        </span>
-      )}
-
-      {showAheadBehind && (
-        <span className="flex shrink-0 items-center gap-1.5 text-xs">
-          {repo.ahead > 0 && (
-            <span className="flex items-center gap-0.5 text-green-400">
-              <ArrowUp size={12} />
-              {repo.ahead}
-            </span>
-          )}
-          {repo.behind > 0 && (
-            <span className="flex items-center gap-0.5 text-red-400">
-              <ArrowDown size={12} />
-              {repo.behind}
-            </span>
-          )}
-        </span>
-      )}
-
-      <button
-        type="button"
-        onClick={onRemove}
-        className="ml-auto shrink-0 rounded-md p-1 text-zinc-600 hover:bg-zinc-700 hover:text-red-400"
-        title="Remove repo"
-      >
-        <X size={14} />
-      </button>
     </div>
   );
 }

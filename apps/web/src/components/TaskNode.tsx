@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useCallback } from "react";
 import { GitBranch, Pencil, Copy, Trash2, Circle } from "lucide-react";
 import type { Task } from "@iara/contracts";
 import { SidebarContextMenu, type ContextMenuItem } from "./SidebarContextMenu";
@@ -6,12 +6,13 @@ import { isScriptActive, isScriptUnhealthy } from "~/lib/script-status";
 import { useScriptsStore } from "~/stores/scripts";
 import { formatRelativeTime, formatAbsoluteTime } from "~/lib/format-relative-time";
 import { writeClipboard } from "~/lib/clipboard";
+import { useInlineEdit } from "~/hooks/useInlineEdit";
+import { useContextMenu } from "~/hooks/useContextMenu";
 
 interface TaskNodeProps {
   task: Task;
   isSelected: boolean;
   onSelect: () => void;
-
   onDelete: () => void;
   onRename: (newName: string) => Promise<void> | void;
 }
@@ -20,7 +21,6 @@ export function TaskNode({
   task,
   isSelected,
   onSelect,
-
   onDelete,
   onRename,
 }: TaskNodeProps) {
@@ -33,27 +33,9 @@ export function TaskNode({
     (s) =>
       s.config?.statuses.some((st) => st.workspace === task.slug && isScriptUnhealthy(st)) ?? false,
   );
-  const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
-  const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState(task.name);
 
-  const handleContextMenu = useCallback((e: React.MouseEvent) => {
-    e.preventDefault();
-    setContextMenu({ x: e.clientX, y: e.clientY });
-  }, []);
-
-  const handleDoubleClick = useCallback(() => {
-    setDraft(task.name);
-    setEditing(true);
-  }, [task.name]);
-
-  const handleSaveRename = useCallback(async () => {
-    const trimmed = draft.trim();
-    if (trimmed && trimmed !== task.name) {
-      await onRename(trimmed);
-    }
-    setEditing(false);
-  }, [draft, task.name, onRename]);
+  const { editing, startEditing, inputProps } = useInlineEdit(task.name, onRename);
+  const { position: contextMenu, handleContextMenu, close: closeContextMenu } = useContextMenu();
 
   const handleCopyBranch = useCallback(() => {
     writeClipboard(task.branch);
@@ -63,12 +45,8 @@ export function TaskNode({
     {
       label: "Rename",
       icon: Pencil,
-      onClick: () => {
-        setDraft(task.name);
-        setEditing(true);
-      },
+      onClick: startEditing,
     },
-
     {
       label: "Copy Branch",
       icon: Copy,
@@ -88,7 +66,7 @@ export function TaskNode({
         type="button"
         onClick={onSelect}
         onContextMenu={handleContextMenu}
-        onDoubleClick={handleDoubleClick}
+        onDoubleClick={startEditing}
         title={task.name}
         className={`group flex w-full items-start gap-2 rounded-md px-2 py-1.5 text-left transition-colors ${
           isSelected
@@ -96,7 +74,6 @@ export function TaskNode({
             : "text-zinc-400 hover:bg-zinc-800/50 hover:text-zinc-300"
         }`}
       >
-        {/* Content */}
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-1.5">
             {runningInTask > 0 && (
@@ -106,22 +83,7 @@ export function TaskNode({
               />
             )}
             {editing ? (
-              <input
-                type="text"
-                value={draft}
-                onChange={(e) => setDraft(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    e.preventDefault();
-                    void handleSaveRename();
-                  } else if (e.key === "Escape") {
-                    setEditing(false);
-                  }
-                }}
-                onBlur={() => void handleSaveRename()}
-                autoFocus
-                className="w-full rounded border border-zinc-600 bg-zinc-800 px-1 py-0 text-sm text-zinc-100 outline-none focus:border-blue-500"
-              />
+              <input type="text" {...inputProps} className="w-full rounded border border-zinc-600 bg-zinc-800 px-1 py-0 text-sm text-zinc-100 outline-none focus:border-blue-500" />
             ) : (
               <span className="block truncate text-sm">{task.name}</span>
             )}
@@ -132,7 +94,6 @@ export function TaskNode({
           </div>
         </div>
 
-        {/* Timestamp */}
         <span
           className="shrink-0 pt-0.5 text-xs text-zinc-600"
           title={formatAbsoluteTime(task.updatedAt)}
@@ -145,7 +106,7 @@ export function TaskNode({
         <SidebarContextMenu
           items={contextMenuItems}
           position={contextMenu}
-          onClose={() => setContextMenu(null)}
+          onClose={closeContextMenu}
         />
       )}
     </>

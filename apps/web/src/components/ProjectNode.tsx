@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from "react";
+import { useState, useEffect } from "react";
 import {
   ChevronRight,
   FolderOpen,
@@ -17,6 +17,8 @@ import { isScriptActive, isScriptUnhealthy } from "~/lib/script-status";
 import { useTaskStore } from "~/stores/tasks";
 import { useScriptsStore } from "~/stores/scripts";
 import { ConfirmDialog } from "./ConfirmDialog";
+import { useInlineEdit } from "~/hooks/useInlineEdit";
+import { useContextMenu } from "~/hooks/useContextMenu";
 
 const MAX_VISIBLE_TASKS = 6;
 
@@ -51,12 +53,11 @@ export function ProjectNode({
 
   const tasks = getTasksForProject(project.id);
   const [showAll, setShowAll] = useState(false);
-  const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
-  const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState(project.name);
   const [deleteTarget, setDeleteTarget] = useState<Task | null>(null);
 
-  // Load tasks when expanded
+  const { editing, startEditing, inputProps } = useInlineEdit(project.name, onRenameProject);
+  const { position: contextMenu, handleContextMenu, close: closeContextMenu } = useContextMenu();
+
   useEffect(() => {
     if (isExpanded) {
       void loadTasks(project.id);
@@ -66,34 +67,13 @@ export function ProjectNode({
   const visibleTasks = showAll ? tasks : tasks.slice(0, MAX_VISIBLE_TASKS);
   const hiddenCount = tasks.length - MAX_VISIBLE_TASKS;
 
-  const handleContextMenu = useCallback((e: React.MouseEvent) => {
-    e.preventDefault();
-    setContextMenu({ x: e.clientX, y: e.clientY });
-  }, []);
-
-  const handleDoubleClick = useCallback(() => {
-    setDraft(project.name);
-    setEditing(true);
-  }, [project.name]);
-
-  const handleSaveRename = useCallback(async () => {
-    const trimmed = draft.trim();
-    if (trimmed && trimmed !== project.name) {
-      await onRenameProject(trimmed);
-    }
-    setEditing(false);
-  }, [draft, project.name, onRenameProject]);
-
   const contextMenuItems: ContextMenuItem[] = [
     { label: "New Task", icon: Plus, onClick: onCreateTask },
     ...(onAddRepo ? [{ label: "Add Repo", icon: FolderPlus, onClick: onAddRepo }] : []),
     {
       label: "Rename",
       icon: Pencil,
-      onClick: () => {
-        setDraft(project.name);
-        setEditing(true);
-      },
+      onClick: startEditing,
     },
     { label: "Delete", icon: Trash2, onClick: onDeleteProject, variant: "danger" },
   ];
@@ -101,7 +81,6 @@ export function ProjectNode({
   return (
     <>
       <div className="flex flex-col">
-        {/* Project header */}
         <div
           className="group flex items-center gap-1 rounded-md px-2 py-1.5 transition-colors hover:bg-zinc-800/50"
           onContextMenu={handleContextMenu}
@@ -127,27 +106,12 @@ export function ProjectNode({
           )}
 
           {editing ? (
-            <input
-              type="text"
-              value={draft}
-              onChange={(e) => setDraft(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  e.preventDefault();
-                  void handleSaveRename();
-                } else if (e.key === "Escape") {
-                  setEditing(false);
-                }
-              }}
-              onBlur={() => void handleSaveRename()}
-              autoFocus
-              className="min-w-0 flex-1 rounded border border-zinc-600 bg-zinc-800 px-1 py-0 text-sm text-zinc-100 outline-none focus:border-blue-500"
-            />
+            <input type="text" {...inputProps} />
           ) : (
             <button
               type="button"
               onClick={onToggle}
-              onDoubleClick={handleDoubleClick}
+              onDoubleClick={startEditing}
               title={project.name}
               className="min-w-0 flex-1 truncate text-left text-sm text-zinc-300 hover:text-zinc-100"
             >
@@ -156,10 +120,8 @@ export function ProjectNode({
           )}
         </div>
 
-        {/* Expanded: tasks */}
         {isExpanded && (
           <div className="ml-3 flex flex-col gap-0.5 border-l border-zinc-800 pl-2">
-            {/* Project Workspace item */}
             <button
               type="button"
               onClick={() => onSelectTask(null)}
@@ -197,7 +159,6 @@ export function ProjectNode({
                     onSelect={() => onSelectTask(task.id)}
                     onDelete={() => setDeleteTarget(task)}
                     onRename={async (newName) => {
-                      // TODO: wire up task rename when API supports it
                       console.log("Rename task", task.id, "to", newName);
                     }}
                   />
@@ -215,7 +176,6 @@ export function ProjectNode({
               </>
             )}
 
-            {/* Fixed add task button */}
             <button
               type="button"
               onClick={onCreateTask}
@@ -232,7 +192,7 @@ export function ProjectNode({
         <SidebarContextMenu
           items={contextMenuItems}
           position={contextMenu}
-          onClose={() => setContextMenu(null)}
+          onClose={closeContextMenu}
         />
       )}
 
