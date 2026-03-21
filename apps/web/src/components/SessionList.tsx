@@ -1,30 +1,28 @@
 import { useEffect } from "react";
 import { Clock, MessageSquare, Play, Plus } from "lucide-react";
 import type { SessionInfo } from "@iara/contracts";
-import { useSessionStore } from "~/stores/sessions";
+import { useAppStore } from "~/stores/app";
 
 type SessionListProps = {
   onLaunch?: (resumeSessionId?: string | undefined, sessionCwd?: string | undefined) => void;
 } & ({ taskId: string; projectId?: never } | { projectId: string; taskId?: never });
 
 export function SessionList({ taskId, projectId, onLaunch }: SessionListProps) {
-  const loadForWorkspace = useSessionStore((s) => s.loadForWorkspace);
-  const loadForProject = useSessionStore((s) => s.loadForProject);
-  const isLoading = useSessionStore((s) => s.isLoading);
-  const getForWorkspace = useSessionStore((s) => s.getForWorkspace);
-  const getForProject = useSessionStore((s) => s.getForProject);
+  const refreshSessions = useAppStore((s) => s.refreshSessions);
+  const refreshSessionsByProject = useAppStore((s) => s.refreshSessionsByProject);
+  const getSessions = useAppStore((s) => s.getSessions);
 
-  const key = taskId ? `ws:${taskId}` : `project:${projectId}`;
-  const loading = isLoading(key);
-  const sessions = taskId ? getForWorkspace(taskId) : getForProject(projectId!);
+  const key = taskId ?? `project:${projectId}`;
+  const sessions = getSessions(key);
 
+  // SWR: background refresh
   useEffect(() => {
     if (taskId) {
-      void loadForWorkspace(taskId);
+      void refreshSessions(taskId);
     } else {
-      void loadForProject(projectId!);
+      void refreshSessionsByProject(projectId!);
     }
-  }, [taskId, projectId, loadForWorkspace, loadForProject]);
+  }, [taskId, projectId, refreshSessions, refreshSessionsByProject]);
 
   return (
     <div>
@@ -42,9 +40,7 @@ export function SessionList({ taskId, projectId, onLaunch }: SessionListProps) {
         )}
       </div>
 
-      {loading && sessions.length === 0 ? (
-        <p className="py-2 text-xs text-zinc-600">Loading sessions...</p>
-      ) : sessions.length === 0 ? (
+      {sessions.length === 0 ? (
         <p className="py-2 text-xs text-zinc-600">No sessions yet.</p>
       ) : (
         <ul className="space-y-1">

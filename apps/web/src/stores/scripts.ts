@@ -1,10 +1,27 @@
 import { create } from "zustand";
 import type { EssencialKey, ScriptStatus, ScriptsConfig } from "@iara/contracts";
 import { transport } from "../lib/ws-transport.js";
+import { LocalCache, MapCache } from "../lib/local-cache.js";
+import { ScriptsPanelSchema, ScriptsConfigSchema } from "../lib/cache-schemas.js";
 
 const MAX_LOG_LINES = 1000;
 
 type PanelTab = "scripts" | "output" | null;
+
+const panelCache = new LocalCache({
+  key: "iara:scripts-panel",
+  version: 1,
+  schema: ScriptsPanelSchema,
+});
+
+const cachedPanel = panelCache.get();
+
+const scriptsConfigCache = new MapCache({
+  key: "iara:scripts-config",
+  version: 1,
+  schema: ScriptsConfigSchema,
+  maxEntries: 20,
+});
 
 interface ScriptsState {
   config: ScriptsConfig | null;
@@ -48,19 +65,23 @@ export const useScriptsStore = create<ScriptsState & ScriptsActions>((set, get) 
   discoveringProjects: new Set<string>(),
   logs: new Map(),
   selectedLog: null,
-  activeTab: null,
-  collapsed: false,
+  activeTab: cachedPanel?.activeTab ?? null,
+  collapsed: cachedPanel?.collapsed ?? false,
 
   loadConfig: async (workspaceId) => {
+    // Show cached config immediately if available
+    const cachedConfig = scriptsConfigCache.getEntry(workspaceId);
     set({
-      loading: true,
+      loading: !cachedConfig,
       selectedLog: null,
       activeTab: "scripts",
       currentWorkspaceId: workspaceId,
+      config: cachedConfig,
     });
     try {
       const config = await transport.request("scripts.load", { workspaceId });
       set({ config, loading: false });
+      scriptsConfigCache.setEntry(workspaceId, config);
     } catch {
       set({ loading: false });
     }
@@ -116,8 +137,15 @@ export const useScriptsStore = create<ScriptsState & ScriptsActions>((set, get) 
     }
   },
 
-  setActiveTab: (tab) => set({ activeTab: tab }),
-  setCollapsed: (collapsed) => set({ collapsed, ...(collapsed ? { activeTab: null } : {}) }),
+  setActiveTab: (tab) => {
+    set({ activeTab: tab });
+    panelCache.set({ activeTab: tab, collapsed: get().collapsed });
+  },
+  setCollapsed: (collapsed) => {
+    const activeTab = collapsed ? null : get().activeTab;
+    set({ collapsed, ...(collapsed ? { activeTab: null } : {}) });
+    panelCache.set({ activeTab, collapsed });
+  },
 
   subscribePush: () => {
     const unsubStatus = transport.subscribe(
@@ -126,8 +154,8 @@ export const useScriptsStore = create<ScriptsState & ScriptsActions>((set, get) 
         const { config, currentWorkspaceId } = get();
         if (!config) return;
         // Ignore statuses from other workspaces
-        // status.projectId is the full workspaceId (e.g. "project/default")
-        if (status.projectId !== currentWorkspaceId) return;
+        const statusWorkspaceId = `${status.projectId}/${status.workspace}`;
+        if (statusWorkspaceId !== currentWorkspaceId) return;
         const existing = config.statuses.findIndex((s) => s.scriptId === status.scriptId);
         if (existing >= 0) {
           const prev = config.statuses[existing]!;

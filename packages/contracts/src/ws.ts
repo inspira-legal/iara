@@ -32,7 +32,12 @@ export type WsMethods = {
   // State
   "state.init": {
     params: Record<string, never>;
-    result: { projects: Project[]; settings: Record<string, string> };
+    result: {
+      projects: Project[];
+      settings: Record<string, string>;
+      repoInfo: Record<string, RepoInfo[]>;
+      sessions: Record<string, SessionInfo[]>;
+    };
   };
 
   // Projects

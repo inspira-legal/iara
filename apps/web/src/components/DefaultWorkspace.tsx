@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { ChevronLeft, Plus, Sparkles, Code, FolderOpen } from "lucide-react";
-import type { Project, RepoInfo } from "@iara/contracts";
+import type { Project } from "@iara/contracts";
 import { transport } from "~/lib/ws-transport.js";
 import { useAppStore } from "~/stores/app";
 import { useTerminalStore } from "~/stores/terminal";
@@ -29,13 +29,14 @@ export function DefaultWorkspace({ project }: DefaultWorkspaceProps) {
   const terminalEntry = useTerminalStore((s) => s.getEntry(defaultKey));
   const resetToSessions = useTerminalStore((s) => s.resetToSessions);
   const createTerminal = useTerminalStore((s) => s.create);
-  const [repoInfo, setRepoInfo] = useState<RepoInfo[]>([]);
-  const [repoLoading, setRepoLoading] = useState(true);
+  const repoInfo = useAppStore((s) => s.getRepoInfo(defaultKey));
+  const refreshRepoInfo = useAppStore((s) => s.refreshRepoInfo);
 
   const hasTerminal = terminalEntry.status !== "idle";
 
   const [pendingResumeSessionId, setPendingResumeSessionId] = useState<string | undefined>();
 
+  // Background git fetch on interval
   useEffect(() => {
     const doFetch = () => {
       void transport.request("repos.fetch", { projectId: project.id }).catch(() => {});
@@ -46,29 +47,18 @@ export function DefaultWorkspace({ project }: DefaultWorkspaceProps) {
     return () => clearInterval(id);
   }, [project.id]);
 
+  // SWR: refresh repo info from server (store already has cached data)
   useEffect(() => {
-    let cancelled = false;
-    setRepoLoading(true);
+    void refreshRepoInfo(project.id, defaultKey);
+  }, [project.id, defaultKey, refreshRepoInfo]);
 
-    transport
-      .request("repos.getInfo", { projectId: project.id })
-      .then((info) => {
-        if (!cancelled) {
-          setRepoInfo(info);
-          setRepoLoading(false);
-        }
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setRepoInfo([]);
-          setRepoLoading(false);
-        }
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [project.id]);
+  // Periodic refresh
+  useEffect(() => {
+    const id = setInterval(() => {
+      void refreshRepoInfo(project.id, defaultKey);
+    }, FETCH_INTERVAL_MS);
+    return () => clearInterval(id);
+  }, [project.id, defaultKey, refreshRepoInfo]);
 
   const handleLaunchSession = (resumeSessionId?: string, sessionCwd?: string) => {
     setPendingResumeSessionId(resumeSessionId);
@@ -94,7 +84,15 @@ export function DefaultWorkspace({ project }: DefaultWorkspaceProps) {
           </div>
         </div>
         <div className="ml-auto flex items-center gap-1">
-          <GitSyncButton projectId={project.id} repoInfo={repoInfo} onSynced={setRepoInfo} />
+          <GitSyncButton
+            projectId={project.id}
+            repoInfo={repoInfo}
+            onSynced={(info) => {
+              useAppStore.setState((s) => ({
+                repoInfo: { ...s.repoInfo, [defaultKey]: info },
+              }));
+            }}
+          />
           <Button
             variant="ghost"
             size="icon-md"
@@ -127,8 +125,11 @@ export function DefaultWorkspace({ project }: DefaultWorkspaceProps) {
         <DefaultWorkspaceDetailView
           project={project}
           repoInfo={repoInfo}
-          repoLoading={repoLoading}
-          setRepoInfo={setRepoInfo}
+          onRepoInfoChanged={(info) => {
+            useAppStore.setState((s) => ({
+              repoInfo: { ...s.repoInfo, [defaultKey]: info },
+            }));
+          }}
           onLaunchSession={handleLaunchSession}
         />
       )}
@@ -139,14 +140,12 @@ export function DefaultWorkspace({ project }: DefaultWorkspaceProps) {
 function DefaultWorkspaceDetailView({
   project,
   repoInfo,
-  repoLoading,
-  setRepoInfo,
+  onRepoInfoChanged,
   onLaunchSession,
 }: {
   project: Project;
-  repoInfo: RepoInfo[];
-  repoLoading: boolean;
-  setRepoInfo: (info: RepoInfo[]) => void;
+  repoInfo: import("@iara/contracts").RepoInfo[];
+  onRepoInfoChanged: (info: import("@iara/contracts").RepoInfo[]) => void;
   onLaunchSession: (resumeSessionId?: string) => void;
 }) {
   const [showAddRepo, setShowAddRepo] = useState(false);
@@ -212,10 +211,8 @@ function DefaultWorkspaceDetailView({
           }
         />
         <div className="space-y-2">
-          {repoLoading ? (
-            Array.from({ length: project.repoSources.length || 1 }, (_, i) => (
-              <RepoSkeleton key={i} />
-            ))
+          {repoInfo.length === 0 && project.repoSources.length > 0 ? (
+            Array.from({ length: project.repoSources.length }, (_, i) => <RepoSkeleton key={i} />)
           ) : repoInfo.length === 0 ? (
             <EmptyState message="No repos yet. Add a repo to get started." />
           ) : (
@@ -245,7 +242,7 @@ function DefaultWorkspaceDetailView({
         onAdd={async (input) => {
           await transport.request("repos.add", { projectId: project.id, ...input });
           const info = await transport.request("repos.getInfo", { projectId: project.id });
-          setRepoInfo(info);
+          onRepoInfoChanged(info);
         }}
       />
 
@@ -276,7 +273,7 @@ function DefaultWorkspaceDetailView({
           });
           setRepoToDelete(null);
           const info = await transport.request("repos.getInfo", { projectId: project.id });
-          setRepoInfo(info);
+          onRepoInfoChanged(info);
         }}
         onCancel={() => setRepoToDelete(null)}
       />

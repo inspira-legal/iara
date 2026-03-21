@@ -37,5 +37,18 @@ export type {
   WsResponseOk,
   WsServerMessage,
 } from "./ws.js";
-export { ProjectFileSchema, SettingsFileSchema, WorkspaceFileSchema } from "./schemas.js";
+export {
+  ProjectFileSchema,
+  SettingsFileSchema,
+  WorkspaceFileSchema,
+  ProjectSchema,
+  WorkspaceSchema,
+  RepoInfoSchema,
+  SessionInfoSchema,
+  ScriptEntrySchema,
+  ScriptStatusSchema,
+  ServiceDefSchema,
+  ResolvedServiceDefSchema,
+  ScriptsConfigSchema,
+} from "./schemas.js";
 export type { ProjectFile, SettingsFile, WorkspaceFile } from "./schemas.js";

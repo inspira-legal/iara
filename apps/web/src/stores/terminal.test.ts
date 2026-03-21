@@ -4,10 +4,10 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 // Transport mock
 // ---------------------------------------------------------------------------
 
-const { mockRequest, mockSubscribe, mockInvalidateWorkspace } = vi.hoisted(() => ({
+const { mockRequest, mockSubscribe, mockRefreshSessions } = vi.hoisted(() => ({
   mockRequest: vi.fn(),
   mockSubscribe: vi.fn(() => vi.fn()),
-  mockInvalidateWorkspace: vi.fn(),
+  mockRefreshSessions: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock("~/lib/ws-transport", () => ({
@@ -17,10 +17,10 @@ vi.mock("~/lib/ws-transport", () => ({
   },
 }));
 
-vi.mock("./sessions", () => ({
-  useSessionStore: {
+vi.mock("./app", () => ({
+  useAppStore: {
     getState: () => ({
-      invalidateWorkspace: mockInvalidateWorkspace,
+      refreshSessions: mockRefreshSessions,
     }),
   },
 }));
@@ -112,7 +112,7 @@ describe("useTerminalStore", () => {
 
       await useTerminalStore.getState().create("proj1/ws1");
 
-      expect(mockInvalidateWorkspace).toHaveBeenCalledWith("proj1/ws1");
+      expect(mockRefreshSessions).toHaveBeenCalledWith("proj1/ws1");
     });
 
     it("passes resumeSessionId when provided", async () => {
@@ -296,7 +296,7 @@ describe("useTerminalStore", () => {
 
       expect(mockRequest).toHaveBeenCalledWith("terminal.destroy", { terminalId: "term-1" });
       expect(useTerminalStore.getState().entries.has("proj1/ws1")).toBe(false);
-      expect(mockInvalidateWorkspace).toHaveBeenCalledWith("proj1/ws1");
+      expect(mockRefreshSessions).toHaveBeenCalledWith("proj1/ws1");
     });
 
     it("skips destroy call if no terminalId", () => {
@@ -307,7 +307,7 @@ describe("useTerminalStore", () => {
       useTerminalStore.getState().resetToSessions("proj1/ws1");
 
       expect(mockRequest).not.toHaveBeenCalled();
-      expect(mockInvalidateWorkspace).toHaveBeenCalledWith("proj1/ws1");
+      expect(mockRefreshSessions).toHaveBeenCalledWith("proj1/ws1");
     });
   });
 
@@ -329,7 +329,7 @@ describe("useTerminalStore", () => {
       useTerminalStore.getState().handleExit("term-1", 0);
 
       expect(useTerminalStore.getState().entries.has("proj1/ws1")).toBe(false);
-      expect(mockInvalidateWorkspace).toHaveBeenCalledWith("proj1/ws1");
+      expect(mockRefreshSessions).toHaveBeenCalledWith("proj1/ws1");
     });
 
     it("non-zero exit code sets exited state", () => {

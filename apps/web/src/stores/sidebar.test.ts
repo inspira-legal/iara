@@ -4,7 +4,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 // localStorage mock
 // ---------------------------------------------------------------------------
 
-const STORAGE_KEY = "iara:sidebar-state:v2";
+const STORAGE_KEY = "iara:sidebar-state";
 
 const storageData: Record<string, string> = {};
 
@@ -81,8 +81,9 @@ describe("useSidebarStore", () => {
     it("saves to localStorage after toggle", () => {
       useSidebarStore.getState().toggleProject("proj1");
       expect(localStorageMock.setItem).toHaveBeenCalledWith(STORAGE_KEY, expect.any(String));
-      const saved = JSON.parse(localStorageMock.setItem.mock.calls[0]![1] as string);
-      expect(saved.expandedProjectIds).toContain("proj1");
+      const envelope = JSON.parse(localStorageMock.setItem.mock.calls[0]![1] as string);
+      expect(envelope.v).toBe(1);
+      expect(envelope.data.expandedProjectIds).toContain("proj1");
     });
   });
 
@@ -141,8 +142,8 @@ describe("useSidebarStore", () => {
     it("saves to localStorage", () => {
       useSidebarStore.getState().setProjectOrder(["proj1"]);
       expect(localStorageMock.setItem).toHaveBeenCalled();
-      const saved = JSON.parse(localStorageMock.setItem.mock.calls[0]![1] as string);
-      expect(saved.projectOrder).toEqual(["proj1"]);
+      const envelope = JSON.parse(localStorageMock.setItem.mock.calls[0]![1] as string);
+      expect(envelope.data.projectOrder).toEqual(["proj1"]);
     });
   });
 
@@ -153,8 +154,11 @@ describe("useSidebarStore", () => {
   describe("hydrateFromStorage()", () => {
     it("reads from localStorage and sets state", () => {
       storageData[STORAGE_KEY] = JSON.stringify({
-        expandedProjectIds: ["proj1", "proj2"],
-        projectOrder: ["proj2", "proj1"],
+        v: 1,
+        data: {
+          expandedProjectIds: ["proj1", "proj2"],
+          projectOrder: ["proj2", "proj1"],
+        },
       });
 
       useSidebarStore.getState().hydrateFromStorage();
@@ -181,7 +185,8 @@ describe("useSidebarStore", () => {
     });
 
     it("defaults missing fields", () => {
-      storageData[STORAGE_KEY] = JSON.stringify({});
+      // Wrong version — cache miss
+      storageData[STORAGE_KEY] = JSON.stringify({ v: 999, data: {} });
 
       useSidebarStore.getState().hydrateFromStorage();
 

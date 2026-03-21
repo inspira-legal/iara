@@ -1,6 +1,14 @@
 import { create } from "zustand";
+import { LocalCache } from "~/lib/local-cache";
+import { SidebarCacheSchema } from "~/lib/cache-schemas";
 
-const STORAGE_KEY = "iara:sidebar-state:v2";
+const sidebarCache = new LocalCache({
+  key: "iara:sidebar-state",
+  version: 1,
+  schema: SidebarCacheSchema,
+});
+
+const cached = sidebarCache.get();
 
 interface SidebarState {
   expandedProjectIds: Set<string>;
@@ -16,37 +24,16 @@ interface SidebarActions {
   removeProject(id: string): void;
 }
 
-function loadFromStorage(): Partial<SidebarState> {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return {};
-    const parsed = JSON.parse(raw);
-    return {
-      expandedProjectIds: new Set(parsed.expandedProjectIds ?? []),
-      projectOrder: parsed.projectOrder ?? [],
-    };
-  } catch {
-    return {};
-  }
-}
-
-function saveToStorage(state: SidebarState) {
-  try {
-    localStorage.setItem(
-      STORAGE_KEY,
-      JSON.stringify({
-        expandedProjectIds: [...state.expandedProjectIds],
-        projectOrder: state.projectOrder,
-      }),
-    );
-  } catch {
-    // localStorage may be unavailable
-  }
+function persist(state: SidebarState) {
+  sidebarCache.set({
+    expandedProjectIds: [...state.expandedProjectIds],
+    projectOrder: state.projectOrder,
+  });
 }
 
 export const useSidebarStore = create<SidebarState & SidebarActions>((set) => ({
-  expandedProjectIds: new Set<string>(),
-  projectOrder: [],
+  expandedProjectIds: new Set<string>(cached?.expandedProjectIds ?? []),
+  projectOrder: cached?.projectOrder ?? [],
 
   toggleProject: (id) => {
     set((state) => {
@@ -57,7 +44,7 @@ export const useSidebarStore = create<SidebarState & SidebarActions>((set) => ({
         next.add(id);
       }
       const newState = { ...state, expandedProjectIds: next };
-      saveToStorage(newState);
+      persist(newState);
       return { expandedProjectIds: next };
     });
   },
@@ -68,7 +55,7 @@ export const useSidebarStore = create<SidebarState & SidebarActions>((set) => ({
       const next = new Set(state.expandedProjectIds);
       next.add(id);
       const newState = { ...state, expandedProjectIds: next };
-      saveToStorage(newState);
+      persist(newState);
       return { expandedProjectIds: next };
     });
   },
@@ -79,7 +66,7 @@ export const useSidebarStore = create<SidebarState & SidebarActions>((set) => ({
       const next = new Set(state.expandedProjectIds);
       next.delete(id);
       const newState = { ...state, expandedProjectIds: next };
-      saveToStorage(newState);
+      persist(newState);
       return { expandedProjectIds: next };
     });
   },
@@ -87,14 +74,19 @@ export const useSidebarStore = create<SidebarState & SidebarActions>((set) => ({
   setProjectOrder: (ids) => {
     set((state) => {
       const newState = { ...state, projectOrder: ids };
-      saveToStorage(newState);
+      persist(newState);
       return { projectOrder: ids };
     });
   },
 
   hydrateFromStorage: () => {
-    const stored = loadFromStorage();
-    set(stored);
+    const stored = sidebarCache.get();
+    if (stored) {
+      set({
+        expandedProjectIds: new Set(stored.expandedProjectIds),
+        projectOrder: stored.projectOrder,
+      });
+    }
   },
 
   removeProject: (id) => {
@@ -103,7 +95,7 @@ export const useSidebarStore = create<SidebarState & SidebarActions>((set) => ({
       nextExpanded.delete(id);
       const nextOrder = state.projectOrder.filter((pid) => pid !== id);
       const newState = { ...state, expandedProjectIds: nextExpanded, projectOrder: nextOrder };
-      saveToStorage(newState);
+      persist(newState);
       return { expandedProjectIds: nextExpanded, projectOrder: nextOrder };
     });
   },

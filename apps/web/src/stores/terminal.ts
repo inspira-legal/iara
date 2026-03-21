@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import { transport } from "../lib/ws-transport.js";
-import { useSessionStore } from "./sessions.js";
+import { useAppStore } from "./app.js";
 
 export type TerminalStatus = "idle" | "connecting" | "active" | "exited";
 
@@ -30,6 +30,10 @@ const DEFAULT_ENTRY: TerminalEntry = {
   status: "idle",
   exitCode: null,
 };
+
+function invalidateSessions(workspaceId: string): void {
+  void useAppStore.getState().refreshSessions(workspaceId);
+}
 
 export const useTerminalStore = create<TerminalState & TerminalActions>((set, get) => ({
   entries: new Map(),
@@ -64,7 +68,7 @@ export const useTerminalStore = create<TerminalState & TerminalActions>((set, ge
         return { entries: next };
       });
       // Invalidate session list so it picks up the new session
-      useSessionStore.getState().invalidateWorkspace(workspaceId);
+      invalidateSessions(workspaceId);
     } catch (err) {
       console.error("Failed to create terminal:", err);
       set((state) => {
@@ -114,7 +118,7 @@ export const useTerminalStore = create<TerminalState & TerminalActions>((set, ge
       next.delete(workspaceId);
       return { entries: next };
     });
-    useSessionStore.getState().invalidateWorkspace(workspaceId);
+    invalidateSessions(workspaceId);
   },
 
   handleExit: (terminalId, exitCode) => {
@@ -124,7 +128,7 @@ export const useTerminalStore = create<TerminalState & TerminalActions>((set, ge
         if (entry.terminalId === terminalId) {
           if (exitCode === 0) {
             next.delete(wsId);
-            useSessionStore.getState().invalidateWorkspace(wsId);
+            invalidateSessions(wsId);
           } else {
             next.set(wsId, { ...entry, status: "exited", exitCode, terminalId: null });
           }

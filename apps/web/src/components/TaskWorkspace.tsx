@@ -1,7 +1,8 @@
 import { useState, useEffect } from "react";
 import { GitBranch, ChevronLeft, Code, FolderOpen, Sparkles } from "lucide-react";
-import type { Workspace, Project, RepoInfo } from "@iara/contracts";
+import type { Workspace, Project } from "@iara/contracts";
 import { transport } from "~/lib/ws-transport.js";
+import { useAppStore } from "~/stores/app";
 import { useTerminalStore } from "~/stores/terminal";
 import { useRegenerate } from "~/hooks/useRegenerate";
 import { RegenerationBanner } from "./RegenerationBanner";
@@ -13,7 +14,6 @@ import { RepoCard, RepoSkeleton } from "./RepoCard";
 import { GitSyncButton } from "./GitSyncButton";
 import { Button } from "./ui/Button";
 import { SectionHeader } from "./ui/SectionHeader";
-import { EmptyState } from "./ui/EmptyState";
 
 const FETCH_INTERVAL_MS = 5 * 60 * 1000;
 
@@ -26,13 +26,14 @@ export function TaskWorkspace({ project, task }: TaskWorkspaceProps) {
   const terminalEntry = useTerminalStore((s) => s.getEntry(task.id));
   const resetToSessions = useTerminalStore((s) => s.resetToSessions);
   const createTerminal = useTerminalStore((s) => s.create);
-  const [repoInfo, setRepoInfo] = useState<RepoInfo[]>([]);
-  const [repoLoading, setRepoLoading] = useState(true);
+  const repoInfo = useAppStore((s) => s.getRepoInfo(task.id));
+  const refreshRepoInfo = useAppStore((s) => s.refreshRepoInfo);
 
   const hasTerminal = terminalEntry.status !== "idle";
 
   const [pendingResumeSessionId, setPendingResumeSessionId] = useState<string | undefined>();
 
+  // Background git fetch on interval
   useEffect(() => {
     const doFetch = () => {
       void transport
@@ -45,29 +46,10 @@ export function TaskWorkspace({ project, task }: TaskWorkspaceProps) {
     return () => clearInterval(id);
   }, [project.id, task.id]);
 
+  // SWR: refresh repo info from server (store already has cached data)
   useEffect(() => {
-    let cancelled = false;
-    setRepoLoading(true);
-
-    transport
-      .request("repos.getInfo", { projectId: project.id, workspaceId: task.id })
-      .then((info) => {
-        if (!cancelled) {
-          setRepoInfo(info);
-          setRepoLoading(false);
-        }
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setRepoInfo([]);
-          setRepoLoading(false);
-        }
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [project.id, task.id]);
+    void refreshRepoInfo(project.id, task.id);
+  }, [project.id, task.id, refreshRepoInfo]);
 
   const handleLaunchSession = (resumeSessionId?: string, sessionCwd?: string) => {
     setPendingResumeSessionId(resumeSessionId);
@@ -104,7 +86,11 @@ export function TaskWorkspace({ project, task }: TaskWorkspaceProps) {
             projectId={project.id}
             workspaceId={task.id}
             repoInfo={repoInfo}
-            onSynced={setRepoInfo}
+            onSynced={(info) => {
+              useAppStore.setState((s) => ({
+                repoInfo: { ...s.repoInfo, [task.id]: info },
+              }));
+            }}
           />
           <Button
             variant="ghost"
@@ -143,7 +129,6 @@ export function TaskWorkspace({ project, task }: TaskWorkspaceProps) {
           project={project}
           task={task}
           repoInfo={repoInfo}
-          repoLoading={repoLoading}
           hasActiveTerminal={hasTerminal}
           onLaunchSession={handleLaunchSession}
         />
@@ -156,14 +141,12 @@ function TaskDetailView({
   project,
   task,
   repoInfo,
-  repoLoading,
   hasActiveTerminal,
   onLaunchSession,
 }: {
   project: Project;
   task: Workspace;
-  repoInfo: RepoInfo[];
-  repoLoading: boolean;
+  repoInfo: import("@iara/contracts").RepoInfo[];
   hasActiveTerminal: boolean;
   onLaunchSession: (resumeSessionId?: string, sessionCwd?: string) => void;
 }) {
@@ -231,13 +214,9 @@ function TaskDetailView({
           }
         />
         <div className="space-y-2">
-          {repoLoading ? (
-            Array.from({ length: 1 }, (_, i) => <RepoSkeleton key={i} />)
-          ) : repoInfo.length === 0 ? (
-            <EmptyState message="No repos configured." />
-          ) : (
-            repoInfo.map((repo) => <RepoCard key={repo.name} repo={repo} taskId={task.id} />)
-          )}
+          {repoInfo.length === 0
+            ? Array.from({ length: 1 }, (_, i) => <RepoSkeleton key={i} />)
+            : repoInfo.map((repo) => <RepoCard key={repo.name} repo={repo} taskId={task.id} />)}
         </div>
       </div>
 

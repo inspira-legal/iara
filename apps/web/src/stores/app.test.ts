@@ -52,16 +52,19 @@ function makeProject(overrides: Partial<Project> = {}): Project {
 const INITIAL_STATE = {
   projects: [],
   settings: {},
+  repoInfo: {},
+  sessions: {},
   selectedProjectId: null,
   selectedWorkspaceId: null,
   initialized: false,
+  stale: false,
 };
 
 // ---------------------------------------------------------------------------
 // localStorage mock
 // ---------------------------------------------------------------------------
 
-const SELECTION_KEY = "iara:selection:v1";
+const SELECTION_KEY = "iara:selection";
 
 const localStorageStore: Record<string, string> = {};
 const localStorageMock = {
@@ -84,6 +87,22 @@ const localStorageMock = {
 };
 
 vi.stubGlobal("localStorage", localStorageMock);
+
+/** Helper to read selection from the versioned LocalCache envelope */
+function readSelection(): { projectId: string | null; workspaceId: string | null } | null {
+  const raw = localStorageStore[SELECTION_KEY];
+  if (!raw) return null;
+  const envelope = JSON.parse(raw);
+  return envelope.data;
+}
+
+/** Helper to write selection into the versioned LocalCache envelope */
+function writeSelection(projectId: string | null, workspaceId: string | null): void {
+  localStorageStore[SELECTION_KEY] = JSON.stringify({
+    v: 1,
+    data: { projectId, workspaceId },
+  });
+}
 
 // ---------------------------------------------------------------------------
 // Tests
@@ -108,7 +127,7 @@ describe("useAppStore", () => {
     it("calls transport.request('state.init') and sets state", async () => {
       const projects = [makeProject()];
       const settings = { theme: "dark" };
-      mockRequest.mockResolvedValueOnce({ projects, settings });
+      mockRequest.mockResolvedValueOnce({ projects, settings, repoInfo: {}, sessions: {} });
 
       await useAppStore.getState().init();
 
@@ -117,6 +136,7 @@ describe("useAppStore", () => {
       expect(state.projects).toEqual(projects);
       expect(state.settings).toEqual(settings);
       expect(state.initialized).toBe(true);
+      expect(state.stale).toBe(false);
     });
 
     it("propagates transport errors", async () => {
@@ -533,30 +553,25 @@ describe("useAppStore", () => {
   // -----------------------------------------------------------------------
 
   describe("subscribePush()", () => {
-    it("subscribes to four events and returns unsubscribe function", () => {
-      const unsub1 = vi.fn();
-      const unsub2 = vi.fn();
-      const unsub3 = vi.fn();
-      const unsub4 = vi.fn();
-      mockSubscribe
-        .mockReturnValueOnce(unsub1)
-        .mockReturnValueOnce(unsub2)
-        .mockReturnValueOnce(unsub3)
-        .mockReturnValueOnce(unsub4);
+    it("subscribes to five events and returns unsubscribe function", () => {
+      const unsubs = Array.from({ length: 5 }, () => vi.fn());
+      for (const unsub of unsubs) {
+        mockSubscribe.mockReturnValueOnce(unsub);
+      }
 
       const unsubAll = useAppStore.getState().subscribePush();
 
-      expect(mockSubscribe).toHaveBeenCalledTimes(4);
+      expect(mockSubscribe).toHaveBeenCalledTimes(5);
       expect(mockSubscribe).toHaveBeenCalledWith("project:changed", expect.any(Function));
       expect(mockSubscribe).toHaveBeenCalledWith("workspace:changed", expect.any(Function));
       expect(mockSubscribe).toHaveBeenCalledWith("state:resync", expect.any(Function));
       expect(mockSubscribe).toHaveBeenCalledWith("settings:changed", expect.any(Function));
+      expect(mockSubscribe).toHaveBeenCalledWith("session:changed", expect.any(Function));
 
       unsubAll();
-      expect(unsub1).toHaveBeenCalled();
-      expect(unsub2).toHaveBeenCalled();
-      expect(unsub3).toHaveBeenCalled();
-      expect(unsub4).toHaveBeenCalled();
+      for (const unsub of unsubs) {
+        expect(unsub).toHaveBeenCalled();
+      }
     });
 
     it("project:changed callback calls onProjectChanged", () => {
@@ -632,8 +647,8 @@ describe("useAppStore", () => {
 
       useAppStore.getState().selectProject("proj1");
 
-      const saved = JSON.parse(localStorageStore[SELECTION_KEY]!);
-      expect(saved.projectId).toBe("proj1");
+      const saved = readSelection();
+      expect(saved!.projectId).toBe("proj1");
     });
 
     it("selectWorkspace saves to localStorage", () => {
@@ -643,19 +658,21 @@ describe("useAppStore", () => {
 
       useAppStore.getState().selectWorkspace("proj1/ws1");
 
-      const saved = JSON.parse(localStorageStore[SELECTION_KEY]!);
-      expect(saved.projectId).toBe("proj1");
-      expect(saved.workspaceId).toBe("proj1/ws1");
+      const saved = readSelection();
+      expect(saved!.projectId).toBe("proj1");
+      expect(saved!.workspaceId).toBe("proj1/ws1");
     });
 
     it("init() restores valid selection from localStorage", async () => {
       const ws = makeWorkspace({ id: "proj1/ws1", projectId: "proj1" });
       const proj = makeProject({ id: "proj1", workspaces: [ws] });
-      localStorageStore[SELECTION_KEY] = JSON.stringify({
-        projectId: "proj1",
-        workspaceId: "proj1/ws1",
+      writeSelection("proj1", "proj1/ws1");
+      mockRequest.mockResolvedValueOnce({
+        projects: [proj],
+        settings: {},
+        repoInfo: {},
+        sessions: {},
       });
-      mockRequest.mockResolvedValueOnce({ projects: [proj], settings: {} });
 
       await useAppStore.getState().init();
 
@@ -664,39 +681,36 @@ describe("useAppStore", () => {
     });
 
     it("init() clears stale selection (project deleted) from localStorage", async () => {
-      localStorageStore[SELECTION_KEY] = JSON.stringify({
-        projectId: "deleted-proj",
-        workspaceId: "deleted-proj/ws1",
-      });
-      mockRequest.mockResolvedValueOnce({ projects: [], settings: {} });
+      writeSelection("deleted-proj", "deleted-proj/ws1");
+      mockRequest.mockResolvedValueOnce({ projects: [], settings: {}, repoInfo: {}, sessions: {} });
 
       await useAppStore.getState().init();
 
       expect(useAppStore.getState().selectedProjectId).toBeNull();
       expect(useAppStore.getState().selectedWorkspaceId).toBeNull();
       // localStorage should have been cleared (saved as null/null)
-      expect(JSON.parse(localStorageStore[SELECTION_KEY]!)).toEqual({
-        projectId: null,
-        workspaceId: null,
-      });
+      const saved = readSelection();
+      expect(saved).toEqual({ projectId: null, workspaceId: null });
     });
 
     it("init() clears stale workspace but keeps valid project from localStorage", async () => {
       const proj = makeProject({ id: "proj1", workspaces: [] });
-      localStorageStore[SELECTION_KEY] = JSON.stringify({
-        projectId: "proj1",
-        workspaceId: "proj1/deleted-ws",
+      writeSelection("proj1", "proj1/deleted-ws");
+      mockRequest.mockResolvedValueOnce({
+        projects: [proj],
+        settings: {},
+        repoInfo: {},
+        sessions: {},
       });
-      mockRequest.mockResolvedValueOnce({ projects: [proj], settings: {} });
 
       await useAppStore.getState().init();
 
       expect(useAppStore.getState().selectedProjectId).toBe("proj1");
       expect(useAppStore.getState().selectedWorkspaceId).toBeNull();
       // localStorage should have been updated to keep project but clear workspace
-      const saved = JSON.parse(localStorageStore[SELECTION_KEY]!);
-      expect(saved.projectId).toBe("proj1");
-      expect(saved.workspaceId).toBeNull();
+      const saved = readSelection();
+      expect(saved!.projectId).toBe("proj1");
+      expect(saved!.workspaceId).toBeNull();
     });
 
     it("deleteProject clears selection from localStorage when deleted project was selected", async () => {
@@ -706,17 +720,14 @@ describe("useAppStore", () => {
         selectedProjectId: "proj1",
         selectedWorkspaceId: "proj1/ws1",
       });
-      localStorageStore[SELECTION_KEY] = JSON.stringify({
-        projectId: "proj1",
-        workspaceId: "proj1/ws1",
-      });
+      writeSelection("proj1", "proj1/ws1");
       mockRequest.mockResolvedValueOnce(undefined);
 
       await useAppStore.getState().deleteProject("proj1");
 
-      const saved = JSON.parse(localStorageStore[SELECTION_KEY]!);
-      expect(saved.projectId).toBeNull();
-      expect(saved.workspaceId).toBeNull();
+      const saved = readSelection();
+      expect(saved!.projectId).toBeNull();
+      expect(saved!.workspaceId).toBeNull();
     });
   });
 
