@@ -20,7 +20,6 @@ import {
 import type { EssencialKey, ResolvedServiceDef, ScriptStatus } from "@iara/contracts";
 import { isScriptActive, isScriptUnhealthy } from "~/lib/script-status";
 import { useScriptsStore, useIsDiscovering } from "~/stores/scripts";
-import { useAppStore } from "~/stores/app";
 import { useWorkspace } from "~/lib/workspace";
 import { transport } from "~/lib/ws-transport";
 
@@ -36,7 +35,11 @@ const ESSENCIAL_ICONS: Record<EssencialKey, typeof Play> = {
   test: FlaskConical,
 };
 
-export function BottomPanel({ panelRef }: { panelRef: RefObject<PanelImperativeHandle | null> }) {
+export function BottomPanel({
+  panelRef,
+}: {
+  panelRef: RefObject<PanelImperativeHandle | null>;
+}) {
   const config = useScriptsStore((s) => s.config);
   const loading = useScriptsStore((s) => s.loading);
   const activeTab = useScriptsStore((s) => s.activeTab);
@@ -46,8 +49,8 @@ export function BottomPanel({ panelRef }: { panelRef: RefObject<PanelImperativeH
   const discover = useScriptsStore((s) => s.discover);
   const setActiveTab = useScriptsStore((s) => s.setActiveTab);
   const discovering = useIsDiscovering();
-  const selectedProjectId = useAppStore((s) => s.selectedProjectId);
   const workspace = useWorkspace();
+  const projectId = workspace?.split("/")[0] ?? null;
 
   // Subscribe to push events (global, always active)
   useEffect(() => {
@@ -62,22 +65,22 @@ export function BottomPanel({ panelRef }: { panelRef: RefObject<PanelImperativeH
     }
   }, [workspace, loadConfig]);
 
-  // Collapse panel when no project is selected
+  // Collapse panel when no workspace is selected
   useEffect(() => {
-    if (!selectedProjectId && !collapsed) {
+    if (!workspace && !collapsed) {
       panelRef.current?.collapse();
     }
-  }, [selectedProjectId, collapsed, panelRef]);
+  }, [workspace, collapsed, panelRef]);
 
   // Reload config when scripts.yaml changes on disk
   useEffect(() => {
-    const unsub = transport.subscribe("scripts:reload", ({ projectId }) => {
-      if (workspace && selectedProjectId && projectId === selectedProjectId) {
+    const unsub = transport.subscribe("scripts:reload", ({ projectId: evtProjectId }) => {
+      if (workspace && projectId && evtProjectId === projectId) {
         void loadConfig(workspace);
       }
     });
     return unsub;
-  }, [selectedProjectId, workspace, loadConfig]);
+  }, [projectId, workspace, loadConfig]);
 
   // Auto-discover when project has no scripts.yaml (once per project)
   const discoveredForRef = useRef<string | null>(null);
@@ -86,13 +89,13 @@ export function BottomPanel({ panelRef }: { panelRef: RefObject<PanelImperativeH
       config &&
       !config.hasFile &&
       !discovering &&
-      selectedProjectId &&
-      discoveredForRef.current !== selectedProjectId
+      projectId &&
+      discoveredForRef.current !== projectId
     ) {
-      discoveredForRef.current = selectedProjectId;
-      void discover(selectedProjectId);
+      discoveredForRef.current = projectId;
+      void discover(projectId);
     }
-  }, [config, discovering, selectedProjectId, discover]);
+  }, [config, discovering, projectId, discover]);
 
   const statuses = config?.statuses ?? [];
   const runningCount = statuses.filter(isScriptActive).length;
@@ -117,7 +120,7 @@ export function BottomPanel({ panelRef }: { panelRef: RefObject<PanelImperativeH
   }, [hasUnhealthy, setActiveTab, collapsed, panelRef]);
 
   const toggleCollapse = () => {
-    if (!selectedProjectId) return;
+    if (!workspace) return;
     if (collapsed) {
       setActiveTab("scripts");
       panelRef.current?.expand();
@@ -127,7 +130,11 @@ export function BottomPanel({ panelRef }: { panelRef: RefObject<PanelImperativeH
   };
 
   const handleTabClick = (tab: "scripts" | "output") => {
-    if (!selectedProjectId) return;
+    if (!workspace) return;
+    if (activeTab === tab) {
+      panelRef.current?.collapse();
+      return;
+    }
     setActiveTab(tab);
     if (collapsed) {
       panelRef.current?.expand();
@@ -136,8 +143,15 @@ export function BottomPanel({ panelRef }: { panelRef: RefObject<PanelImperativeH
 
   return (
     <div className="flex h-full flex-col">
-      {/* Tab bar */}
-      <div className="flex h-8 shrink-0 items-center justify-between bg-zinc-900 px-2">
+      {/* Tab bar — always visible (panel collapses to 32px) */}
+      <div className="flex h-8 shrink-0 items-center bg-zinc-900 px-2">
+        <button
+          type="button"
+          onClick={toggleCollapse}
+          className="mr-1 rounded p-0.5 text-zinc-500 hover:text-zinc-300"
+        >
+          {collapsed ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+        </button>
         <div className="flex items-center gap-1">
           <TabButton
             label="Scripts"
@@ -156,22 +170,13 @@ export function BottomPanel({ panelRef }: { panelRef: RefObject<PanelImperativeH
             <Loader2 size={10} className="ml-1 animate-spin text-zinc-500" />
           )}
         </div>
-        <button
-          type="button"
-          onClick={toggleCollapse}
-          className="rounded p-0.5 text-zinc-500 hover:text-zinc-300"
-        >
-          {collapsed ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-        </button>
       </div>
 
       {/* Panel content */}
-      {!collapsed && (
-        <div className="flex-1 overflow-y-auto bg-zinc-950">
-          {activeTab === "scripts" && <ScriptsTab />}
-          {activeTab === "output" && <OutputTab />}
-        </div>
-      )}
+      <div className="min-h-0 flex-1 overflow-y-auto bg-zinc-950">
+        {activeTab === "scripts" && <ScriptsTab />}
+        {activeTab === "output" && <OutputTab />}
+      </div>
     </div>
   );
 }
@@ -213,9 +218,10 @@ function ScriptsTab() {
   const config = useScriptsStore((s) => s.config);
   const discover = useScriptsStore((s) => s.discover);
   const discovering = useIsDiscovering();
-  const selectedProjectId = useAppStore((s) => s.selectedProjectId);
-  if (!selectedProjectId) {
-    return <div className="p-4 text-sm text-zinc-600">Select a project to manage scripts</div>;
+  const workspace = useWorkspace();
+  const projectId = workspace?.split("/")[0] ?? null;
+  if (!projectId) {
+    return <div className="p-4 text-sm text-zinc-600">Select a workspace to manage scripts</div>;
   }
 
   if (discovering) {
@@ -233,7 +239,7 @@ function ScriptsTab() {
         <div className="text-sm text-zinc-600">No services defined</div>
         <button
           type="button"
-          onClick={() => void discover(selectedProjectId)}
+          onClick={() => void discover(projectId)}
           className="flex items-center gap-2 rounded-md bg-zinc-800/50 px-4 py-2.5 text-sm text-zinc-400 hover:bg-zinc-800 hover:text-zinc-300"
         >
           <Sparkles size={14} />
@@ -282,7 +288,6 @@ function getCategoryState(
 
 /** Toolbar with all essencial commands + edit + rediscover */
 function CommandBar() {
-  const selectedProjectId = useAppStore((s) => s.selectedProjectId);
   const config = useScriptsStore((s) => s.config);
   const runAll = useScriptsStore((s) => s.runAll);
   const stopAll = useScriptsStore((s) => s.stopAll);
@@ -312,7 +317,10 @@ function CommandBar() {
       <div className="ml-auto flex items-center gap-1">
         <button
           type="button"
-          onClick={() => selectedProjectId && void discover(selectedProjectId)}
+          onClick={() => {
+            const projectId = workspace?.split("/")[0];
+            if (projectId) void discover(projectId);
+          }}
           disabled={discovering}
           className="flex items-center gap-1.5 rounded px-2.5 py-1.5 text-xs text-zinc-600 transition-colors hover:bg-zinc-800 hover:text-zinc-400 disabled:opacity-50"
           title="Rediscover scripts"

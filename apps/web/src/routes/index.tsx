@@ -8,15 +8,8 @@ export const Route = createFileRoute("/")({
 });
 
 function HomePage() {
-  const projects = useAppStore((s) => s.projects);
-  const selectedProjectId = useAppStore((s) => s.selectedProjectId);
-  const selectedWorkspaceId = useAppStore((s) => s.selectedWorkspaceId);
-  const getWorkspace = useAppStore((s) => s.getWorkspace);
-
-  const workspace = selectedWorkspaceId ? getWorkspace(selectedWorkspaceId) : undefined;
-  const project = workspace
-    ? projects.find((p) => p.id === workspace.projectId)
-    : projects.find((p) => p.id === selectedProjectId);
+  const workspace = useAppStore((s) => s.selectedWorkspace());
+  const project = useAppStore((s) => s.selectedProject());
 
   if (workspace && workspace.type === "task" && project) {
     return <TaskWorkspace key={workspace.id} project={project} task={workspace} />;

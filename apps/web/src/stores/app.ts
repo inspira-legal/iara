@@ -5,35 +5,44 @@ import type {
   CreateProjectInput,
   UpdateProjectInput,
   CreateWorkspaceInput,
+  RepoInfo,
+  SessionInfo,
 } from "@iara/contracts";
 import { transport } from "~/lib/ws-transport";
+import { LocalCache } from "~/lib/local-cache";
+import { CachedStateSchema, SelectionCacheSchema } from "~/lib/cache-schemas";
 
 // ---------------------------------------------------------------------------
-// Selection persistence
+// Caches
 // ---------------------------------------------------------------------------
 
-const SELECTION_KEY = "iara:selection:v1";
+const stateCache = new LocalCache({
+  key: "iara:state-cache",
+  version: 1,
+  schema: CachedStateSchema,
+});
 
-interface PersistedSelection {
-  projectId: string | null;
-  workspaceId: string | null;
-}
+const selectionCache = new LocalCache({
+  key: "iara:selection",
+  version: 1,
+  schema: SelectionCacheSchema,
+});
 
 function saveSelection(projectId: string | null, workspaceId: string | null): void {
-  try {
-    localStorage.setItem(SELECTION_KEY, JSON.stringify({ projectId, workspaceId }));
-  } catch {}
+  selectionCache.set({ projectId, workspaceId });
 }
 
-function loadSelection(): PersistedSelection | null {
-  try {
-    const raw = localStorage.getItem(SELECTION_KEY);
-    if (!raw) return null;
-    return JSON.parse(raw) as PersistedSelection;
-  } catch {
-    return null;
-  }
-}
+// ---------------------------------------------------------------------------
+// Hydrate from cache (sync)
+// ---------------------------------------------------------------------------
+
+const cached = stateCache.get() as {
+  projects: Project[];
+  settings: Record<string, string>;
+  repoInfo: Record<string, RepoInfo[]>;
+  sessions: Record<string, SessionInfo[]>;
+} | null;
+const savedSelection = selectionCache.get();
 
 // ---------------------------------------------------------------------------
 // State
@@ -42,9 +51,12 @@ function loadSelection(): PersistedSelection | null {
 interface AppState {
   projects: Project[];
   settings: Record<string, string>;
+  repoInfo: Record<string, RepoInfo[]>;
+  sessions: Record<string, SessionInfo[]>;
   selectedProjectId: string | null;
   selectedWorkspaceId: string | null;
   initialized: boolean;
+  stale: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -71,6 +83,15 @@ interface AppActions {
   // Settings
   updateSetting(key: string, value: string): Promise<void>;
 
+  // Repo info
+  getRepoInfo(workspaceId: string): RepoInfo[];
+  refreshRepoInfo(projectId: string, workspaceId: string): Promise<void>;
+
+  // Sessions
+  getSessions(key: string): SessionInfo[];
+  refreshSessions(workspaceId: string): Promise<void>;
+  refreshSessionsByProject(projectId: string): Promise<void>;
+
   // Push handlers
   onProjectChanged(project: Project): void;
   onWorkspaceChanged(workspace: Workspace): void;
@@ -89,43 +110,71 @@ interface AppActions {
 }
 
 // ---------------------------------------------------------------------------
+// Restore selection from cache
+// ---------------------------------------------------------------------------
+
+function restoreSelection(
+  projects: Project[],
+  saved: { projectId: string | null; workspaceId: string | null } | null,
+): {
+  selectedProjectId: string | null;
+  selectedWorkspaceId: string | null;
+} {
+  if (!saved) return { selectedProjectId: null, selectedWorkspaceId: null };
+
+  const project = projects.find((p) => p.id === saved.projectId);
+  if (!project) {
+    saveSelection(null, null);
+    return { selectedProjectId: null, selectedWorkspaceId: null };
+  }
+
+  const workspace = saved.workspaceId
+    ? project.workspaces.find((w) => w.id === saved.workspaceId)
+    : undefined;
+
+  if (!workspace && saved.workspaceId) {
+    saveSelection(project.id, null);
+  }
+
+  return {
+    selectedProjectId: project.id,
+    selectedWorkspaceId: workspace ? workspace.id : null,
+  };
+}
+
+const restoredSelection = cached
+  ? restoreSelection(cached.projects, savedSelection)
+  : { selectedProjectId: null, selectedWorkspaceId: null };
+
+// ---------------------------------------------------------------------------
 // Store
 // ---------------------------------------------------------------------------
 
 export const useAppStore = create<AppState & AppActions>((set, get) => ({
-  projects: [],
-  settings: {},
-  selectedProjectId: null,
-  selectedWorkspaceId: null,
-  initialized: false,
+  projects: cached?.projects ?? [],
+  settings: cached?.settings ?? {},
+  repoInfo: cached?.repoInfo ?? {},
+  sessions: cached?.sessions ?? {},
+  selectedProjectId: restoredSelection.selectedProjectId,
+  selectedWorkspaceId: restoredSelection.selectedWorkspaceId,
+  initialized: !!cached,
+  stale: !!cached,
 
   // ---------------------------------------------------------------------------
   // Initialisation
   // ---------------------------------------------------------------------------
 
   init: async () => {
-    const { projects, settings } = await transport.request("state.init", {});
-    set({ projects, settings, initialized: true });
+    const { projects, settings, repoInfo, sessions } = await transport.request("state.init", {});
+    set({ projects, settings, repoInfo, sessions, initialized: true, stale: false });
 
-    // Restore persisted selection
-    const saved = loadSelection();
-    if (saved) {
-      const project = projects.find((p: Project) => p.id === saved.projectId);
-      if (project) {
-        const workspace = saved.workspaceId
-          ? project.workspaces.find((w: Workspace) => w.id === saved.workspaceId)
-          : undefined;
-        set({
-          selectedProjectId: project.id,
-          selectedWorkspaceId: workspace ? workspace.id : null,
-        });
-        if (!workspace && saved.workspaceId) {
-          saveSelection(project.id, null);
-        }
-      } else {
-        saveSelection(null, null);
-      }
-    }
+    // Persist immediately (don't wait for debounce)
+    stateCache.set({ projects, settings, repoInfo, sessions });
+
+    // Restore selection against fresh data
+    const saved = selectionCache.get();
+    const selection = restoreSelection(projects, saved);
+    set(selection);
   },
 
   // ---------------------------------------------------------------------------
@@ -141,12 +190,16 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
 
     const state = get();
     const project = state.projects.find((p) => p.id === id);
-    // Clear workspace selection unless the workspace belongs to the selected project
+    // Keep current workspace if it belongs to the selected project,
+    // otherwise select the default workspace
     const keepWorkspace =
       state.selectedWorkspaceId != null &&
       project?.workspaces.some((w) => w.id === state.selectedWorkspaceId);
 
-    const newWorkspaceId = keepWorkspace ? state.selectedWorkspaceId : null;
+    const defaultWorkspace = project?.workspaces.find((w) => w.type === "default");
+    const newWorkspaceId = keepWorkspace
+      ? state.selectedWorkspaceId
+      : (defaultWorkspace?.id ?? null);
     set({
       selectedProjectId: id,
       selectedWorkspaceId: newWorkspaceId,
@@ -243,6 +296,55 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
       settings: { ...state.settings, [key]: value },
     }));
     await transport.request("settings.set", { key, value });
+  },
+
+  // ---------------------------------------------------------------------------
+  // Repo info
+  // ---------------------------------------------------------------------------
+
+  getRepoInfo: (workspaceId) => {
+    return get().repoInfo[workspaceId] ?? [];
+  },
+
+  refreshRepoInfo: async (projectId, workspaceId) => {
+    try {
+      const info = await transport.request("repos.getInfo", { projectId, workspaceId });
+      set((state) => ({
+        repoInfo: { ...state.repoInfo, [workspaceId]: info },
+      }));
+    } catch {
+      // ignore — keep stale data
+    }
+  },
+
+  // ---------------------------------------------------------------------------
+  // Sessions
+  // ---------------------------------------------------------------------------
+
+  getSessions: (key) => {
+    return get().sessions[key] ?? [];
+  },
+
+  refreshSessions: async (workspaceId) => {
+    try {
+      const sessions = await transport.request("sessions.list", { workspaceId });
+      set((state) => ({
+        sessions: { ...state.sessions, [workspaceId]: sessions },
+      }));
+    } catch {
+      // ignore — keep stale data
+    }
+  },
+
+  refreshSessionsByProject: async (projectId) => {
+    try {
+      const sessions = await transport.request("sessions.listByProject", { projectId });
+      set((state) => ({
+        sessions: { ...state.sessions, [`project:${projectId}`]: sessions },
+      }));
+    } catch {
+      // ignore — keep stale data
+    }
   },
 
   // ---------------------------------------------------------------------------
@@ -350,6 +452,9 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
       transport.subscribe("settings:changed", (params) => {
         get().onSettingsChanged(params.key, params.value);
       }),
+      transport.subscribe("session:changed", ({ workspaceId }) => {
+        void get().refreshSessions(workspaceId);
+      }),
     ];
 
     return () => {
@@ -359,3 +464,25 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
     };
   },
 }));
+
+// ---------------------------------------------------------------------------
+// Debounced cache persistence — auto-writes state after any mutation
+// ---------------------------------------------------------------------------
+
+let persistTimer: ReturnType<typeof setTimeout> | null = null;
+
+useAppStore.subscribe(() => {
+  const current = useAppStore.getState();
+  if (!current.initialized) return;
+
+  if (persistTimer) clearTimeout(persistTimer);
+  persistTimer = setTimeout(() => {
+    const fresh = useAppStore.getState();
+    stateCache.set({
+      projects: fresh.projects,
+      settings: fresh.settings,
+      repoInfo: fresh.repoInfo,
+      sessions: fresh.sessions,
+    });
+  }, 300);
+});
