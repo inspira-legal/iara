@@ -126,8 +126,8 @@ export const useScriptsStore = create<ScriptsState & ScriptsActions>((set, get) 
         const { config, currentWorkspaceId } = get();
         if (!config) return;
         // Ignore statuses from other workspaces
-        const wsId = `${status.projectId}/${status.workspace}`;
-        if (wsId !== currentWorkspaceId) return;
+        // status.projectId is the full workspaceId (e.g. "project/default")
+        if (status.projectId !== currentWorkspaceId) return;
         const existing = config.statuses.findIndex((s) => s.scriptId === status.scriptId);
         if (existing >= 0) {
           const prev = config.statuses[existing]!;
