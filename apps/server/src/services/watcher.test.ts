@@ -112,8 +112,7 @@ describe("ProjectsWatcher", () => {
       const project1 = { slug: "proj1" };
       const project2 = { slug: "proj2" };
       const appState = createMockAppState({
-        rescanProject: vi.fn().mockReturnValue({}),
-        getProject: vi.fn((slug: string) => {
+        rescanProject: vi.fn((slug: string) => {
           if (slug === "proj1") return project1;
           if (slug === "proj2") return project2;
           return null;
@@ -131,10 +130,11 @@ describe("ProjectsWatcher", () => {
       expect(pushFn).toHaveBeenCalledWith("project:changed", { project: project2 });
     });
 
-    it("does full resync when rescanProject returns null", () => {
+    it("does full resync when a previously known project disappears", () => {
       const state = { projects: [], settings: {} };
       const appState = createMockAppState({
         rescanProject: vi.fn().mockReturnValue(null),
+        getProject: vi.fn().mockReturnValue({ slug: "deleted" }),
         getState: vi.fn().mockReturnValue(state),
       });
 

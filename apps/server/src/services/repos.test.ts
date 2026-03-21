@@ -9,14 +9,29 @@ vi.mock("node:child_process", () => ({
 }));
 
 vi.mock("@iara/shared/git", () => ({
+  GitOperationError: class GitOperationError extends Error {
+    override readonly name = "GitOperationError";
+    constructor(
+      public readonly command: string,
+      public readonly stderr: string,
+      public readonly exitCode: number | null,
+    ) {
+      super(`git ${command} failed: ${stderr.trim()}`);
+    }
+  },
+  GitNotInstalledError: class GitNotInstalledError extends Error {
+    override readonly name = "GitNotInstalledError";
+  },
   gitCloneWithProgress: vi.fn().mockResolvedValue(undefined),
+  gitLsRemote: vi.fn().mockResolvedValue(undefined),
   gitFetch: vi.fn().mockResolvedValue(undefined),
   gitPull: vi.fn().mockResolvedValue(undefined),
+  gitPush: vi.fn().mockResolvedValue(undefined),
   gitWorktreeAdd: vi.fn().mockResolvedValue(undefined),
 }));
 
 import { execSync } from "node:child_process";
-import { gitCloneWithProgress, gitWorktreeAdd } from "@iara/shared/git";
+import { gitCloneWithProgress, gitLsRemote, gitWorktreeAdd } from "@iara/shared/git";
 import { getRepoInfo, addRepo } from "./repos.js";
 
 let tmpDir: string;
@@ -38,6 +53,7 @@ beforeEach(() => {
   // Restore default mock implementations after restoreAllMocks clears them
   vi.mocked(execSync).mockReturnValue(Buffer.from(""));
   vi.mocked(gitCloneWithProgress).mockResolvedValue(undefined);
+  vi.mocked(gitLsRemote).mockResolvedValue(undefined);
   vi.mocked(gitWorktreeAdd).mockResolvedValue(undefined);
 });
 

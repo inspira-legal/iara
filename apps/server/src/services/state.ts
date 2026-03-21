@@ -296,18 +296,41 @@ export class AppState {
   rescanProject(slug: string): Project | null {
     const project = this.readProject(slug);
 
-    const idx = this.state.projects.findIndex((p) => p.id === slug);
     if (project) {
-      if (idx >= 0) {
-        this.state.projects[idx] = project;
-      } else {
-        this.state.projects.push(project);
-      }
-    } else if (idx >= 0) {
-      this.state.projects.splice(idx, 1);
+      this.upsertProject(project);
+    } else {
+      const idx = this.state.projects.findIndex((p) => p.id === slug);
+      if (idx >= 0) this.state.projects.splice(idx, 1);
     }
 
     return project;
+  }
+
+  /** Create and register an empty project (no repos on disk yet). */
+  createEmptyProject(
+    slug: string,
+    data: { name: string; description: string; repoSources: string[] },
+  ): Project {
+    const project: Project = {
+      id: slug,
+      slug,
+      name: data.name,
+      description: data.description,
+      repoSources: data.repoSources,
+      createdAt: new Date().toISOString(),
+      workspaces: [],
+    };
+    this.upsertProject(project);
+    return project;
+  }
+
+  private upsertProject(project: Project): void {
+    const idx = this.state.projects.findIndex((p) => p.id === project.id);
+    if (idx >= 0) {
+      this.state.projects[idx] = project;
+    } else {
+      this.state.projects.push(project);
+    }
   }
 
   // ---------------------------------------------------------------------------

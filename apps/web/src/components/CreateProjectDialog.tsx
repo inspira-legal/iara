@@ -53,12 +53,13 @@ export function CreateProjectDialog({ open, onClose }: CreateProjectDialogProps)
   const [submitting, setSubmitting] = useState(false);
   const [progress, setProgress] = useState("");
 
-  const { projects, createProject } = useAppStore();
+  const { projects, createProject, deleteProject } = useAppStore();
   const { expandProject } = useSidebarStore();
   const { toast } = useToast();
 
   const computedSlug = toSlug(name);
-  const slugTaken = computedSlug !== "" && projects.some((p) => p.slug === computedSlug);
+  const existingProject = computedSlug !== "" ? projects.find((p) => p.slug === computedSlug) : undefined;
+  const slugTaken = !!existingProject && existingProject.workspaces.length > 0;
 
   const claude = useClaudeSuggestion({
     requestFn: (userGoal) => transport.request("projects.suggest", { userGoal }),
@@ -104,6 +105,9 @@ export function CreateProjectDialog({ open, onClose }: CreateProjectDialogProps)
     if (pendingRepos.some((r) => r.input.name === input.name)) {
       throw new Error(`Repo "${input.name}" already added`);
     }
+    if (input.method === "git-url" && input.url) {
+      await transport.request("repos.validateUrl", { url: input.url });
+    }
     setPendingRepos((prev) => [...prev, { input }]);
   };
 
@@ -122,6 +126,7 @@ export function CreateProjectDialog({ open, onClose }: CreateProjectDialogProps)
     setSubmitting(true);
     setStep("creating");
 
+    let projectId: string | null = null;
     try {
       setProgress("Creating project...");
       const project = await createProject({
@@ -130,6 +135,7 @@ export function CreateProjectDialog({ open, onClose }: CreateProjectDialogProps)
         description: description.trim(),
         repoSources: [],
       });
+      projectId = project.id;
 
       const total = pendingRepos.length;
       for (const [i, repo] of pendingRepos.entries()) {
@@ -152,9 +158,12 @@ export function CreateProjectDialog({ open, onClose }: CreateProjectDialogProps)
       resetForm();
       onClose();
     } catch (err) {
+      if (projectId) {
+        try { await deleteProject(projectId); } catch { /* best effort */ }
+      }
       toast(`Failed: ${err instanceof Error ? err.message : String(err)}`, "error");
-      setSubmitting(false);
-      setStep("review");
+      resetForm();
+      onClose();
     }
   };
 

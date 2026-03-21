@@ -86,8 +86,6 @@ interface QueryStreamConfig {
   prompt: string;
   cwd: string;
   systemPrompt?: string;
-  sessionId?: string;
-  resume?: string;
   maxTurns: number;
   abortController: AbortController;
   tempFile: string;
@@ -103,7 +101,7 @@ async function runQueryStream(
     allowedTools: ["Read", "Glob", "Grep", "Write"],
     disallowedTools: ["Bash", "Edit"],
     maxTurns: config.maxTurns,
-    persistSession: true,
+    persistSession: false,
     abortController: config.abortController,
     canUseTool: async (toolName: string, input: Record<string, unknown>) => {
       if (toolName === "Write" && input.file_path !== config.tempFile) {
@@ -118,8 +116,6 @@ async function runQueryStream(
   };
 
   if (config.systemPrompt) options.systemPrompt = config.systemPrompt;
-  if (config.sessionId) options.sessionId = config.sessionId;
-  if (config.resume) options.resume = config.resume;
 
   let result: { subtype: string; errors?: string[] } = { subtype: "no_result" };
 
@@ -216,7 +212,6 @@ export function runClaude<T>(
   schema?: z.ZodType<T>,
 ): ClaudeRun<T | string> {
   const tempFile = path.join(os.tmpdir(), `iara-claude-${crypto.randomUUID()}.json`);
-  const sessionId = crypto.randomUUID();
   const progress = createProgressQueue();
   const describeToolUse = makeDescribeToolUse(config.cwd);
 
@@ -231,27 +226,32 @@ export function runClaude<T>(
     .filter(Boolean)
     .join("\n\n");
 
+  const baseStreamConfig = {
+    cwd: config.cwd,
+    systemPrompt,
+    maxTurns: config.maxTurns ?? DEFAULT_MAX_TURNS,
+    abortController,
+    tempFile,
+    pushProgress: progress.push,
+    describeToolUse,
+  };
+
+  const runRetry = async (retryPrompt: string) => {
+    const result = await runQueryStream({ ...baseStreamConfig, prompt: retryPrompt });
+    if (result.subtype !== "success") {
+      throw new Error(`Retry query failed: ${result.errors?.join(", ") ?? result.subtype}`);
+    }
+  };
+
   const resultPromise = (async (): Promise<T | string> => {
     try {
-      // Initial query
-      const firstResult = await runQueryStream({
-        prompt: config.prompt,
-        cwd: config.cwd,
-        systemPrompt,
-        sessionId,
-        maxTurns: config.maxTurns ?? DEFAULT_MAX_TURNS,
-        abortController,
-        tempFile,
-        pushProgress: progress.push,
-        describeToolUse,
-      });
+      const firstResult = await runQueryStream({ ...baseStreamConfig, prompt: config.prompt });
 
       if (firstResult.subtype !== "success") {
         const errors = firstResult.errors?.join(", ") ?? firstResult.subtype;
         throw new Error(`Claude query failed: ${errors}`);
       }
 
-      // Read + validate with retries in same session
       for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
         // Read temp file
         let content: string;
@@ -259,25 +259,8 @@ export function runClaude<T>(
           content = await fs.promises.readFile(tempFile, "utf-8");
         } catch {
           if (attempt < MAX_RETRIES) {
-            progress.push({
-              type: "status",
-              message: `Result file not found, retrying (${attempt + 1}/${MAX_RETRIES})...`,
-            });
-            const retryResult = await runQueryStream({
-              prompt: `You did not write the result file. Write the result as JSON to "${tempFile}" using the Write tool.`,
-              cwd: config.cwd,
-              resume: sessionId,
-              maxTurns: config.maxTurns ?? DEFAULT_MAX_TURNS,
-              abortController,
-              tempFile,
-              pushProgress: progress.push,
-              describeToolUse,
-            });
-            if (retryResult.subtype !== "success") {
-              throw new Error(
-                `Retry query failed: ${retryResult.errors?.join(", ") ?? retryResult.subtype}`,
-              );
-            }
+            progress.push({ type: "status", message: `Result file not found, retrying (${attempt + 1}/${MAX_RETRIES})...` });
+            await runRetry(`Write the result as JSON to "${tempFile}" using the Write tool.`);
             continue;
           }
           throw new Error("Claude did not write the result file");
@@ -292,25 +275,8 @@ export function runClaude<T>(
           parsed = JSON.parse(content);
         } catch {
           if (attempt < MAX_RETRIES) {
-            progress.push({
-              type: "status",
-              message: `Invalid JSON, retrying (${attempt + 1}/${MAX_RETRIES})...`,
-            });
-            const retryResult = await runQueryStream({
-              prompt: `The file "${tempFile}" is not valid JSON. Fix the content and write valid JSON to the same file.`,
-              cwd: config.cwd,
-              resume: sessionId,
-              maxTurns: config.maxTurns ?? DEFAULT_MAX_TURNS,
-              abortController,
-              tempFile,
-              pushProgress: progress.push,
-              describeToolUse,
-            });
-            if (retryResult.subtype !== "success") {
-              throw new Error(
-                `Retry query failed: ${retryResult.errors?.join(", ") ?? retryResult.subtype}`,
-              );
-            }
+            progress.push({ type: "status", message: `Invalid JSON, retrying (${attempt + 1}/${MAX_RETRIES})...` });
+            await runRetry(`The file "${tempFile}" contains invalid JSON. Write valid JSON to the same file.`);
             continue;
           }
           throw new Error("Result is not valid JSON after retries");
@@ -321,28 +287,9 @@ export function runClaude<T>(
         if (result.success) return result.data as T;
 
         if (attempt < MAX_RETRIES) {
-          const issues = result.error.issues
-            .map((i) => `${i.path.join(".")}: ${i.message}`)
-            .join("; ");
-          progress.push({
-            type: "status",
-            message: `Validation failed, retrying (${attempt + 1}/${MAX_RETRIES})...`,
-          });
-          const retryResult = await runQueryStream({
-            prompt: `Validation failed for "${tempFile}": ${issues}. Fix the errors and write the corrected JSON to the same file.`,
-            cwd: config.cwd,
-            resume: sessionId,
-            maxTurns: config.maxTurns ?? DEFAULT_MAX_TURNS,
-            abortController,
-            tempFile,
-            pushProgress: progress.push,
-            describeToolUse,
-          });
-          if (retryResult.subtype !== "success") {
-            throw new Error(
-              `Retry query failed: ${retryResult.errors?.join(", ") ?? retryResult.subtype}`,
-            );
-          }
+          const issues = result.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; ");
+          progress.push({ type: "status", message: `Validation failed, retrying (${attempt + 1}/${MAX_RETRIES})...` });
+          await runRetry(`Validation failed for "${tempFile}": ${issues}. Fix the errors and write corrected JSON to the same file.`);
           continue;
         }
 

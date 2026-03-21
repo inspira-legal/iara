@@ -2,8 +2,39 @@ import { execSync } from "node:child_process";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import type { AddRepoInput, CloneProgress, RepoInfo, SyncResult } from "@iara/contracts";
-import { gitCloneWithProgress, gitFetch, gitPull, gitPush, gitWorktreeAdd } from "@iara/shared/git";
+import {
+  GitOperationError,
+  gitCloneWithProgress,
+  gitFetch,
+  gitLsRemote,
+  gitPull,
+  gitPush,
+  gitWorktreeAdd,
+} from "@iara/shared/git";
 import type { AppState } from "./state.js";
+
+function friendlyGitError(err: unknown): string {
+  if (err instanceof GitOperationError && err.exitCode === 128) {
+    const s = err.stderr.toLowerCase();
+    if (s.includes("could not read") || s.includes("authentication") || s.includes("permission denied"))
+      return "Authentication failed. Check your credentials or SSH key.";
+    if (s.includes("not found") || s.includes("does not exist") || s.includes("not appear to be a git repo"))
+      return "Repository not found. Check the URL and try again.";
+    if (s.includes("already exists"))
+      return "Destination directory already exists.";
+    return `Could not access repository: ${err.stderr.split("\n")[0]}`;
+  }
+  return err instanceof Error ? err.message : String(err);
+}
+
+/** Validate a git URL is reachable. Throws a friendly error if not. */
+export async function validateGitUrl(url: string): Promise<void> {
+  try {
+    await gitLsRemote(url);
+  } catch (err) {
+    throw new Error(friendlyGitError(err), { cause: err });
+  }
+}
 
 export async function getRepoInfo(appState: AppState, projectSlug: string): Promise<RepoInfo[]> {
   const repos = appState.discoverRepos(projectSlug);
@@ -79,12 +110,9 @@ export async function addRepo(
     }
   } catch (err) {
     cleanup();
-    onProgress?.({
-      repo: input.name,
-      status: "error",
-      error: err instanceof Error ? err.message : String(err),
-    });
-    throw err;
+    const message = friendlyGitError(err);
+    onProgress?.({ repo: input.name, status: "error", error: message });
+    throw new Error(message, { cause: err });
   }
 
   // Create worktrees for active workspaces
