@@ -22,9 +22,7 @@ interface PersistedSelection {
 function saveSelection(projectId: string | null, workspaceId: string | null): void {
   try {
     localStorage.setItem(SELECTION_KEY, JSON.stringify({ projectId, workspaceId }));
-  } catch {
-    // localStorage may be unavailable
-  }
+  } catch {}
 }
 
 function loadSelection(): PersistedSelection | null {
@@ -34,14 +32,6 @@ function loadSelection(): PersistedSelection | null {
     return JSON.parse(raw) as PersistedSelection;
   } catch {
     return null;
-  }
-}
-
-function clearSelection(): void {
-  try {
-    localStorage.removeItem(SELECTION_KEY);
-  } catch {
-    // localStorage may be unavailable
   }
 }
 
@@ -133,7 +123,7 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
           saveSelection(project.id, null);
         }
       } else {
-        clearSelection();
+        saveSelection(null, null);
       }
     }
   },

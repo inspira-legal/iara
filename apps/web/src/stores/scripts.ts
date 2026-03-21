@@ -10,7 +10,6 @@ interface ScriptsState {
   config: ScriptsConfig | null;
   currentWorkspaceId: string | null;
   loading: boolean;
-  discovering: boolean;
   /** Projects currently running discovery */
   discoveringProjects: Set<string>;
   /** Logs keyed by ScriptStatus.id */
@@ -46,7 +45,6 @@ export const useScriptsStore = create<ScriptsState & ScriptsActions>((set, get) 
   config: null,
   currentWorkspaceId: null as string | null,
   loading: false,
-  discovering: false,
   discoveringProjects: new Set<string>(),
   logs: new Map(),
   selectedLog: null,
@@ -87,18 +85,13 @@ export const useScriptsStore = create<ScriptsState & ScriptsActions>((set, get) 
   discover: async (projectId) => {
     const next = new Set(get().discoveringProjects);
     next.add(projectId);
-    const currentProjectId = projectIdFromWorkspaceId(get().currentWorkspaceId);
-    set({ discovering: next.has(currentProjectId ?? ""), discoveringProjects: next });
+    set({ discoveringProjects: next });
     try {
       await transport.request("scripts.discover", { projectId });
     } catch {
       const cleared = new Set(get().discoveringProjects);
       cleared.delete(projectId);
-      const curProjId = projectIdFromWorkspaceId(get().currentWorkspaceId);
-      set({
-        discoveringProjects: cleared,
-        discovering: cleared.has(curProjId ?? ""),
-      });
+      set({ discoveringProjects: cleared });
     }
   },
 
@@ -170,11 +163,7 @@ export const useScriptsStore = create<ScriptsState & ScriptsActions>((set, get) 
     const unsubReload = transport.subscribe("scripts:reload", ({ projectId }) => {
       const next = new Set(get().discoveringProjects);
       next.delete(projectId);
-      const currentProjectId = projectIdFromWorkspaceId(get().currentWorkspaceId);
-      set({
-        discoveringProjects: next,
-        discovering: next.has(currentProjectId ?? ""),
-      });
+      set({ discoveringProjects: next });
     });
 
     return () => {
@@ -184,3 +173,11 @@ export const useScriptsStore = create<ScriptsState & ScriptsActions>((set, get) 
     };
   },
 }));
+
+/** Derived selector: is the current workspace's project being discovered? */
+export function useIsDiscovering(): boolean {
+  const discoveringProjects = useScriptsStore((s) => s.discoveringProjects);
+  const currentWorkspaceId = useScriptsStore((s) => s.currentWorkspaceId);
+  const projectId = projectIdFromWorkspaceId(currentWorkspaceId);
+  return projectId ? discoveringProjects.has(projectId) : false;
+}

@@ -62,15 +62,15 @@ export class AppState {
     const defaultDir = path.join(projectDir, "default");
 
     // Directory structure is the source of truth
-    if (this.listRepoNames(defaultDir).size === 0) return null;
+    const repoNames = this.listRepoNames(defaultDir);
+    if (repoNames.size === 0) return null;
 
     const projectFile = createJsonFile(
       path.join(projectDir, "project.json"),
       ProjectFileSchema,
       () => {
-        // Detect remote URLs from repos in default/
         const repoSources: string[] = [];
-        for (const repoName of this.listRepoNames(defaultDir)) {
+        for (const repoName of repoNames) {
           const url = gitRemoteUrlSync(path.join(defaultDir, repoName));
           if (url) repoSources.push(url);
         }
@@ -132,7 +132,7 @@ export class AppState {
           return { type: "default" as const, name: "Default", description: "", createdAt: now };
         }
         const branches = this.detectBranches(wsDir);
-        const branch = Object.values(branches)[0] ?? this.detectBranch(wsDir) ?? entry.name;
+        const branch = Object.values(branches)[0] ?? entry.name;
         return {
           type: "task" as const,
           name: entry.name,
@@ -208,24 +208,10 @@ export class AppState {
     return branches;
   }
 
-  /** Detect git branch from the first repo/worktree in a workspace directory. */
-  private detectBranch(wsDir: string): string | null {
-    try {
-      for (const name of fs.readdirSync(wsDir)) {
-        const branch = this.detectBranchForRepo(path.join(wsDir, name));
-        if (branch) return branch;
-      }
-    } catch {
-      // ignore
-    }
-    return null;
-  }
-
   /** Detect git branch for a single repo or worktree directory. */
   private detectBranchForRepo(repoDir: string): string | null {
     try {
       const gitPath = path.join(repoDir, ".git");
-      if (!fs.existsSync(gitPath)) return null;
       const stat = fs.statSync(gitPath);
 
       let headPath: string | null = null;
@@ -239,14 +225,14 @@ export class AppState {
         }
       }
 
-      if (headPath && fs.existsSync(headPath)) {
+      if (headPath) {
         const head = fs.readFileSync(headPath, "utf-8").trim();
         if (head.startsWith("ref: refs/heads/")) {
           return head.replace("ref: refs/heads/", "");
         }
       }
     } catch {
-      // ignore
+      // ignore — file missing, not a git dir, etc.
     }
     return null;
   }

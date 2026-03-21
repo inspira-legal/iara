@@ -5,7 +5,7 @@ import { useScriptsStore } from "~/stores/scripts";
 
 export function MainPanel({ children }: { children: ReactNode }) {
   const bottomPanelRef = usePanelRef();
-  const { setCollapsed, setActiveTab } = useScriptsStore();
+  const { setCollapsed } = useScriptsStore();
 
   const contentLayout = useDefaultLayout({ id: "iara:content-layout:v2", storage: localStorage });
 
@@ -15,9 +15,6 @@ export function MainPanel({ children }: { children: ReactNode }) {
     const isCollapsed = panel.isCollapsed();
     if (isCollapsed !== useScriptsStore.getState().collapsed) {
       setCollapsed(isCollapsed);
-      if (isCollapsed) {
-        setActiveTab(null);
-      }
     }
   };
 

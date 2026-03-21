@@ -674,8 +674,11 @@ describe("useAppStore", () => {
 
       expect(useAppStore.getState().selectedProjectId).toBeNull();
       expect(useAppStore.getState().selectedWorkspaceId).toBeNull();
-      // localStorage should have been cleared
-      expect(localStorageStore[SELECTION_KEY]).toBeUndefined();
+      // localStorage should have been cleared (saved as null/null)
+      expect(JSON.parse(localStorageStore[SELECTION_KEY]!)).toEqual({
+        projectId: null,
+        workspaceId: null,
+      });
     });
 
     it("init() clears stale workspace but keeps valid project from localStorage", async () => {

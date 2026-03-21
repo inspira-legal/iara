@@ -19,7 +19,7 @@ import {
 } from "lucide-react";
 import type { EssencialKey, ResolvedServiceDef, ScriptStatus } from "@iara/contracts";
 import { isScriptActive, isScriptUnhealthy } from "~/lib/script-status";
-import { useScriptsStore } from "~/stores/scripts";
+import { useScriptsStore, useIsDiscovering } from "~/stores/scripts";
 import { useAppStore } from "~/stores/app";
 import { useWorkspace } from "~/lib/workspace";
 import { transport } from "~/lib/ws-transport";
@@ -37,17 +37,15 @@ const ESSENCIAL_ICONS: Record<EssencialKey, typeof Play> = {
 };
 
 export function BottomPanel({ panelRef }: { panelRef: RefObject<PanelImperativeHandle | null> }) {
-  const {
-    config,
-    loading,
-    discovering,
-    activeTab,
-    setActiveTab,
-    collapsed,
-    subscribePush,
-    loadConfig,
-    discover,
-  } = useScriptsStore();
+  const config = useScriptsStore((s) => s.config);
+  const loading = useScriptsStore((s) => s.loading);
+  const activeTab = useScriptsStore((s) => s.activeTab);
+  const collapsed = useScriptsStore((s) => s.collapsed);
+  const subscribePush = useScriptsStore((s) => s.subscribePush);
+  const loadConfig = useScriptsStore((s) => s.loadConfig);
+  const discover = useScriptsStore((s) => s.discover);
+  const setActiveTab = useScriptsStore((s) => s.setActiveTab);
+  const discovering = useIsDiscovering();
   const selectedProjectId = useAppStore((s) => s.selectedProjectId);
   const workspace = useWorkspace();
 
@@ -203,7 +201,9 @@ function TabButton({
 // ---------------------------------------------------------------------------
 
 function ScriptsTab() {
-  const { config, discovering, discover } = useScriptsStore();
+  const config = useScriptsStore((s) => s.config);
+  const discover = useScriptsStore((s) => s.discover);
+  const discovering = useIsDiscovering();
   const selectedProjectId = useAppStore((s) => s.selectedProjectId);
   const workspace = useWorkspace();
 
@@ -276,7 +276,11 @@ function getCategoryState(
 /** Toolbar with all essencial commands + edit + rediscover */
 function CommandBar() {
   const selectedProjectId = useAppStore((s) => s.selectedProjectId);
-  const { config, runAll, stopAll, discover, discovering } = useScriptsStore();
+  const config = useScriptsStore((s) => s.config);
+  const runAll = useScriptsStore((s) => s.runAll);
+  const stopAll = useScriptsStore((s) => s.stopAll);
+  const discover = useScriptsStore((s) => s.discover);
+  const discovering = useIsDiscovering();
   const workspace = useWorkspace();
   const statuses = config?.statuses ?? [];
 
@@ -427,7 +431,8 @@ function ServiceCard({
   statuses: ScriptStatus[];
 }) {
   const [showOthers, setShowOthers] = useState(false);
-  const { runScript, stopScript } = useScriptsStore();
+  const runScript = useScriptsStore((s) => s.runScript);
+  const stopScript = useScriptsStore((s) => s.stopScript);
   const workspace = useWorkspace();
 
   const serviceStatuses = statuses.filter((s) => s.service === service.name);
@@ -610,7 +615,10 @@ function getWorstHealth(statuses: ScriptStatus[]): string | null {
 // ---------------------------------------------------------------------------
 
 function OutputTab() {
-  const { config, logs, selectedLog, selectLog } = useScriptsStore();
+  const config = useScriptsStore((s) => s.config);
+  const logs = useScriptsStore((s) => s.logs);
+  const selectedLog = useScriptsStore((s) => s.selectedLog);
+  const selectLog = useScriptsStore((s) => s.selectLog);
   const logsEndRef = useRef<HTMLDivElement>(null);
 
   const allScripts = config?.statuses ?? [];

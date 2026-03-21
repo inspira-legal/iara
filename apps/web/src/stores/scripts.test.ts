@@ -51,7 +51,6 @@ const INITIAL_STATE = {
   config: null,
   currentWorkspaceId: null,
   loading: false,
-  discovering: false,
   discoveringProjects: new Set<string>(),
   logs: new Map<string, string[]>(),
   selectedLog: null,
@@ -278,7 +277,7 @@ describe("useScriptsStore", () => {
 
       await useScriptsStore.getState().discover("proj1");
 
-      expect(useScriptsStore.getState().discovering).toBe(false);
+      expect(useScriptsStore.getState().discoveringProjects.has("proj1")).toBe(false);
     });
   });
 
@@ -458,10 +457,8 @@ describe("useScriptsStore", () => {
     });
 
     it("scripts:reload clears discovering flag", () => {
-      const discoveringProjects = new Set(["proj1"]);
       useScriptsStore.setState({
-        discovering: true,
-        discoveringProjects,
+        discoveringProjects: new Set(["proj1"]),
         currentWorkspaceId: "proj1/default",
       });
 
@@ -475,7 +472,7 @@ describe("useScriptsStore", () => {
 
       useScriptsStore.getState().subscribePush();
 
-      expect(useScriptsStore.getState().discovering).toBe(false);
+      expect(useScriptsStore.getState().discoveringProjects.has("proj1")).toBe(false);
     });
   });
 });
