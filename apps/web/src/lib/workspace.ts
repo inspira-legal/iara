@@ -1,8 +1,10 @@
 import { useAppStore } from "~/stores/app";
 
-export const DEFAULT_WORKSPACE = "default";
-
-export function useWorkspace(): string {
+export function useWorkspace(): string | null {
   const selectedWorkspaceId = useAppStore((s) => s.selectedWorkspaceId);
-  return selectedWorkspaceId ?? DEFAULT_WORKSPACE;
+  const selectedProjectId = useAppStore((s) => s.selectedProjectId);
+
+  if (selectedWorkspaceId) return selectedWorkspaceId;
+  if (selectedProjectId) return `${selectedProjectId}/default`;
+  return null;
 }

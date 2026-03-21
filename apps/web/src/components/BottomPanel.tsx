@@ -60,15 +60,15 @@ export function BottomPanel({ panelRef }: { panelRef: RefObject<PanelImperativeH
 
   // Load config when project/workspace changes
   useEffect(() => {
-    if (selectedProjectId) {
+    if (workspace) {
       void loadConfig(workspace);
     }
-  }, [selectedProjectId, workspace, loadConfig]);
+  }, [workspace, loadConfig]);
 
   // Reload config when scripts.yaml changes on disk
   useEffect(() => {
     const unsub = transport.subscribe("scripts:reload", ({ projectId }) => {
-      if (selectedProjectId && projectId === selectedProjectId) {
+      if (workspace && selectedProjectId && projectId === selectedProjectId) {
         void loadConfig(workspace);
       }
     });
@@ -293,7 +293,7 @@ function CommandBar() {
           key={key}
           category={key}
           state={getCategoryState(key, statuses, config?.services ?? [])}
-          onRun={() => void runAll(workspace, key)}
+          onRun={() => workspace && void runAll(workspace, key)}
           onStop={() => void stopAll()}
         />
       ))}
@@ -461,7 +461,7 @@ function ServiceCard({
               script={key}
               icon={Icon}
               status={serviceStatuses.find((s) => s.script === key)}
-              onRun={() => void runScript(workspace, service.name, key)}
+              onRun={() => workspace && void runScript(workspace, service.name, key)}
               onStop={(scriptId) => void stopScript(scriptId)}
             />
           );
@@ -491,7 +491,7 @@ function ServiceCard({
                   script={key}
                   status={serviceStatuses.find((s) => s.script === key)}
                   variant="advanced"
-                  onRun={() => void runScript(workspace, service.name, key)}
+                  onRun={() => workspace && void runScript(workspace, service.name, key)}
                   onStop={(scriptId) => void stopScript(scriptId)}
                 />
               ))}
