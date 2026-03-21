@@ -27,6 +27,7 @@
     "lucide-react": "^0.564.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
+    "react-resizable-panels": "^4.7.4",
     "tailwind-merge": "^3.4.0",
     "zustand": "^5.0.11"
   },

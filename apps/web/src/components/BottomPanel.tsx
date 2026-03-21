@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type RefObject } from "react";
+import type { PanelImperativeHandle } from "react-resizable-panels";
 import {
   Play,
   Square,
@@ -35,7 +36,7 @@ const ESSENCIAL_ICONS: Record<EssencialKey, typeof Play> = {
   test: FlaskConical,
 };
 
-export function BottomPanel() {
+export function BottomPanel({ panelRef }: { panelRef: RefObject<PanelImperativeHandle | null> }) {
   const {
     config,
     loading,
@@ -44,17 +45,12 @@ export function BottomPanel() {
     setActiveTab,
     collapsed,
     setCollapsed,
-    panelHeight,
-    setPanelHeight,
     subscribePush,
     loadConfig,
     discover,
   } = useScriptsStore();
   const { selectedProjectId } = useProjectStore();
   const workspace = useWorkspace();
-  const [isResizing, setIsResizing] = useState(false);
-  const startYRef = useRef(0);
-  const startHeightRef = useRef(0);
 
   // Subscribe to push events (global, always active)
   useEffect(() => {
@@ -110,70 +106,43 @@ export function BottomPanel() {
   useEffect(() => {
     if (hasUnhealthy) {
       setActiveTab("output");
-      setCollapsed(false);
+      if (collapsed) {
+        panelRef.current?.expand();
+      }
     }
-  }, [hasUnhealthy, setActiveTab, setCollapsed]);
+  }, [hasUnhealthy, setActiveTab, collapsed, panelRef]);
 
-  const onResizeStart = useCallback(
-    (e: React.MouseEvent) => {
-      e.preventDefault();
-      setIsResizing(true);
-      startYRef.current = e.clientY;
-      startHeightRef.current = panelHeight;
-    },
-    [panelHeight],
-  );
+  const toggleCollapse = () => {
+    if (collapsed) {
+      panelRef.current?.expand();
+    } else {
+      panelRef.current?.collapse();
+    }
+  };
 
-  useEffect(() => {
-    if (!isResizing) return;
-
-    const onMouseMove = (e: MouseEvent) => {
-      const delta = startYRef.current - e.clientY;
-      setPanelHeight(startHeightRef.current + delta);
-    };
-
-    const onMouseUp = () => setIsResizing(false);
-
-    document.addEventListener("mousemove", onMouseMove);
-    document.addEventListener("mouseup", onMouseUp);
-    return () => {
-      document.removeEventListener("mousemove", onMouseMove);
-      document.removeEventListener("mouseup", onMouseUp);
-    };
-  }, [isResizing]);
+  const expandAndSetTab = (tab: "scripts" | "output") => {
+    setActiveTab(tab);
+    if (collapsed) {
+      panelRef.current?.expand();
+    }
+  };
 
   return (
-    <div className="flex flex-col border-t border-zinc-800">
-      {/* Resize handle */}
-      {!collapsed && (
-        <div
-          role="separator"
-          aria-orientation="horizontal"
-          onMouseDown={onResizeStart}
-          className={`h-0.5 cursor-row-resize transition-colors hover:bg-blue-500/50 ${isResizing ? "bg-blue-500/50" : ""}`}
-        />
-      )}
-
+    <div className="flex h-full flex-col">
       {/* Tab bar */}
-      <div className="flex h-8 items-center justify-between bg-zinc-900 px-2">
+      <div className="flex h-8 shrink-0 items-center justify-between bg-zinc-900 px-2">
         <div className="flex items-center gap-1">
           <TabButton
             label="Scripts"
             active={activeTab === "scripts"}
-            onClick={() => {
-              setActiveTab("scripts");
-              if (collapsed) setCollapsed(false);
-            }}
+            onClick={() => expandAndSetTab("scripts")}
             badge={runningCount || undefined}
           />
           {hasOutputs && (
             <TabButton
               label="Output"
               active={activeTab === "output"}
-              onClick={() => {
-                setActiveTab("output");
-                if (collapsed) setCollapsed(false);
-              }}
+              onClick={() => expandAndSetTab("output")}
             />
           )}
           {(loading || discovering) && (
@@ -182,7 +151,7 @@ export function BottomPanel() {
         </div>
         <button
           type="button"
-          onClick={() => setCollapsed(!collapsed)}
+          onClick={toggleCollapse}
           className="rounded p-0.5 text-zinc-500 hover:text-zinc-300"
         >
           {collapsed ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
@@ -191,14 +160,11 @@ export function BottomPanel() {
 
       {/* Panel content */}
       {!collapsed && (
-        <div className="overflow-y-auto bg-zinc-950" style={{ height: panelHeight }}>
+        <div className="flex-1 overflow-y-auto bg-zinc-950">
           {activeTab === "scripts" && <ScriptsTab />}
           {activeTab === "output" && <OutputTab />}
         </div>
       )}
-
-      {/* Block pointer events while resizing */}
-      {isResizing && <div className="fixed inset-0 z-50 cursor-row-resize" />}
     </div>
   );
 }

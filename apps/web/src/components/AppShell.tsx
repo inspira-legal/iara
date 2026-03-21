@@ -1,4 +1,5 @@
 import { useMemo, useCallback, type ReactNode } from "react";
+import { Group, Panel, Separator, useDefaultLayout } from "react-resizable-panels";
 import { Sidebar } from "./Sidebar";
 import { MainPanel } from "./MainPanel";
 import { useKeyboardShortcuts } from "~/hooks/useKeyboardShortcuts";
@@ -84,10 +85,30 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   useKeyboardShortcuts(shortcuts);
 
+  const mainLayout = useDefaultLayout({ id: "iara:main-layout:v3", storage: localStorage });
+
   return (
-    <div className="flex h-screen w-screen overflow-hidden bg-zinc-950 text-zinc-100">
-      <Sidebar />
-      <MainPanel>{children}</MainPanel>
+    <div className="h-screen w-screen overflow-hidden bg-zinc-950 text-zinc-100">
+      <Group
+        orientation="horizontal"
+        defaultLayout={mainLayout.defaultLayout}
+        onLayoutChanged={mainLayout.onLayoutChanged}
+      >
+        <Panel
+          id="sidebar"
+          defaultSize="280px"
+          minSize="200px"
+          maxSize="480px"
+          collapsible
+          collapsedSize={0}
+        >
+          <Sidebar />
+        </Panel>
+        <Separator className="relative z-10 -mx-1.5 w-3 bg-transparent outline-none after:absolute after:inset-y-0 after:left-1/2 after:w-1 after:-translate-x-1/2 after:bg-transparent after:transition-colors hover:after:bg-blue-500/50 data-[resize-handle-active]:after:bg-blue-500/70" />
+        <Panel id="main" minSize="40%">
+          <MainPanel>{children}</MainPanel>
+        </Panel>
+      </Group>
     </div>
   );
 }

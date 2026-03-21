@@ -20,7 +20,6 @@ interface ScriptsState {
   /** Bottom panel UI state */
   activeTab: PanelTab;
   collapsed: boolean;
-  panelHeight: number;
 }
 
 interface ScriptsActions {
@@ -34,7 +33,6 @@ interface ScriptsActions {
   fetchLogs(scriptId: string): Promise<void>;
   setActiveTab(tab: PanelTab): void;
   setCollapsed(collapsed: boolean): void;
-  setPanelHeight(height: number): void;
   subscribePush(): () => void;
 }
 
@@ -49,7 +47,6 @@ export const useScriptsStore = create<ScriptsState & ScriptsActions>((set, get) 
   selectedLog: null,
   activeTab: "scripts",
   collapsed: false,
-  panelHeight: 240,
 
   loadConfig: async (projectId, workspace) => {
     set({
@@ -58,7 +55,6 @@ export const useScriptsStore = create<ScriptsState & ScriptsActions>((set, get) 
       activeTab: "scripts",
       currentProjectId: projectId,
       currentWorkspace: workspace,
-      discovering: get().discoveringProjects.has(projectId),
     });
     try {
       const config = await transport.request("scripts.load", { projectId, workspace });
@@ -123,7 +119,6 @@ export const useScriptsStore = create<ScriptsState & ScriptsActions>((set, get) 
 
   setActiveTab: (tab) => set({ activeTab: tab }),
   setCollapsed: (collapsed) => set({ collapsed }),
-  setPanelHeight: (height) => set({ panelHeight: Math.max(120, Math.min(600, height)) }),
 
   subscribePush: () => {
     const unsubStatus = transport.subscribe(
