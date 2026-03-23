@@ -222,8 +222,10 @@ export function registerScriptHandlers(
     });
   });
 
-  registerMethod("scripts.stopAll", async () => {
-    supervisor.stopAll();
+  registerMethod("scripts.stopAll", async (params) => {
+    const workspace = appState.getWorkspace(params.workspaceId);
+    if (!workspace) throw new Error(`Workspace not found: ${params.workspaceId}`);
+    supervisor.stopAll(params.workspaceId, workspace.slug);
   });
 
   registerMethod("scripts.status", async (params) => {
@@ -244,8 +246,12 @@ export function registerScriptHandlers(
     const yamlPath = getScriptsYamlPath(appState, project.slug);
     const existingYaml = fs.existsSync(yamlPath) ? fs.readFileSync(yamlPath, "utf-8") : undefined;
 
-    const requestId = triggerDiscovery(appState, project.slug, pushFn, existingYaml) ?? "";
-    return { requestId };
+    const requestId = triggerDiscovery(appState, project.slug, pushFn, existingYaml);
+    if (requestId === null) {
+      // Discovery skipped (no repos or no build config) — clear discovering state
+      pushFn("scripts:reload", { projectId: project.slug });
+    }
+    return { requestId: requestId ?? "" };
   });
 
   // Watch scripts.yaml for manual edits

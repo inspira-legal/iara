@@ -41,7 +41,7 @@ interface ScriptsActions {
   runScript(workspaceId: string, service: string, script: string): Promise<void>;
   stopScript(scriptId: string): Promise<void>;
   runAll(workspaceId: string, category: EssencialKey): Promise<void>;
-  stopAll(): Promise<void>;
+  stopAll(workspaceId: string): Promise<void>;
   discover(projectId: string): Promise<void>;
   selectLog(service: string, script: string): void;
   fetchLogs(scriptId: string): Promise<void>;
@@ -98,14 +98,18 @@ export const useScriptsStore = create<ScriptsState & ScriptsActions>((set, get) 
     await transport.request("scripts.runAll", { workspaceId, category });
   },
 
-  stopAll: async () => {
-    await transport.request("scripts.stopAll", {});
+  stopAll: async (workspaceId) => {
+    await transport.request("scripts.stopAll", { workspaceId });
   },
 
   discover: async (projectId) => {
     const next = new Set(get().discoveringProjects);
     next.add(projectId);
-    set({ discoveringProjects: next });
+    // Clear stale outputs if discovering for the current workspace's project
+    const currentProject = projectIdFromWorkspaceId(get().currentWorkspaceId);
+    const clearState =
+      currentProject === projectId ? { config: null, logs: new Map(), selectedLog: null } : {};
+    set({ discoveringProjects: next, ...clearState });
     try {
       await transport.request("scripts.discover", { projectId });
     } catch {

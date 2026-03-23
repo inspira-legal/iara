@@ -351,7 +351,6 @@ export function streamClaudeRun<T>(
         await fs.promises.writeFile(outputPath, content, "utf-8");
       }
       pushFn("claude:result", { requestId, result: { content } });
-      onComplete?.();
     } catch (err) {
       pushFn("claude:error", {
         requestId,
@@ -359,6 +358,7 @@ export function streamClaudeRun<T>(
       });
     } finally {
       activeRuns.delete(requestId);
+      onComplete?.();
     }
   })();
 }

@@ -512,7 +512,7 @@ describe("ScriptSupervisor", () => {
       await vi.advanceTimersByTimeAsync(3000);
 
       expect(supervisor.status()[0]!.health).toBe("healthy");
-      supervisor.stopAll();
+      supervisor.stopAll("proj1", "default");
       vi.useRealTimers();
     });
 
@@ -534,7 +534,7 @@ describe("ScriptSupervisor", () => {
       await vi.advanceTimersByTimeAsync(3000);
       expect(supervisor.status()[0]!.health).toBe("unhealthy");
 
-      supervisor.stopAll();
+      supervisor.stopAll("proj1", "default");
       vi.useRealTimers();
     });
 
@@ -555,7 +555,7 @@ describe("ScriptSupervisor", () => {
       await vi.advanceTimersByTimeAsync(30_000);
       expect(supervisor.status()[0]!.health).toBe("unhealthy");
 
-      supervisor.stopAll();
+      supervisor.stopAll("proj1", "default");
       vi.useRealTimers();
     });
 
@@ -581,7 +581,7 @@ describe("ScriptSupervisor", () => {
       await vi.advanceTimersByTimeAsync(30_000);
       expect(supervisor.status()[0]!.health).toBe("healthy");
 
-      supervisor.stopAll();
+      supervisor.stopAll("proj1", "default");
       vi.useRealTimers();
     });
 
@@ -597,7 +597,7 @@ describe("ScriptSupervisor", () => {
 
       expect(supervisor.status()[0]!.health).toBe("unhealthy");
 
-      supervisor.stopAll();
+      supervisor.stopAll("proj1", "default");
       vi.useRealTimers();
     });
 
@@ -624,7 +624,7 @@ describe("ScriptSupervisor", () => {
         .filter((c) => c[0] === "scripts:status");
       expect(statusCallsAfter).toHaveLength(0);
 
-      supervisor.stopAll();
+      supervisor.stopAll("proj1", "default");
       vi.useRealTimers();
     });
   });
@@ -689,7 +689,7 @@ describe("ScriptSupervisor", () => {
   });
 
   describe("stopAll()", () => {
-    it("stops all running scripts", () => {
+    it("stops all running scripts for the given workspace", () => {
       const push = vi.fn();
       const supervisor = new ScriptSupervisor(push);
 
@@ -697,7 +697,7 @@ describe("ScriptSupervisor", () => {
       mockChild = createMockChild(99999);
       supervisor.start(defaultStartOpts({ service: "web", port: 4000 }));
 
-      supervisor.stopAll();
+      supervisor.stopAll("proj1", "default");
 
       const statusCalls = push.mock.calls.filter(
         (c) => c[0] === "scripts:status" && c[1].status.health === "stopped",
@@ -706,12 +706,30 @@ describe("ScriptSupervisor", () => {
       expect(supervisor.status()).toEqual([]);
     });
 
+    it("does not stop scripts from other workspaces", () => {
+      const push = vi.fn();
+      const supervisor = new ScriptSupervisor(push);
+
+      supervisor.start(defaultStartOpts({ workspace: "ws1", port: 3000 }));
+      mockChild = createMockChild(99999);
+      supervisor.start(defaultStartOpts({ workspace: "ws2", port: 4000 }));
+
+      supervisor.stopAll("proj1", "ws1");
+
+      // Only ws1 stopped
+      expect(supervisor.status("proj1", "ws1")).toEqual([]);
+      expect(supervisor.status("proj1", "ws2")).toHaveLength(1);
+
+      // Cleanup
+      supervisor.stopAll("proj1", "ws2");
+    });
+
     it("clears shared port mappings", () => {
       const push = vi.fn();
       const supervisor = new ScriptSupervisor(push);
 
       supervisor.start(defaultStartOpts({ isPinnedPort: true, port: 3000 }));
-      supervisor.stopAll();
+      supervisor.stopAll("proj1", "default");
       expect(supervisor.isPortOwnedByUs(3000)).toBe(false);
     });
   });
@@ -1115,7 +1133,7 @@ describe("ScriptSupervisor", () => {
       await runPromise;
 
       expect(supervisor.status().length).toBe(2);
-      supervisor.stopAll();
+      supervisor.stopAll("proj1", "default");
       vi.useRealTimers();
     });
 
@@ -1166,7 +1184,7 @@ describe("ScriptSupervisor", () => {
       await runPromise;
 
       expect(supervisor.status().length).toBeGreaterThanOrEqual(1);
-      supervisor.stopAll();
+      supervisor.stopAll("proj1", "default");
       vi.useRealTimers();
     });
 
@@ -1207,7 +1225,7 @@ describe("ScriptSupervisor", () => {
       await vi.advanceTimersByTimeAsync(1);
 
       await runPromise;
-      supervisor.stopAll();
+      supervisor.stopAll("proj1", "default");
       vi.useRealTimers();
     });
 
@@ -1259,7 +1277,7 @@ describe("ScriptSupervisor", () => {
       await runPromise;
 
       expect(supervisor.status().length).toBe(2);
-      supervisor.stopAll();
+      supervisor.stopAll("proj1", "default");
       vi.useRealTimers();
     });
 
@@ -1296,7 +1314,7 @@ describe("ScriptSupervisor", () => {
       await vi.advanceTimersByTimeAsync(2500);
 
       await runPromise;
-      supervisor.stopAll();
+      supervisor.stopAll("proj1", "default");
       vi.useRealTimers();
     });
 
@@ -1345,7 +1363,7 @@ describe("ScriptSupervisor", () => {
 
       await runPromise;
       expect(supervisor.status().length).toBeGreaterThanOrEqual(1);
-      supervisor.stopAll();
+      supervisor.stopAll("proj1", "default");
       vi.useRealTimers();
     });
 
@@ -1468,7 +1486,7 @@ describe("ScriptSupervisor", () => {
       await vi.advanceTimersByTimeAsync(1);
 
       await runPromise;
-      supervisor.stopAll();
+      supervisor.stopAll("proj1", "default");
       vi.useRealTimers();
     });
   });
@@ -1520,7 +1538,7 @@ describe("ScriptSupervisor", () => {
       await vi.advanceTimersByTimeAsync(1);
 
       await runPromise;
-      supervisor.stopAll();
+      supervisor.stopAll("proj1", "default");
       vi.useRealTimers();
     });
   });
@@ -1566,7 +1584,7 @@ describe("ScriptSupervisor", () => {
       await vi.advanceTimersByTimeAsync(100);
 
       await runPromise;
-      supervisor.stopAll();
+      supervisor.stopAll("proj1", "default");
       vi.useRealTimers();
     });
   });

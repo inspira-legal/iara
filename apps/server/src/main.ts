@@ -108,7 +108,7 @@ function shutdown() {
     terminalManager.destroyAll();
   } catch {}
   try {
-    scriptSupervisor.stopAll();
+    scriptSupervisor.shutdown();
   } catch {}
   try {
     void socketServer.stop();

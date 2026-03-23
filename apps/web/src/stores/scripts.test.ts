@@ -158,12 +158,12 @@ describe("useScriptsStore", () => {
   });
 
   describe("stopAll()", () => {
-    it("calls transport", async () => {
+    it("calls transport with workspaceId", async () => {
       mockRequest.mockResolvedValueOnce(undefined);
 
-      await useScriptsStore.getState().stopAll();
+      await useScriptsStore.getState().stopAll("proj1/ws1");
 
-      expect(mockRequest).toHaveBeenCalledWith("scripts.stopAll", {});
+      expect(mockRequest).toHaveBeenCalledWith("scripts.stopAll", { workspaceId: "proj1/ws1" });
     });
   });
 
@@ -278,6 +278,35 @@ describe("useScriptsStore", () => {
       await useScriptsStore.getState().discover("proj1");
 
       expect(useScriptsStore.getState().discoveringProjects.has("proj1")).toBe(false);
+    });
+
+    it("clears config, logs, and selectedLog when discovering current project", async () => {
+      const config = makeConfig({ statuses: [makeScriptStatus()] });
+      const logs = new Map<string, string[]>();
+      logs.set("8080:api:dev", ["line1"]);
+      useScriptsStore.setState({
+        config,
+        logs,
+        selectedLog: { service: "api", script: "dev" },
+        currentWorkspaceId: "proj1/ws1",
+      });
+      mockRequest.mockResolvedValueOnce(undefined);
+
+      await useScriptsStore.getState().discover("proj1");
+
+      expect(useScriptsStore.getState().config).toBeNull();
+      expect(useScriptsStore.getState().logs.size).toBe(0);
+      expect(useScriptsStore.getState().selectedLog).toBeNull();
+    });
+
+    it("does not clear config when discovering a different project", async () => {
+      const config = makeConfig({ statuses: [makeScriptStatus()] });
+      useScriptsStore.setState({ config, currentWorkspaceId: "proj1/ws1" });
+      mockRequest.mockResolvedValueOnce(undefined);
+
+      await useScriptsStore.getState().discover("proj2");
+
+      expect(useScriptsStore.getState().config).toEqual(config);
     });
   });
 

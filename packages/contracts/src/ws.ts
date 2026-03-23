@@ -105,7 +105,7 @@ export type WsMethods = {
     params: { workspaceId: string; category: EssencialKey };
     result: void;
   };
-  "scripts.stopAll": { params: Record<string, never>; result: void };
+  "scripts.stopAll": { params: { workspaceId: string }; result: void };
   "scripts.status": { params: { workspaceId: string }; result: ScriptStatus[] };
   "scripts.logs": { params: { scriptId: string; limit?: number }; result: string[] };
   "scripts.discover": { params: { projectId: string }; result: { requestId: string } };

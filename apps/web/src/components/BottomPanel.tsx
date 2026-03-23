@@ -308,7 +308,7 @@ function CommandBar() {
           category={key}
           state={getCategoryState(key, statuses, config?.services ?? [])}
           onRun={() => workspace && void runAll(workspace, key)}
-          onStop={() => void stopAll()}
+          onStop={() => workspace && void stopAll(workspace)}
         />
       ))}
 

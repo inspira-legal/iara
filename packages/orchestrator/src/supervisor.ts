@@ -304,13 +304,30 @@ export class ScriptSupervisor {
     }
   }
 
-  /** Stop all running scripts. */
-  stopAll(): void {
-    for (const entry of this.running.values()) {
+  /** Stop all running scripts for a specific workspace. */
+  stopAll(projectId: string, workspace: string): void {
+    for (const [key, entry] of this.running) {
+      if (entry.projectId !== projectId || entry.workspace !== workspace) continue;
       entry.kill();
       if (entry.healthCheckTimer) clearInterval(entry.healthCheckTimer);
       entry.health = "stopped";
       this.pushStatus(entry);
+      this.running.delete(key);
+      // Clean up shared port mapping
+      for (const [port, k] of this.sharedByPort) {
+        if (k === key) {
+          this.sharedByPort.delete(port);
+          break;
+        }
+      }
+    }
+  }
+
+  /** Stop every running script (used for process cleanup on shutdown). */
+  shutdown(): void {
+    for (const entry of this.running.values()) {
+      entry.kill();
+      if (entry.healthCheckTimer) clearInterval(entry.healthCheckTimer);
     }
     this.running.clear();
     this.sharedByPort.clear();
