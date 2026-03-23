@@ -334,6 +334,7 @@ export function streamClaudeRun<T>(
   outputPath: string | null,
   pushFn: (event: any, params: any) => void,
   transform?: (data: T) => string,
+  onComplete?: () => void,
 ): void {
   void (async () => {
     try {
@@ -350,6 +351,7 @@ export function streamClaudeRun<T>(
         await fs.promises.writeFile(outputPath, content, "utf-8");
       }
       pushFn("claude:result", { requestId, result: { content } });
+      onComplete?.();
     } catch (err) {
       pushFn("claude:error", {
         requestId,

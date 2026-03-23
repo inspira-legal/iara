@@ -96,14 +96,21 @@ export function triggerDiscovery(
 
   const run = runClaude({ prompt, cwd: projectDir });
   activeRuns.set(requestId, run);
-  streamClaudeRun(run, requestId, yamlPath, pushFn, (content) => {
-    const yaml = content
-      .replace(/^```ya?ml\s*\n/i, "")
-      .replace(/\n```\s*$/, "")
-      .trim();
-    pushFn("scripts:reload", { projectId: projectSlug });
-    return yaml;
-  });
+  streamClaudeRun(
+    run,
+    requestId,
+    yamlPath,
+    pushFn,
+    (content) => {
+      return content
+        .replace(/^```ya?ml\s*\n/i, "")
+        .replace(/\n```\s*$/, "")
+        .trim();
+    },
+    () => {
+      pushFn("scripts:reload", { projectId: projectSlug });
+    },
+  );
 
   return requestId;
 }
