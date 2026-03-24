@@ -130,7 +130,6 @@ describe("AppState", () => {
         type: "task",
         name: "Fix Login",
         description: "Fix the login bug",
-        branch: "feat/fix-login",
         createdAt: "2026-03-20T00:00:00.000Z",
       });
       createFakeWorktree("my-app", "fix-login", "repo", "feat/fix-login");
@@ -148,7 +147,6 @@ describe("AppState", () => {
       const taskWs = project!.workspaces.find((w) => w.type === "task");
       expect(taskWs).toBeDefined();
       expect(taskWs!.id).toBe("my-app/fix-login");
-      expect(taskWs!.branch).toBe("feat/fix-login");
     });
 
     it("ignores subdirs without workspace.json and without git repos", () => {
@@ -214,7 +212,7 @@ describe("AppState", () => {
       );
     });
 
-    it("auto-creates workspace.json for task dir with worktrees, detecting branch", () => {
+    it("auto-creates workspace.json for task dir with worktrees", () => {
       writeProjectJson("my-app", {
         name: "My App",
         repoSources: [],
@@ -227,7 +225,6 @@ describe("AppState", () => {
       const ws = state.getWorkspace("my-app/fix-login");
       expect(ws).not.toBeNull();
       expect(ws!.type).toBe("task");
-      expect(ws!.branch).toBe("feat/fix-login");
       expect(fs.existsSync(path.join(projectsDir, "my-app", "fix-login", "workspace.json"))).toBe(
         true,
       );
@@ -280,7 +277,6 @@ describe("AppState", () => {
 
       const taskWs = project!.workspaces.find((w) => w.slug === "some-task");
       expect(taskWs!.type).toBe("task");
-      expect(taskWs!.branch).toBe("feat/something");
     });
   });
 
@@ -306,7 +302,6 @@ describe("AppState", () => {
       writeWorkspaceJson("my-app", "bad-task", {
         type: "task",
         name: "Bad Task",
-        branch: "feat/x",
         createdAt: "2026-03-20T00:00:00.000Z",
       });
       const state = new AppState(projectsDir, stateDir);
@@ -454,7 +449,6 @@ describe("AppState", () => {
       writeWorkspaceJson("my-app", "new-task", {
         type: "task",
         name: "New Task",
-        branch: "feat/new",
         createdAt: "2026-03-20T00:00:00.000Z",
       });
       createFakeWorktree("my-app", "new-task", "repo", "feat/new");
@@ -514,19 +508,18 @@ describe("AppState", () => {
       expect(raw.createdAt).toBeDefined();
     });
 
-    it("writes task workspace.json with branch", () => {
+    it("writes task workspace.json", () => {
       fs.mkdirSync(path.join(projectsDir, "my-app", "fix-bug"), { recursive: true });
       const state = new AppState(projectsDir, stateDir);
       state.writeWorkspace("my-app", "fix-bug", {
         type: "task",
         name: "Fix Bug",
-        branch: "feat/fix-bug",
       });
       const raw = JSON.parse(
         fs.readFileSync(path.join(projectsDir, "my-app", "fix-bug", "workspace.json"), "utf-8"),
       );
       expect(raw.type).toBe("task");
-      expect(raw.branch).toBe("feat/fix-bug");
+      expect(raw.name).toBe("Fix Bug");
     });
   });
 
@@ -625,40 +618,6 @@ describe("AppState", () => {
     });
   });
 
-  describe("branch detection from worktrees", () => {
-    it("detects branch from worktree .git file", () => {
-      createFakeRepo("my-app", "default", "repo", "main");
-      createFakeWorktree("my-app", "my-task", "repo", "feat/cool-feature");
-      const state = new AppState(projectsDir, stateDir);
-
-      const ws = state.getWorkspace("my-app/my-task");
-      expect(ws).not.toBeNull();
-      expect(ws!.branch).toBe("feat/cool-feature");
-    });
-
-    it("falls back to directory name when branch cannot be detected", () => {
-      createFakeRepo("my-app", "default", "repo", "main");
-      // Create a worktree with an unreadable HEAD
-      const wsDir = path.join(projectsDir, "my-app", "broken-task", "repo");
-      fs.mkdirSync(wsDir, { recursive: true });
-      const worktreeDataDir = path.join(
-        projectsDir,
-        "my-app",
-        ".worktree-data",
-        "broken-task",
-        "repo",
-      );
-      fs.mkdirSync(worktreeDataDir, { recursive: true });
-      fs.writeFileSync(path.join(wsDir, ".git"), `gitdir: ${worktreeDataDir}\n`);
-      // No HEAD file in worktree data dir
-      const state = new AppState(projectsDir, stateDir);
-
-      const ws = state.getWorkspace("my-app/broken-task");
-      expect(ws).not.toBeNull();
-      expect(ws!.branch).toBe("broken-task"); // falls back to dir name
-    });
-  });
-
   describe("settings persistence across instances", () => {
     it("settings written by one instance are readable by a new instance", () => {
       const state1 = new AppState(projectsDir, stateDir);
@@ -723,48 +682,6 @@ describe("AppState", () => {
     });
   });
 
-  describe("per-repo branches in workspace.json", () => {
-    it("auto-created workspace.json for multi-repo task populates branches map", () => {
-      createFakeRepo("multi", "default", "frontend", "main");
-      createFakeRepo("multi", "default", "backend", "main");
-      createFakeWorktree("multi", "feat-x", "frontend", "feat/frontend-x");
-      createFakeWorktree("multi", "feat-x", "backend", "feat/backend-x");
-
-      const state = new AppState(projectsDir, stateDir);
-      const ws = state.getWorkspace("multi/feat-x");
-      expect(ws).not.toBeNull();
-      expect(ws!.type).toBe("task");
-
-      // Read the auto-created workspace.json from disk
-      const raw = JSON.parse(
-        fs.readFileSync(path.join(projectsDir, "multi", "feat-x", "workspace.json"), "utf-8"),
-      );
-      expect(raw.branches).toBeDefined();
-      expect(raw.branches.frontend).toBe("feat/frontend-x");
-      expect(raw.branches.backend).toBe("feat/backend-x");
-    });
-  });
-
-  describe("writeWorkspace with branches", () => {
-    it("persists branches map to disk for task workspace", () => {
-      fs.mkdirSync(path.join(projectsDir, "my-app", "multi-task"), { recursive: true });
-      const state = new AppState(projectsDir, stateDir);
-      state.writeWorkspace("my-app", "multi-task", {
-        type: "task",
-        name: "Multi Task",
-        branch: "feat/multi",
-        branches: { frontend: "feat/multi-fe", backend: "feat/multi-be" },
-      });
-
-      const raw = JSON.parse(
-        fs.readFileSync(path.join(projectsDir, "my-app", "multi-task", "workspace.json"), "utf-8"),
-      );
-      expect(raw.type).toBe("task");
-      expect(raw.branch).toBe("feat/multi");
-      expect(raw.branches).toEqual({ frontend: "feat/multi-fe", backend: "feat/multi-be" });
-    });
-  });
-
   describe("updateProject preserves other fields", () => {
     it("preserves repoSources when updating name", () => {
       writeProjectJson("my-app", {
@@ -783,6 +700,74 @@ describe("AppState", () => {
       expect(raw.repoSources).toEqual(["https://github.com/org/repo"]);
       expect(raw.description).toBe("desc");
       expect(raw.createdAt).toBe("2026-01-01T00:00:00.000Z");
+    });
+  });
+
+  describe("updateWorkspace", () => {
+    it("updates name while preserving other fields", () => {
+      writeProjectJson("my-app", {
+        name: "My App",
+        repoSources: [],
+        createdAt: "2026-03-20T00:00:00.000Z",
+      });
+      createFakeRepo("my-app", "default", "repo", "main");
+      writeWorkspaceJson("my-app", "default", {
+        type: "default",
+        name: "Original Name",
+        description: "Original description",
+        createdAt: "2026-01-01T00:00:00.000Z",
+      });
+      const state = new AppState(projectsDir, stateDir);
+      state.updateWorkspace("my-app", "default", { name: "Updated Name" });
+
+      const raw = JSON.parse(
+        fs.readFileSync(path.join(projectsDir, "my-app", "default", "workspace.json"), "utf-8"),
+      );
+      expect(raw.name).toBe("Updated Name");
+      expect(raw.description).toBe("Original description");
+      expect(raw.createdAt).toBe("2026-01-01T00:00:00.000Z");
+      expect(raw.type).toBe("default");
+    });
+  });
+
+  describe("workspace.json does not contain branch fields", () => {
+    it("writeWorkspace does not write branch or branches fields", () => {
+      fs.mkdirSync(path.join(projectsDir, "my-app", "some-task"), { recursive: true });
+      const state = new AppState(projectsDir, stateDir);
+      state.writeWorkspace("my-app", "some-task", {
+        type: "task",
+        name: "Some Task",
+      });
+
+      const raw = JSON.parse(
+        fs.readFileSync(path.join(projectsDir, "my-app", "some-task", "workspace.json"), "utf-8"),
+      );
+      expect(raw.branch).toBeUndefined();
+      expect(raw.branches).toBeUndefined();
+    });
+  });
+
+  describe("backwards compatibility with old workspace.json files", () => {
+    it("old workspace.json with branch field is still parseable", () => {
+      writeProjectJson("my-app", {
+        name: "My App",
+        repoSources: [],
+        createdAt: "2026-03-20T00:00:00.000Z",
+      });
+      createFakeRepo("my-app", "default", "repo", "main");
+      // Write a workspace.json with a legacy branch field
+      writeWorkspaceJson("my-app", "default", {
+        type: "default",
+        name: "Default",
+        description: "",
+        createdAt: "2026-03-20T00:00:00.000Z",
+        branch: "legacy-branch",
+      });
+      const state = new AppState(projectsDir, stateDir);
+      const ws = state.getWorkspace("my-app/default");
+      expect(ws).not.toBeNull();
+      expect(ws!.name).toBe("Default");
+      expect(ws!.type).toBe("default");
     });
   });
 

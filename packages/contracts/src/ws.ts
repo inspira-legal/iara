@@ -9,10 +9,12 @@ import type {
   ScriptsConfig,
   SessionInfo,
   UpdateProjectInput,
+  UpdateWorkspaceInput,
 } from "./ipc.js";
 import type {
   ClaudeProgress,
   CloneProgress,
+  CreationProgress,
   EnvEntry,
   EnvRepoEntries,
   Project,
@@ -39,6 +41,10 @@ export type WsMethods = {
   "projects.create": { params: CreateProjectInput; result: Project };
   "projects.update": { params: { id: string } & UpdateProjectInput; result: void };
   "projects.delete": { params: { id: string }; result: void };
+  "projects.createFromPrompt": {
+    params: { repoSources: string[]; prompt: string };
+    result: { requestId: string };
+  };
   "projects.suggest": {
     params: { userGoal: string };
     result: { requestId: string };
@@ -57,10 +63,15 @@ export type WsMethods = {
 
   // Workspaces
   "workspaces.create": {
-    params: { projectId: string } & CreateWorkspaceInput;
+    params: { projectId: string; branch?: string } & CreateWorkspaceInput;
     result: Workspace;
   };
+  "workspaces.update": { params: { workspaceId: string } & UpdateWorkspaceInput; result: void };
   "workspaces.delete": { params: { workspaceId: string }; result: void };
+  "workspaces.createFromPrompt": {
+    params: { projectId: string; prompt: string };
+    result: { requestId: string };
+  };
   "workspaces.suggest": {
     params: { projectId: string; userGoal: string };
     result: { requestId: string };
@@ -71,7 +82,15 @@ export type WsMethods = {
   };
   "workspaces.renameBranch": {
     params: { workspaceId: string; repoName: string; newBranch: string };
-    result: void;
+    result: RepoInfo[];
+  };
+  "workspaces.checkoutBranch": {
+    params: { workspaceId: string; repoName: string; branch: string };
+    result: RepoInfo[];
+  };
+  "repos.listBranches": {
+    params: { projectId: string; workspaceId?: string; repoName: string };
+    result: string[];
   };
 
   // Sessions
@@ -164,6 +183,7 @@ export type WsPushEvents = {
   "scripts:log": { scriptId: string; service: string; script: string; line: string };
   "scripts:reload": { projectId: string };
   notification: { title: string; body: string; type?: string };
+  "creation:progress": CreationProgress;
   "clone:progress": CloneProgress;
   "session:changed": { workspaceId: string };
   "env:changed": { repo: string; level: "global" | "local" };

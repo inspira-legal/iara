@@ -77,7 +77,10 @@ interface AppActions {
   deleteProject(id: string): Promise<void>;
 
   // Workspaces
-  createWorkspace(projectId: string, input: CreateWorkspaceInput): Promise<Workspace>;
+  createWorkspace(
+    projectId: string,
+    input: CreateWorkspaceInput & { branch?: string },
+  ): Promise<Workspace>;
   deleteWorkspace(workspaceId: string): Promise<void>;
 
   // Settings

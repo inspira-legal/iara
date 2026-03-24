@@ -1,11 +1,9 @@
-import { useCallback } from "react";
-import { GitBranch, Pencil, Copy, Trash2, Circle } from "lucide-react";
+import { Pencil, Trash2, Circle } from "lucide-react";
 import type { Workspace } from "@iara/contracts";
 import { SidebarContextMenu, type ContextMenuItem } from "./SidebarContextMenu";
 import { isScriptActive, isScriptUnhealthy } from "~/lib/script-status";
 import { useScriptsStore } from "~/stores/scripts";
 import { formatRelativeTime, formatAbsoluteTime } from "~/lib/format-relative-time";
-import { writeClipboard } from "~/lib/clipboard";
 import { useInlineEdit } from "~/hooks/useInlineEdit";
 import { useContextMenu } from "~/hooks/useContextMenu";
 
@@ -31,20 +29,11 @@ export function TaskNode({ task, isSelected, onSelect, onDelete, onRename }: Tas
   const { editing, startEditing, inputProps } = useInlineEdit(task.name, onRename);
   const { position: contextMenu, handleContextMenu, close: closeContextMenu } = useContextMenu();
 
-  const handleCopyBranch = useCallback(() => {
-    if (task.branch) writeClipboard(task.branch);
-  }, [task.branch]);
-
   const contextMenuItems: ContextMenuItem[] = [
     {
       label: "Rename",
       icon: Pencil,
       onClick: startEditing,
-    },
-    {
-      label: "Copy Branch",
-      icon: Copy,
-      onClick: handleCopyBranch,
     },
     {
       label: "Delete",
@@ -86,12 +75,6 @@ export function TaskNode({ task, isSelected, onSelect, onDelete, onRename }: Tas
               <span className="block truncate text-sm">{task.name}</span>
             )}
           </div>
-          {task.branch && (
-            <div className="flex items-center gap-1">
-              <GitBranch size={10} className="shrink-0 text-zinc-600" />
-              <span className="truncate text-xs text-zinc-600">{task.branch}</span>
-            </div>
-          )}
         </div>
 
         <span

@@ -15,10 +15,13 @@ export type {
   ServiceDef,
   SessionInfo,
   UpdateProjectInput,
+  UpdateWorkspaceInput,
 } from "./ipc.js";
 export type {
   ClaudeProgress,
   CloneProgress,
+  CreationProgress,
+  CreationStage,
   EnvEntry,
   EnvRepoEntries,
   Project,

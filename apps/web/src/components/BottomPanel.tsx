@@ -35,11 +35,7 @@ const ESSENCIAL_ICONS: Record<EssencialKey, typeof Play> = {
   test: FlaskConical,
 };
 
-export function BottomPanel({
-  panelRef,
-}: {
-  panelRef: RefObject<PanelImperativeHandle | null>;
-}) {
+export function BottomPanel({ panelRef }: { panelRef: RefObject<PanelImperativeHandle | null> }) {
   const config = useScriptsStore((s) => s.config);
   const loading = useScriptsStore((s) => s.loading);
   const activeTab = useScriptsStore((s) => s.activeTab);

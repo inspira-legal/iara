@@ -32,7 +32,7 @@ vi.mock("@iara/shared/git", () => ({
 
 import { execSync } from "node:child_process";
 import { gitCloneWithProgress, gitLsRemote, gitWorktreeAdd } from "@iara/shared/git";
-import { getRepoInfo, addRepo } from "./repos.js";
+import { getRepoInfo, addRepo, listLocalBranches } from "./repos.js";
 
 let tmpDir: string;
 
@@ -279,10 +279,7 @@ describe("addRepo()", () => {
     const appState = createMockAppState(
       projectSlug,
       [],
-      [
-        { slug: "default", branch: "main" },
-        { slug: "feature-1", branch: "feature-1" },
-      ],
+      [{ slug: "default" }, { slug: "feature-1" }],
     );
 
     await addRepo(appState, "id", projectSlug, { method: "empty", name: "my-repo" });
@@ -290,7 +287,81 @@ describe("addRepo()", () => {
     expect(vi.mocked(gitWorktreeAdd)).toHaveBeenCalledWith(
       path.join(projectDir, "default", "my-repo"),
       path.join(projectDir, "feature-1", "my-repo"),
-      "feature-1",
+      "feat/feature-1",
     );
+  });
+});
+
+describe("listLocalBranches()", () => {
+  it("returns all branches when none are in other worktrees", () => {
+    const execSyncMock = vi.mocked(execSync);
+    execSyncMock.mockImplementation((cmd: unknown) => {
+      const command = String(cmd);
+      if (command.includes("branch --format")) return Buffer.from("main\nfeature-1\nfeature-2\n");
+      if (command.includes("worktree list --porcelain")) return Buffer.from("");
+      if (command.includes("branch --show-current")) return Buffer.from("main\n");
+      return Buffer.from("");
+    });
+
+    const result = listLocalBranches("/fake/repo");
+    expect(result).toEqual(["main", "feature-1", "feature-2"]);
+  });
+
+  it("filters out branches checked out in other worktrees", () => {
+    const execSyncMock = vi.mocked(execSync);
+    execSyncMock.mockImplementation((cmd: unknown) => {
+      const command = String(cmd);
+      if (command.includes("branch --format")) return Buffer.from("main\nfeature-1\nfeature-2\n");
+      if (command.includes("worktree list --porcelain"))
+        return Buffer.from(
+          "worktree /path/to/main\nHEAD abc123\nbranch refs/heads/main\n\nworktree /path/to/feature-1\nHEAD def456\nbranch refs/heads/feature-1\n",
+        );
+      if (command.includes("branch --show-current")) return Buffer.from("main\n");
+      return Buffer.from("");
+    });
+
+    const result = listLocalBranches("/fake/repo");
+    // main is kept (it's the current branch), feature-1 is filtered out, feature-2 stays
+    expect(result).toEqual(["main", "feature-2"]);
+  });
+
+  it("keeps the current branch even if it appears in worktree list", () => {
+    const execSyncMock = vi.mocked(execSync);
+    execSyncMock.mockImplementation((cmd: unknown) => {
+      const command = String(cmd);
+      if (command.includes("branch --format")) return Buffer.from("main\ndev\n");
+      if (command.includes("worktree list --porcelain"))
+        return Buffer.from(
+          "worktree /path/to/main\nHEAD abc123\nbranch refs/heads/main\n\nworktree /path/to/dev\nHEAD def456\nbranch refs/heads/dev\n",
+        );
+      if (command.includes("branch --show-current")) return Buffer.from("dev\n");
+      return Buffer.from("");
+    });
+
+    const result = listLocalBranches("/fake/repo");
+    // dev is current branch so it's kept; main is in another worktree so it's filtered
+    expect(result).toEqual(["dev"]);
+  });
+
+  it("returns empty array on error", () => {
+    const execSyncMock = vi.mocked(execSync);
+    execSyncMock.mockImplementation(() => {
+      throw new Error("git error");
+    });
+
+    const result = listLocalBranches("/fake/repo");
+    expect(result).toEqual([]);
+  });
+
+  it("returns empty array when no branches", () => {
+    const execSyncMock = vi.mocked(execSync);
+    execSyncMock.mockImplementation((cmd: unknown) => {
+      const command = String(cmd);
+      if (command.includes("branch --format")) return Buffer.from("");
+      return Buffer.from("");
+    });
+
+    const result = listLocalBranches("/fake/repo");
+    expect(result).toEqual([]);
   });
 });

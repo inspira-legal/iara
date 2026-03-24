@@ -82,7 +82,6 @@ export function Sidebar() {
           open={createTaskProjectId !== null}
           onClose={() => setCreateTaskProjectId(null)}
           projectId={createTaskProjectId}
-          project={projects.find((p) => p.id === createTaskProjectId)}
         />
       )}
 

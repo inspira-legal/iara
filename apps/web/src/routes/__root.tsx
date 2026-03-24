@@ -5,8 +5,16 @@ import { ErrorBoundary } from "~/components/ErrorBoundary";
 import { ToastProvider } from "~/components/Toast";
 import { useNotificationStore } from "~/stores/notifications";
 import { useAppStore } from "~/stores/app";
-// Import terminal store to register global terminal:exit listener
+// Import stores to register global WS listeners
 import "~/stores/terminal";
+import "~/stores/creation";
+import { useCreationToasts } from "~/hooks/useCreationToasts";
+import { FallbackCreationDialog } from "~/components/FallbackCreationDialog";
+
+function CreationToastBridge() {
+  useCreationToasts();
+  return null;
+}
 
 function RootComponent() {
   const { loadNotifications, subscribePush } = useNotificationStore();
@@ -27,6 +35,8 @@ function RootComponent() {
   return (
     <ErrorBoundary>
       <ToastProvider>
+        <CreationToastBridge />
+        <FallbackCreationDialog />
         <AppShell>
           <Outlet />
         </AppShell>

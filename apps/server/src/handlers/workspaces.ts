@@ -2,7 +2,7 @@ import * as crypto from "node:crypto";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { execFileSync } from "node:child_process";
-import type { CreateWorkspaceInput, Workspace } from "@iara/contracts";
+import type { CreateWorkspaceInput, CreationStage, Workspace } from "@iara/contracts";
 import type { PortAllocator } from "@iara/orchestrator/ports";
 import { gitWorktreeAdd, gitWorktreeRemove } from "@iara/shared/git";
 import { z } from "zod";
@@ -13,17 +13,24 @@ import type { ProjectsWatcher } from "../services/watcher.js";
 import { ensureGlobalSymlinks } from "../services/env.js";
 import { runClaude, activeRuns, streamClaudeRun } from "../services/claude-runner.js";
 import { loadPrompt } from "../prompts/index.js";
+import { getRepoInfo } from "../services/repos.js";
 import type { PushFn } from "./index.js";
+
+function toSlug(s: string): string {
+  return s
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "");
+}
 
 // Quick schema — metadata only, no code exploration needed
 const TaskMetadataSchema = z.object({
   name: z.string().min(1).describe("nome curto e descritivo da task"),
   description: z.string().min(1).describe("descrição concisa do objetivo"),
-  branches: z
-    .record(z.string(), z.string().min(1))
-    .describe(
-      "mapa repoName → branchName, seguindo o padrão de nomenclatura de branches existente em cada repo",
-    ),
+  branch: z
+    .string()
+    .min(1)
+    .describe("nome da branch para a task, seguindo o padrão de nomenclatura existente"),
 });
 
 function listRepoBranches(repoDir: string): string[] {
@@ -50,10 +57,29 @@ export function registerWorkspaceHandlers(
   portAllocator: PortAllocator,
 ): void {
   registerMethod("workspaces.create", async (params) => {
-    const { projectId, ...input } = params;
-    const workspace = await createWorkspace(appState, watcher, projectId, input, pushFn);
+    const { projectId, branch, ...input } = params;
+    const workspace = await createWorkspace(appState, watcher, projectId, input, pushFn, branch);
     sessionWatcher.refresh();
     return workspace;
+  });
+
+  registerMethod("workspaces.update", async (params) => {
+    const { workspaceId, ...input } = params;
+    const workspace = appState.getWorkspace(workspaceId);
+    if (!workspace) throw new Error(`Workspace not found: ${workspaceId}`);
+
+    const wsDir = appState.getWorkspaceDir(workspaceId);
+    const wsJsonPath = path.join(wsDir, "workspace.json");
+
+    appState.updateWorkspace(workspace.projectId, workspace.slug, input);
+    watcher.suppressNext(wsJsonPath);
+
+    // Rescan and push
+    const project = appState.rescanProject(workspace.projectId);
+    if (project) {
+      const updated = project.workspaces.find((w) => w.id === workspaceId);
+      if (updated) pushFn("workspace:changed", { workspace: updated });
+    }
   });
 
   registerMethod("workspaces.delete", async (params) => {
@@ -145,8 +171,7 @@ NÃO explore arquivos. Responda apenas com base nas informações acima.`;
     const systemPrompt = `${projectMdContent}
 
 Task: ${workspace.name}
-Descrição: ${workspace.description}
-Branch: ${workspace.branch}`;
+Descrição: ${workspace.description}`;
 
     const taskMdPath = path.join(wsDir, "TASK.md");
     const prompt = loadPrompt("task-regenerate");
@@ -157,6 +182,23 @@ Branch: ${workspace.branch}`;
     streamClaudeRun(run, requestId, taskMdPath, pushFn);
 
     return { requestId };
+  });
+
+  registerMethod("workspaces.checkoutBranch", async (params) => {
+    const { workspaceId, repoName, branch } = params;
+    const workspace = appState.getWorkspace(workspaceId);
+    if (!workspace) throw new Error(`Workspace not found: ${workspaceId}`);
+
+    const wsDir = appState.getWorkspaceDir(workspaceId);
+    const repoDir = path.join(wsDir, repoName);
+
+    execFileSync("git", ["checkout", branch], {
+      cwd: repoDir,
+      encoding: "utf-8",
+      timeout: 10000,
+    });
+
+    return getRepoInfo(appState, workspace.projectId, workspace.slug);
   });
 
   registerMethod("workspaces.renameBranch", async (params) => {
@@ -172,6 +214,126 @@ Branch: ${workspace.branch}`;
       encoding: "utf-8",
       timeout: 10000,
     });
+
+    // Return fresh repo info after rename
+    return getRepoInfo(appState, workspace.projectId, workspace.slug);
+  });
+
+  // ---------------------------------------------------------------------------
+  // Background creation orchestration
+  // ---------------------------------------------------------------------------
+
+  registerMethod("workspaces.createFromPrompt", async (params) => {
+    const { projectId, prompt: userGoal } = params;
+    const requestId = crypto.randomUUID();
+
+    const project = appState.getProject(projectId);
+    if (!project) throw new Error(`Project not found: ${projectId}`);
+
+    const pushProgress = (
+      stage: CreationStage,
+      extra?: { name?: string; entityId?: string; error?: string },
+    ) => {
+      pushFn("creation:progress", { requestId, type: "task", stage, ...extra });
+    };
+
+    void (async () => {
+      try {
+        // Stage 1: Suggest metadata via Claude
+        pushProgress("suggesting");
+        const projectDir = appState.getProjectDir(project.slug);
+        const defaultDir = path.join(projectDir, "default");
+        const repos = appState.discoverRepos(project.slug);
+
+        const reposBranchInfo = repos.map((repo: string) => {
+          const repoDir = path.join(defaultDir, repo);
+          const branches = listRepoBranches(repoDir);
+          return { name: repo, branches };
+        });
+
+        const repoLines = reposBranchInfo
+          .map(
+            (r: { name: string; branches: string[] }) =>
+              `- ${r.name}: branches existentes: ${r.branches.join(", ") || "nenhuma"}`,
+          )
+          .join("\n");
+
+        const systemPrompt = `Repositórios do projeto:\n${repoLines}\n\nNÃO explore arquivos. Responda apenas com base nas informações acima.`;
+        const suggestPrompt = loadPrompt("task-suggest", { userGoal });
+
+        const suggestRun = runClaude(
+          { cwd: defaultDir, prompt: suggestPrompt, systemPrompt, maxTurns: 3 },
+          TaskMetadataSchema,
+        );
+
+        let suggested: { name: string; description: string; branch: string };
+        try {
+          suggested = await suggestRun.result;
+        } catch {
+          pushProgress("error", { error: "Claude suggestion failed" });
+          return;
+        }
+
+        const slug = toSlug(suggested.name);
+        if (!slug || slug === "default") {
+          pushProgress("error", { error: "Invalid task name" });
+          return;
+        }
+        pushProgress("suggested", { name: suggested.name });
+
+        // Stage 2: Create workspace (worktrees, TASK.md)
+        pushProgress("creating", { name: suggested.name });
+        const input: CreateWorkspaceInput = {
+          slug,
+          name: suggested.name,
+          description: suggested.description,
+        };
+        const workspace = await createWorkspace(
+          appState,
+          watcher,
+          projectId,
+          input,
+          pushFn,
+          suggested.branch,
+        );
+        sessionWatcher.refresh();
+
+        const entityId = workspace.id;
+        pushProgress("created", { name: suggested.name, entityId });
+
+        // Stage 3: Generate TASK.md — non-blocking
+        pushProgress("analyzing", { name: suggested.name, entityId });
+        try {
+          const wsDir = appState.getWorkspaceDir(entityId);
+          let projectMdContent = "";
+          const projectMdPath = path.join(projectDir, "PROJECT.md");
+          try {
+            projectMdContent = (await fs.promises.readFile(projectMdPath, "utf-8")).trim();
+          } catch {
+            // ignore
+          }
+          const regenSystemPrompt = `${projectMdContent}\n\nTask: ${workspace.name}\nDescrição: ${workspace.description}`;
+          const regenPrompt = loadPrompt("task-regenerate");
+          const regenRun = runClaude({
+            cwd: wsDir,
+            prompt: regenPrompt,
+            systemPrompt: regenSystemPrompt,
+          });
+          const regenResult = await regenRun.result;
+          const content =
+            typeof regenResult === "string" ? regenResult : JSON.stringify(regenResult);
+          await fs.promises.writeFile(path.join(wsDir, "TASK.md"), content, "utf-8");
+        } catch {
+          // Regeneration failure is non-fatal
+        }
+
+        pushProgress("done", { name: suggested.name, entityId });
+      } catch (err) {
+        pushProgress("error", { error: err instanceof Error ? err.message : String(err) });
+      }
+    })();
+
+    return { requestId };
   });
 }
 
@@ -185,6 +347,8 @@ async function createWorkspace(
   projectId: string,
   input: CreateWorkspaceInput,
   pushFn: PushFn,
+  /** Transient branch name for git worktree creation — not persisted in workspace.json */
+  branch?: string,
 ): Promise<Workspace> {
   if (input.slug === "default") {
     throw new Error('Slug "default" is reserved and cannot be used for workspaces');
@@ -193,8 +357,7 @@ async function createWorkspace(
   const project = appState.getProject(projectId);
   if (!project) throw new Error(`Project not found: ${projectId}`);
 
-  const branch = input.branch ?? `feat/${input.slug}`;
-  const branchesMap = input.branches;
+  const worktreeBranch = branch ?? `feat/${input.slug}`;
 
   const projectDir = appState.getProjectDir(project.slug);
   const wsDir = path.join(projectDir, input.slug);
@@ -223,8 +386,7 @@ async function createWorkspace(
         repos.map((repo: string) => {
           const repoDir = path.join(reposDir, repo);
           const wtDir = path.join(wsDir, repo);
-          const repoBranch = branchesMap?.[repo] ?? branch;
-          return gitWorktreeAdd(repoDir, wtDir, repoBranch);
+          return gitWorktreeAdd(repoDir, wtDir, worktreeBranch);
         }),
       );
 
@@ -251,8 +413,6 @@ async function createWorkspace(
     type: "task",
     name: input.name,
     ...(input.description !== undefined ? { description: input.description } : {}),
-    branch,
-    ...(branchesMap ? { branches: branchesMap } : {}),
   });
 
   // Rescan project and push updated state

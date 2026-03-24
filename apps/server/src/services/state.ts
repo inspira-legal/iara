@@ -131,14 +131,10 @@ export class AppState {
         if (isDefault) {
           return { type: "default" as const, name: "Default", description: "", createdAt: now };
         }
-        const branches = this.detectBranches(wsDir);
-        const branch = Object.values(branches)[0] ?? entry.name;
         return {
           type: "task" as const,
           name: entry.name,
           description: "",
-          branch,
-          ...(Object.keys(branches).length > 0 ? { branches } : {}),
           createdAt: now,
         };
       });
@@ -192,49 +188,6 @@ export class AppState {
     } catch {
       return false;
     }
-  }
-
-  /** Detect git branch for each repo/worktree in a workspace directory. */
-  private detectBranches(wsDir: string): Record<string, string> {
-    const branches: Record<string, string> = {};
-    try {
-      for (const name of fs.readdirSync(wsDir)) {
-        const branch = this.detectBranchForRepo(path.join(wsDir, name));
-        if (branch) branches[name] = branch;
-      }
-    } catch {
-      // ignore
-    }
-    return branches;
-  }
-
-  /** Detect git branch for a single repo or worktree directory. */
-  private detectBranchForRepo(repoDir: string): string | null {
-    try {
-      const gitPath = path.join(repoDir, ".git");
-      const stat = fs.statSync(gitPath);
-
-      let headPath: string | null = null;
-      if (stat.isDirectory()) {
-        headPath = path.join(gitPath, "HEAD");
-      } else if (stat.isFile()) {
-        const content = fs.readFileSync(gitPath, "utf-8").trim();
-        const match = content.match(/^gitdir:\s*(.+)$/);
-        if (match?.[1]) {
-          headPath = path.join(match[1], "HEAD");
-        }
-      }
-
-      if (headPath) {
-        const head = fs.readFileSync(headPath, "utf-8").trim();
-        if (head.startsWith("ref: refs/heads/")) {
-          return head.replace("ref: refs/heads/", "");
-        }
-      }
-    } catch {
-      // ignore — file missing, not a git dir, etc.
-    }
-    return null;
   }
 
   // ---------------------------------------------------------------------------
@@ -370,13 +323,7 @@ export class AppState {
     wsSlug: string,
     data:
       | { type: "default"; name: string; description?: string }
-      | {
-          type: "task";
-          name: string;
-          description?: string;
-          branch: string;
-          branches?: Record<string, string>;
-        },
+      | { type: "task"; name: string; description?: string },
   ): void {
     const wsDir = path.join(this.projectsDir, projectSlug, wsSlug);
     const file = createJsonFile(path.join(wsDir, "workspace.json"), WorkspaceFileSchema);
@@ -385,6 +332,17 @@ export class AppState {
       description: data.description ?? "",
       createdAt: new Date().toISOString(),
     });
+  }
+
+  /** Update workspace.json for an existing workspace (preserves createdAt). */
+  updateWorkspace(
+    projectSlug: string,
+    wsSlug: string,
+    updates: { name?: string; description?: string },
+  ): void {
+    const wsDir = path.join(this.projectsDir, projectSlug, wsSlug);
+    const file = createJsonFile(path.join(wsDir, "workspace.json"), WorkspaceFileSchema);
+    file.update(updates);
   }
 
   // ---------------------------------------------------------------------------

@@ -2,7 +2,6 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { loadPrompt } from "../prompts/index.js";
 
-
 export interface LaunchConfig {
   taskDir: string;
   repoDirs: string[];

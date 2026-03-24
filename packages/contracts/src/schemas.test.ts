@@ -73,19 +73,9 @@ describe("WorkspaceFileSchema", () => {
       type: "task",
       name: "Fix login bug",
       description: "Fix the login form validation",
-      branch: "feat/fix-login",
       createdAt: "2026-03-20T00:00:00.000Z",
     });
     expect(result.success).toBe(true);
-  });
-
-  it("rejects task workspace without branch", () => {
-    const result = WorkspaceFileSchema.safeParse({
-      type: "task",
-      name: "No branch",
-      createdAt: "2026-03-20T00:00:00.000Z",
-    });
-    expect(result.success).toBe(false);
   });
 
   it("applies default description for default workspace", () => {
@@ -101,7 +91,6 @@ describe("WorkspaceFileSchema", () => {
     const result = WorkspaceFileSchema.parse({
       type: "task",
       name: "Task",
-      branch: "feat/x",
       createdAt: "2026-03-20T00:00:00.000Z",
     });
     expect(result.description).toBe("");
@@ -116,59 +105,14 @@ describe("WorkspaceFileSchema", () => {
     expect(result.success).toBe(false);
   });
 
-  it("validates a task workspace with branches map", () => {
+  it("task workspace does not require branch field", () => {
     const result = WorkspaceFileSchema.safeParse({
       type: "task",
-      name: "Multi-repo task",
+      name: "No branch needed",
       description: "",
-      branch: "feat/multi",
-      branches: { frontend: "feat/multi", backend: "feat/multi-api" },
       createdAt: "2026-03-20T00:00:00.000Z",
     });
     expect(result.success).toBe(true);
-    if (result.success) {
-      expect(result.data.type).toBe("task");
-      expect((result.data as { branches?: Record<string, string> }).branches).toEqual({
-        frontend: "feat/multi",
-        backend: "feat/multi-api",
-      });
-    }
-  });
-
-  it("validates a task workspace without branches (backward compat)", () => {
-    const result = WorkspaceFileSchema.safeParse({
-      type: "task",
-      name: "Single-repo task",
-      description: "",
-      branch: "feat/single",
-      createdAt: "2026-03-20T00:00:00.000Z",
-    });
-    expect(result.success).toBe(true);
-  });
-
-  it("rejects branches with non-string values", () => {
-    const result = WorkspaceFileSchema.safeParse({
-      type: "task",
-      name: "Bad branches",
-      branch: "feat/x",
-      branches: { frontend: 123, backend: true },
-      createdAt: "2026-03-20T00:00:00.000Z",
-    });
-    expect(result.success).toBe(false);
-  });
-
-  it("default workspace does not accept branch field", () => {
-    // branch is not stripped but is unexpected — depends on zod strictness
-    const result = WorkspaceFileSchema.safeParse({
-      type: "default",
-      name: "Default",
-      branch: "should-not-be-here",
-      createdAt: "2026-03-20T00:00:00.000Z",
-    });
-    // With passthrough, this may succeed but branch is ignored in the type
-    if (result.success) {
-      expect(result.data.type).toBe("default");
-    }
   });
 });
 

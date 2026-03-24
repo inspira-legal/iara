@@ -34,8 +34,10 @@ export interface CreateWorkspaceInput {
   slug: string;
   name: string;
   description?: string;
-  branch?: string;
-  branches?: Record<string, string>;
+}
+
+export interface UpdateWorkspaceInput {
+  name?: string;
 }
 
 export interface SessionInfo {

@@ -15,8 +15,6 @@ export interface Workspace {
   type: "default" | "task";
   name: string;
   description: string;
-  branch?: string;
-  branches?: Record<string, string>;
   createdAt: string;
 }
 
@@ -48,6 +46,24 @@ export interface CloneProgress {
   repo: string;
   status: "started" | "progress" | "done" | "error";
   message?: string;
+  error?: string;
+}
+
+export type CreationStage =
+  | "suggesting"
+  | "suggested"
+  | "creating"
+  | "created"
+  | "analyzing"
+  | "done"
+  | "error";
+
+export interface CreationProgress {
+  requestId: string;
+  type: "project" | "task";
+  stage: CreationStage;
+  name?: string;
+  entityId?: string;
   error?: string;
 }
 

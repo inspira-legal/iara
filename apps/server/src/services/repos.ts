@@ -132,9 +132,9 @@ export async function addRepo(
     if (ws.slug === "default") continue;
     const wsDir = path.join(projectDir, ws.slug);
     const wtDir = path.join(wsDir, input.name);
-    if (fs.existsSync(wsDir) && !fs.existsSync(wtDir) && ws.branch) {
+    if (fs.existsSync(wsDir) && !fs.existsSync(wtDir)) {
       try {
-        await gitWorktreeAdd(dest, wtDir, ws.branch);
+        await gitWorktreeAdd(dest, wtDir, `feat/${ws.slug}`);
       } catch {
         // Best effort — branch may not exist yet
       }
@@ -189,6 +189,42 @@ export async function fetchRepos(
   await Promise.all(
     repos.map((name: string) => gitFetch(path.join(reposDir, name)).catch(() => {})),
   );
+}
+
+/**
+ * List local branches for a repo, filtering out branches checked out in other worktrees.
+ */
+export function listLocalBranches(repoDir: string): string[] {
+  try {
+    const output = execSync("git branch --format='%(refname:short)'", {
+      cwd: repoDir,
+      stdio: "pipe",
+    })
+      .toString()
+      .trim();
+    if (!output) return [];
+    const allBranches = output.split("\n").map((b) => b.trim().replace(/^'|'$/g, ""));
+
+    // Get branches that are checked out in worktrees
+    const worktreeOutput = execSync("git worktree list --porcelain", {
+      cwd: repoDir,
+      stdio: "pipe",
+    }).toString();
+
+    const checkedOut = new Set<string>();
+    for (const line of worktreeOutput.split("\n")) {
+      if (line.startsWith("branch refs/heads/")) {
+        checkedOut.add(line.replace("branch refs/heads/", ""));
+      }
+    }
+
+    // Get the current branch in this worktree — we keep it
+    const currentBranch = getGitBranch(repoDir);
+
+    return allBranches.filter((b) => b === currentBranch || !checkedOut.has(b));
+  } catch {
+    return [];
+  }
 }
 
 /** Resolve the directory containing repos for a workspace (default/ or task slug). */

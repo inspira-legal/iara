@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { GitBranch, ChevronLeft, Code, FolderOpen, Sparkles } from "lucide-react";
+import { ChevronLeft, Code, FolderOpen, Sparkles } from "lucide-react";
 import type { Workspace, Project, RepoInfo } from "@iara/contracts";
 import { transport } from "~/lib/ws-transport.js";
 import { useTerminalStore } from "~/stores/terminal";
@@ -92,12 +92,6 @@ export function TaskWorkspace({ project, task }: TaskWorkspaceProps) {
             <div className="text-xs text-zinc-500">{project.name}</div>
             <div className="text-sm font-medium text-zinc-100">{task.name}</div>
           </div>
-          {task.branch && (
-            <div className="flex items-center gap-1.5 text-xs text-zinc-500">
-              <GitBranch size={12} />
-              <code className="rounded bg-zinc-800 px-1 py-0.5">{task.branch}</code>
-            </div>
-          )}
         </div>
         <div className="ml-auto flex items-center gap-1">
           <GitSyncButton
@@ -146,6 +140,7 @@ export function TaskWorkspace({ project, task }: TaskWorkspaceProps) {
           repoLoading={repoLoading}
           hasActiveTerminal={hasTerminal}
           onLaunchSession={handleLaunchSession}
+          onRepoInfoUpdate={setRepoInfo}
         />
       )}
     </div>
@@ -159,6 +154,7 @@ function TaskDetailView({
   repoLoading,
   hasActiveTerminal,
   onLaunchSession,
+  onRepoInfoUpdate,
 }: {
   project: Project;
   task: Workspace;
@@ -166,6 +162,7 @@ function TaskDetailView({
   repoLoading: boolean;
   hasActiveTerminal: boolean;
   onLaunchSession: (resumeSessionId?: string, sessionCwd?: string) => void;
+  onRepoInfoUpdate: (info: RepoInfo[]) => void;
 }) {
   const {
     isRegenerating,
@@ -236,7 +233,15 @@ function TaskDetailView({
           ) : repoInfo.length === 0 ? (
             <EmptyState message="No repos configured." />
           ) : (
-            repoInfo.map((repo) => <RepoCard key={repo.name} repo={repo} taskId={task.id} />)
+            repoInfo.map((repo) => (
+              <RepoCard
+                key={repo.name}
+                repo={repo}
+                taskId={task.id}
+                projectId={project.id}
+                onRepoInfoUpdate={onRepoInfoUpdate}
+              />
+            ))
           )}
         </div>
       </div>
