@@ -20,45 +20,23 @@ afterEach(() => {
   fs.rmSync(tmpDir, { recursive: true, force: true });
 });
 
-function writeProjectJson(slug: string, data: Record<string, unknown>): void {
-  const dir = path.join(projectsDir, slug);
-  fs.mkdirSync(dir, { recursive: true });
-  fs.writeFileSync(path.join(dir, "project.json"), JSON.stringify(data));
-}
-
-function writeWorkspaceJson(
-  projectSlug: string,
-  wsSlug: string,
-  data: Record<string, unknown>,
-): void {
-  const dir = path.join(projectsDir, projectSlug, wsSlug);
-  fs.mkdirSync(dir, { recursive: true });
-  fs.writeFileSync(path.join(dir, "workspace.json"), JSON.stringify(data));
-}
-
-/** Create a fake git repo (.git is a directory with HEAD) inside a workspace */
-function createFakeRepo(
-  projectSlug: string,
-  wsSlug: string,
-  repoName: string,
-  branch = "main",
-): void {
-  const repoDir = path.join(projectsDir, projectSlug, wsSlug, repoName);
+/** Create a fake git repo (.git is a directory with HEAD) at the project root */
+function createFakeRepo(projectSlug: string, repoName: string, branch = "main"): void {
+  const repoDir = path.join(projectsDir, projectSlug, repoName);
   const gitDir = path.join(repoDir, ".git");
   fs.mkdirSync(gitDir, { recursive: true });
   fs.writeFileSync(path.join(gitDir, "HEAD"), `ref: refs/heads/${branch}\n`);
 }
 
-/** Create a fake git worktree (.git is a file pointing to a gitdir) inside a workspace */
+/** Create a fake git worktree (.git is a file) under workspaces/<wsSlug>/<repoName> */
 function createFakeWorktree(
   projectSlug: string,
   wsSlug: string,
   repoName: string,
   branch = "feat/task",
 ): void {
-  const repoDir = path.join(projectsDir, projectSlug, wsSlug, repoName);
+  const repoDir = path.join(projectsDir, projectSlug, "workspaces", wsSlug, repoName);
   fs.mkdirSync(repoDir, { recursive: true });
-  // Worktree .git is a file: "gitdir: /path/to/worktree-data"
   const worktreeDataDir = path.join(projectsDir, projectSlug, ".worktree-data", wsSlug, repoName);
   fs.mkdirSync(worktreeDataDir, { recursive: true });
   fs.writeFileSync(path.join(repoDir, ".git"), `gitdir: ${worktreeDataDir}\n`);
@@ -73,92 +51,59 @@ describe("AppState", () => {
       expect(state.getState().settings).toEqual({});
     });
 
-    it("ignores directories without project.json", () => {
+    it("ignores directories without git repos", () => {
       fs.mkdirSync(path.join(projectsDir, "not-a-project"), { recursive: true });
       const state = new AppState(projectsDir, stateDir);
       expect(state.getState().projects).toEqual([]);
     });
 
-    it("discovers project with project.json", () => {
-      writeProjectJson("my-app", {
-        name: "My App",
-        description: "Test",
-        repoSources: ["https://github.com/org/repo"],
-        createdAt: "2026-03-20T00:00:00.000Z",
-      });
-      createFakeRepo("my-app", "default", "repo", "main");
+    it("discovers project with git repo at root", () => {
+      createFakeRepo("my-app", "repo");
       const state = new AppState(projectsDir, stateDir);
       const projects = state.getState().projects;
       expect(projects).toHaveLength(1);
       expect(projects[0]!.id).toBe("my-app");
       expect(projects[0]!.slug).toBe("my-app");
       expect(projects[0]!.name).toBe("My App");
-      expect(projects[0]!.repoSources).toEqual(["https://github.com/org/repo"]);
     });
 
     it("discovers multiple projects", () => {
-      writeProjectJson("proj-a", {
-        name: "A",
-        repoSources: [],
-        createdAt: "2026-03-20T00:00:00.000Z",
-      });
-      createFakeRepo("proj-a", "default", "repo", "main");
-      writeProjectJson("proj-b", {
-        name: "B",
-        repoSources: [],
-        createdAt: "2026-03-20T00:00:00.000Z",
-      });
-      createFakeRepo("proj-b", "default", "repo", "main");
+      createFakeRepo("proj-a", "repo");
+      createFakeRepo("proj-b", "repo");
       const state = new AppState(projectsDir, stateDir);
       expect(state.getState().projects).toHaveLength(2);
     });
 
-    it("discovers workspaces within projects", () => {
-      writeProjectJson("my-app", {
-        name: "My App",
-        repoSources: [],
-        createdAt: "2026-03-20T00:00:00.000Z",
-      });
-      writeWorkspaceJson("my-app", "default", {
-        type: "default",
-        name: "Default",
-        description: "",
-        createdAt: "2026-03-20T00:00:00.000Z",
-      });
-      createFakeRepo("my-app", "default", "repo", "main");
-      writeWorkspaceJson("my-app", "fix-login", {
-        type: "task",
-        name: "Fix Login",
-        description: "Fix the login bug",
-        branch: "feat/fix-login",
-        createdAt: "2026-03-20T00:00:00.000Z",
-      });
-      createFakeWorktree("my-app", "fix-login", "repo", "feat/fix-login");
+    it("always includes main workspace for a project", () => {
+      createFakeRepo("my-app", "repo");
       const state = new AppState(projectsDir, stateDir);
       const project = state.getProject("my-app");
       expect(project).not.toBeNull();
-      expect(project!.workspaces).toHaveLength(2);
+      expect(project!.workspaces).toHaveLength(1);
 
-      const defaultWs = project!.workspaces.find((w) => w.type === "default");
-      expect(defaultWs).toBeDefined();
-      expect(defaultWs!.id).toBe("my-app/default");
-      expect(defaultWs!.projectId).toBe("my-app");
-      expect(defaultWs!.slug).toBe("default");
-
-      const taskWs = project!.workspaces.find((w) => w.type === "task");
-      expect(taskWs).toBeDefined();
-      expect(taskWs!.id).toBe("my-app/fix-login");
-      expect(taskWs!.branch).toBe("feat/fix-login");
+      const mainWs = project!.workspaces[0]!;
+      expect(mainWs.id).toBe("my-app/main");
+      expect(mainWs.slug).toBe("main");
+      expect(mainWs.name).toBe("Main");
     });
 
-    it("ignores subdirs without workspace.json and without git repos", () => {
-      writeProjectJson("my-app", {
-        name: "My App",
-        repoSources: [],
-        createdAt: "2026-03-20T00:00:00.000Z",
+    it("discovers workspaces with worktrees", () => {
+      createFakeRepo("my-app", "repo");
+      createFakeWorktree("my-app", "fix-login", "repo", "feat/fix-login");
+      const state = new AppState(projectsDir, stateDir);
+      const project = state.getProject("my-app");
+      expect(project!.workspaces).toHaveLength(2);
+
+      const taskWs = project!.workspaces.find((w) => w.slug === "fix-login");
+      expect(taskWs).toBeDefined();
+      expect(taskWs!.id).toBe("my-app/fix-login");
+    });
+
+    it("ignores workspace subdirs without worktrees", () => {
+      createFakeRepo("my-app", "repo");
+      fs.mkdirSync(path.join(projectsDir, "my-app", "workspaces", "empty-dir"), {
+        recursive: true,
       });
-      createFakeRepo("my-app", "default", "repo", "main");
-      fs.mkdirSync(path.join(projectsDir, "my-app", "random-dir"), { recursive: true });
       const state = new AppState(projectsDir, stateDir);
       expect(state.getProject("my-app")!.workspaces).toHaveLength(1);
     });
@@ -178,173 +123,6 @@ describe("AppState", () => {
     });
   });
 
-  describe("auto-create missing JSON files", () => {
-    it("auto-creates project.json when directory has default/ with git repos", () => {
-      createFakeRepo("my-app", "default", "repo", "main");
-      const state = new AppState(projectsDir, stateDir);
-
-      const project = state.getProject("my-app");
-      expect(project).not.toBeNull();
-      expect(project!.name).toBe("my-app");
-      expect(fs.existsSync(path.join(projectsDir, "my-app", "project.json"))).toBe(true);
-    });
-
-    it("does not auto-create project.json when no default/ dir", () => {
-      fs.mkdirSync(path.join(projectsDir, "orphan"), { recursive: true });
-      const state = new AppState(projectsDir, stateDir);
-      expect(state.getProject("orphan")).toBeNull();
-      expect(fs.existsSync(path.join(projectsDir, "orphan", "project.json"))).toBe(false);
-    });
-
-    it("auto-creates workspace.json for default/ with git repos", () => {
-      writeProjectJson("my-app", {
-        name: "My App",
-        repoSources: [],
-        createdAt: "2026-03-20T00:00:00.000Z",
-      });
-      createFakeRepo("my-app", "default", "repo", "main");
-      const state = new AppState(projectsDir, stateDir);
-
-      const ws = state.getWorkspace("my-app/default");
-      expect(ws).not.toBeNull();
-      expect(ws!.type).toBe("default");
-      expect(ws!.name).toBe("Default");
-      expect(fs.existsSync(path.join(projectsDir, "my-app", "default", "workspace.json"))).toBe(
-        true,
-      );
-    });
-
-    it("auto-creates workspace.json for task dir with worktrees, detecting branch", () => {
-      writeProjectJson("my-app", {
-        name: "My App",
-        repoSources: [],
-        createdAt: "2026-03-20T00:00:00.000Z",
-      });
-      createFakeRepo("my-app", "default", "repo", "main"); // matching repo in default
-      createFakeWorktree("my-app", "fix-login", "repo", "feat/fix-login");
-      const state = new AppState(projectsDir, stateDir);
-
-      const ws = state.getWorkspace("my-app/fix-login");
-      expect(ws).not.toBeNull();
-      expect(ws!.type).toBe("task");
-      expect(ws!.branch).toBe("feat/fix-login");
-      expect(fs.existsSync(path.join(projectsDir, "my-app", "fix-login", "workspace.json"))).toBe(
-        true,
-      );
-    });
-
-    it("does NOT auto-create task workspace.json if dir has repos instead of worktrees", () => {
-      writeProjectJson("my-app", {
-        name: "My App",
-        repoSources: [],
-        createdAt: "2026-03-20T00:00:00.000Z",
-      });
-      // .git as directory = repo, not worktree — invalid for a task workspace
-      createFakeRepo("my-app", "bad-task", "repo", "main");
-      const state = new AppState(projectsDir, stateDir);
-      expect(state.getWorkspace("my-app/bad-task")).toBeNull();
-    });
-
-    it("does NOT auto-create default workspace.json if dir has worktrees instead of repos", () => {
-      // default/ should have real repos, not worktrees
-      createFakeWorktree("my-app", "default", "repo", "main");
-      const state = new AppState(projectsDir, stateDir);
-      // Project won't be found either since looksLikeProject checks for default/ dir
-      // but the workspace won't be valid
-      expect(state.getProject("my-app")).toBeNull();
-    });
-
-    it("does not auto-create workspace.json for dir without git repos or worktrees", () => {
-      writeProjectJson("my-app", {
-        name: "My App",
-        repoSources: [],
-        createdAt: "2026-03-20T00:00:00.000Z",
-      });
-      fs.mkdirSync(path.join(projectsDir, "my-app", "empty-dir"), { recursive: true });
-      const state = new AppState(projectsDir, stateDir);
-      expect(state.getWorkspace("my-app/empty-dir")).toBeNull();
-    });
-
-    it("auto-creates both project.json and workspace.json from bare directory structure", () => {
-      createFakeRepo("legacy-proj", "default", "my-repo", "main");
-      createFakeWorktree("legacy-proj", "some-task", "my-repo", "feat/something");
-      const state = new AppState(projectsDir, stateDir);
-
-      expect(state.getState().projects).toHaveLength(1);
-      const project = state.getProject("legacy-proj");
-      expect(project).not.toBeNull();
-      expect(project!.workspaces).toHaveLength(2);
-
-      const defaultWs = project!.workspaces.find((w) => w.slug === "default");
-      expect(defaultWs!.type).toBe("default");
-
-      const taskWs = project!.workspaces.find((w) => w.slug === "some-task");
-      expect(taskWs!.type).toBe("task");
-      expect(taskWs!.branch).toBe("feat/something");
-    });
-  });
-
-  describe("directory structure is source of truth (not JSON)", () => {
-    it("project.json present but no repos in default/ — not a project", () => {
-      writeProjectJson("my-app", {
-        name: "My App",
-        repoSources: [],
-        createdAt: "2026-03-20T00:00:00.000Z",
-      });
-      fs.mkdirSync(path.join(projectsDir, "my-app", "default"), { recursive: true });
-      const state = new AppState(projectsDir, stateDir);
-      expect(state.getProject("my-app")).toBeNull();
-    });
-
-    it("workspace.json present for task but no worktrees — not a workspace", () => {
-      createFakeRepo("my-app", "default", "repo", "main");
-      writeProjectJson("my-app", {
-        name: "My App",
-        repoSources: [],
-        createdAt: "2026-03-20T00:00:00.000Z",
-      });
-      writeWorkspaceJson("my-app", "bad-task", {
-        type: "task",
-        name: "Bad Task",
-        branch: "feat/x",
-        createdAt: "2026-03-20T00:00:00.000Z",
-      });
-      const state = new AppState(projectsDir, stateDir);
-      const tasks = state.getProject("my-app")!.workspaces.filter((w) => w.type === "task");
-      expect(tasks).toHaveLength(0);
-    });
-
-    it("skips task if worktree names don't match default/ repo names", () => {
-      createFakeRepo("my-app", "default", "frontend", "main");
-      createFakeWorktree("my-app", "my-task", "unknown-repo", "feat/task");
-      const state = new AppState(projectsDir, stateDir);
-      expect(state.getProject("my-app")!.workspaces).toHaveLength(1);
-      expect(state.getProject("my-app")!.workspaces[0]!.type).toBe("default");
-    });
-
-    it("accepts task when worktree names match default/ repo names", () => {
-      createFakeRepo("my-app", "default", "frontend", "main");
-      createFakeWorktree("my-app", "my-task", "frontend", "feat/task");
-      const state = new AppState(projectsDir, stateDir);
-      expect(state.getProject("my-app")!.workspaces).toHaveLength(2);
-    });
-
-    it("reads metadata from workspace.json when present, but existence is from dir structure", () => {
-      createFakeRepo("my-app", "default", "repo", "main");
-      writeWorkspaceJson("my-app", "default", {
-        type: "default",
-        name: "Custom Name",
-        description: "Custom description",
-        createdAt: "2026-01-01T00:00:00.000Z",
-      });
-      const state = new AppState(projectsDir, stateDir);
-      const ws = state.getWorkspace("my-app/default");
-      expect(ws).not.toBeNull();
-      expect(ws!.name).toBe("Custom Name");
-      expect(ws!.description).toBe("Custom description");
-    });
-  });
-
   describe("getProject", () => {
     it("returns null for non-existent project", () => {
       const state = new AppState(projectsDir, stateDir);
@@ -352,12 +130,7 @@ describe("AppState", () => {
     });
 
     it("returns project by slug", () => {
-      writeProjectJson("my-app", {
-        name: "My App",
-        repoSources: [],
-        createdAt: "2026-03-20T00:00:00.000Z",
-      });
-      createFakeRepo("my-app", "default", "repo", "main");
+      createFakeRepo("my-app", "repo");
       const state = new AppState(projectsDir, stateDir);
       expect(state.getProject("my-app")?.name).toBe("My App");
     });
@@ -369,23 +142,35 @@ describe("AppState", () => {
       expect(state.getWorkspace("nope/nope")).toBeNull();
     });
 
-    it("returns workspace by id", () => {
-      writeProjectJson("my-app", {
-        name: "My App",
-        repoSources: [],
-        createdAt: "2026-03-20T00:00:00.000Z",
-      });
-      writeWorkspaceJson("my-app", "default", {
-        type: "default",
-        name: "Default",
-        createdAt: "2026-03-20T00:00:00.000Z",
-      });
-      createFakeRepo("my-app", "default", "repo", "main");
+    it("returns main workspace by id", () => {
+      createFakeRepo("my-app", "repo");
       const state = new AppState(projectsDir, stateDir);
-      const ws = state.getWorkspace("my-app/default");
+      const ws = state.getWorkspace("my-app/main");
       expect(ws).not.toBeNull();
-      expect(ws!.name).toBe("Default");
-      expect(ws!.type).toBe("default");
+      expect(ws!.name).toBe("Main");
+    });
+
+    it("returns task workspace by id", () => {
+      createFakeRepo("my-app", "repo");
+      createFakeWorktree("my-app", "fix-login", "repo", "feat/fix-login");
+      const state = new AppState(projectsDir, stateDir);
+      const ws = state.getWorkspace("my-app/fix-login");
+      expect(ws).not.toBeNull();
+      expect(ws!.slug).toBe("fix-login");
+    });
+  });
+
+  describe("getWorkspaceDir", () => {
+    it("returns project root for main workspace", () => {
+      const state = new AppState(projectsDir, stateDir);
+      expect(state.getWorkspaceDir("my-app/main")).toBe(path.join(projectsDir, "my-app"));
+    });
+
+    it("returns workspaces subdir for task workspace", () => {
+      const state = new AppState(projectsDir, stateDir);
+      expect(state.getWorkspaceDir("my-app/fix-login")).toBe(
+        path.join(projectsDir, "my-app", "workspaces", "fix-login"),
+      );
     });
   });
 
@@ -394,44 +179,14 @@ describe("AppState", () => {
       const state = new AppState(projectsDir, stateDir);
       expect(state.getState().projects).toHaveLength(0);
 
-      writeProjectJson("new-proj", {
-        name: "New",
-        repoSources: [],
-        createdAt: "2026-03-20T00:00:00.000Z",
-      });
-      createFakeRepo("new-proj", "default", "repo", "main");
+      createFakeRepo("new-proj", "repo");
       const project = state.rescanProject("new-proj");
       expect(project).not.toBeNull();
       expect(state.getState().projects).toHaveLength(1);
     });
 
-    it("updates existing project in state", () => {
-      writeProjectJson("my-app", {
-        name: "Old Name",
-        repoSources: [],
-        createdAt: "2026-03-20T00:00:00.000Z",
-      });
-      createFakeRepo("my-app", "default", "repo", "main");
-      const state = new AppState(projectsDir, stateDir);
-      expect(state.getProject("my-app")?.name).toBe("Old Name");
-
-      // Overwrite
-      writeProjectJson("my-app", {
-        name: "New Name",
-        repoSources: [],
-        createdAt: "2026-03-20T00:00:00.000Z",
-      });
-      state.rescanProject("my-app");
-      expect(state.getProject("my-app")?.name).toBe("New Name");
-    });
-
     it("removes deleted project from state", () => {
-      writeProjectJson("my-app", {
-        name: "My App",
-        repoSources: [],
-        createdAt: "2026-03-20T00:00:00.000Z",
-      });
-      createFakeRepo("my-app", "default", "repo", "main");
+      createFakeRepo("my-app", "repo");
       const state = new AppState(projectsDir, stateDir);
       expect(state.getState().projects).toHaveLength(1);
 
@@ -441,92 +196,24 @@ describe("AppState", () => {
     });
 
     it("detects new workspaces on rescan", () => {
-      writeProjectJson("my-app", {
-        name: "My App",
-        repoSources: [],
-        createdAt: "2026-03-20T00:00:00.000Z",
-      });
-      createFakeRepo("my-app", "default", "repo", "main");
+      createFakeRepo("my-app", "repo");
       const state = new AppState(projectsDir, stateDir);
-      // Only default/ auto-created
       expect(state.getProject("my-app")!.workspaces).toHaveLength(1);
 
-      writeWorkspaceJson("my-app", "new-task", {
-        type: "task",
-        name: "New Task",
-        branch: "feat/new",
-        createdAt: "2026-03-20T00:00:00.000Z",
-      });
       createFakeWorktree("my-app", "new-task", "repo", "feat/new");
       state.rescanProject("my-app");
       expect(state.getProject("my-app")!.workspaces).toHaveLength(2);
     });
   });
 
-  describe("writeProject", () => {
-    it("writes project.json to disk", () => {
+  describe("createEmptyProject", () => {
+    it("creates a project with no workspaces", () => {
       const state = new AppState(projectsDir, stateDir);
-      fs.mkdirSync(path.join(projectsDir, "new-proj"), { recursive: true });
-      state.writeProject("new-proj", {
-        name: "New Project",
-        description: "Test",
-        repoSources: [],
-      });
-      const raw = JSON.parse(
-        fs.readFileSync(path.join(projectsDir, "new-proj", "project.json"), "utf-8"),
-      );
-      expect(raw.name).toBe("New Project");
-      expect(raw.createdAt).toBeDefined();
-    });
-  });
-
-  describe("updateProject", () => {
-    it("preserves createdAt while updating other fields", () => {
-      writeProjectJson("my-app", {
-        name: "Old",
-        description: "",
-        repoSources: [],
-        createdAt: "2026-01-01T00:00:00.000Z",
-      });
-      const state = new AppState(projectsDir, stateDir);
-      state.updateProject("my-app", { name: "New" });
-      const raw = JSON.parse(
-        fs.readFileSync(path.join(projectsDir, "my-app", "project.json"), "utf-8"),
-      );
-      expect(raw.name).toBe("New");
-      expect(raw.createdAt).toBe("2026-01-01T00:00:00.000Z");
-    });
-  });
-
-  describe("writeWorkspace", () => {
-    it("writes default workspace.json", () => {
-      fs.mkdirSync(path.join(projectsDir, "my-app", "default"), { recursive: true });
-      const state = new AppState(projectsDir, stateDir);
-      state.writeWorkspace("my-app", "default", {
-        type: "default",
-        name: "Default",
-      });
-      const raw = JSON.parse(
-        fs.readFileSync(path.join(projectsDir, "my-app", "default", "workspace.json"), "utf-8"),
-      );
-      expect(raw.type).toBe("default");
-      expect(raw.name).toBe("Default");
-      expect(raw.createdAt).toBeDefined();
-    });
-
-    it("writes task workspace.json with branch", () => {
-      fs.mkdirSync(path.join(projectsDir, "my-app", "fix-bug"), { recursive: true });
-      const state = new AppState(projectsDir, stateDir);
-      state.writeWorkspace("my-app", "fix-bug", {
-        type: "task",
-        name: "Fix Bug",
-        branch: "feat/fix-bug",
-      });
-      const raw = JSON.parse(
-        fs.readFileSync(path.join(projectsDir, "my-app", "fix-bug", "workspace.json"), "utf-8"),
-      );
-      expect(raw.type).toBe("task");
-      expect(raw.branch).toBe("feat/fix-bug");
+      const project = state.createEmptyProject("empty-proj");
+      expect(project.id).toBe("empty-proj");
+      expect(project.name).toBe("Empty Proj");
+      expect(project.workspaces).toEqual([]);
+      expect(state.getState().projects).toHaveLength(1);
     });
   });
 
@@ -541,7 +228,6 @@ describe("AppState", () => {
       state.setSetting("theme", "dark");
       expect(state.getSetting("theme")).toBe("dark");
 
-      // Verify on disk
       const raw = JSON.parse(fs.readFileSync(path.join(stateDir, "settings.json"), "utf-8"));
       expect(raw.theme).toBe("dark");
     });
@@ -562,9 +248,9 @@ describe("AppState", () => {
   });
 
   describe("discoverRepos", () => {
-    it("returns repo names from default/", () => {
-      createFakeRepo("my-app", "default", "frontend", "main");
-      createFakeRepo("my-app", "default", "backend", "main");
+    it("returns repo names from project root", () => {
+      createFakeRepo("my-app", "frontend");
+      createFakeRepo("my-app", "backend");
       const state = new AppState(projectsDir, stateDir);
       const repos = state.discoverRepos("my-app");
       expect(repos.toSorted()).toEqual(["backend", "frontend"]);
@@ -575,87 +261,32 @@ describe("AppState", () => {
       expect(state.discoverRepos("nonexistent")).toEqual([]);
     });
 
-    it("ignores non-git directories in default/", () => {
-      createFakeRepo("my-app", "default", "repo", "main");
-      fs.mkdirSync(path.join(projectsDir, "my-app", "default", "not-a-repo"), { recursive: true });
+    it("ignores non-git directories in project root", () => {
+      createFakeRepo("my-app", "repo");
+      fs.mkdirSync(path.join(projectsDir, "my-app", "not-a-repo"), { recursive: true });
+      const state = new AppState(projectsDir, stateDir);
+      expect(state.discoverRepos("my-app")).toEqual(["repo"]);
+    });
+
+    it("excludes workspaces/ directory from repo scanning", () => {
+      createFakeRepo("my-app", "repo");
+      createFakeWorktree("my-app", "ws1", "repo", "feat/ws1");
       const state = new AppState(projectsDir, stateDir);
       expect(state.discoverRepos("my-app")).toEqual(["repo"]);
     });
   });
 
   describe("multiple repos", () => {
-    it("project with multiple repos in default/ discovers all workspaces", () => {
-      createFakeRepo("multi", "default", "frontend", "main");
-      createFakeRepo("multi", "default", "backend", "main");
+    it("project with multiple repos discovers all workspaces", () => {
+      createFakeRepo("multi", "frontend");
+      createFakeRepo("multi", "backend");
       createFakeWorktree("multi", "feat-x", "frontend", "feat/x");
       createFakeWorktree("multi", "feat-x", "backend", "feat/x");
       const state = new AppState(projectsDir, stateDir);
 
       const project = state.getProject("multi");
       expect(project).not.toBeNull();
-      expect(project!.workspaces).toHaveLength(2); // default + feat-x
-    });
-
-    it("task workspace with partial repo match is still accepted", () => {
-      createFakeRepo("multi", "default", "frontend", "main");
-      createFakeRepo("multi", "default", "backend", "main");
-      // Only one of the two repos has a worktree
-      createFakeWorktree("multi", "partial-task", "frontend", "feat/partial");
-      const state = new AppState(projectsDir, stateDir);
-
-      const project = state.getProject("multi");
-      expect(project!.workspaces).toHaveLength(2); // default + partial-task
-    });
-  });
-
-  describe("special directories are ignored", () => {
-    it("environment/ directory is not a project", () => {
-      fs.mkdirSync(path.join(projectsDir, "environment"), { recursive: true });
-      const state = new AppState(projectsDir, stateDir);
-      expect(state.getProject("environment")).toBeNull();
-    });
-
-    it("files in project dir are ignored (only directories scanned)", () => {
-      createFakeRepo("my-app", "default", "repo", "main");
-      fs.writeFileSync(path.join(projectsDir, "my-app", "scripts.yaml"), "content");
-      fs.writeFileSync(path.join(projectsDir, "my-app", "PROJECT.md"), "");
-      const state = new AppState(projectsDir, stateDir);
-      // Only default/ is a workspace, files are ignored
-      expect(state.getProject("my-app")!.workspaces).toHaveLength(1);
-    });
-  });
-
-  describe("branch detection from worktrees", () => {
-    it("detects branch from worktree .git file", () => {
-      createFakeRepo("my-app", "default", "repo", "main");
-      createFakeWorktree("my-app", "my-task", "repo", "feat/cool-feature");
-      const state = new AppState(projectsDir, stateDir);
-
-      const ws = state.getWorkspace("my-app/my-task");
-      expect(ws).not.toBeNull();
-      expect(ws!.branch).toBe("feat/cool-feature");
-    });
-
-    it("falls back to directory name when branch cannot be detected", () => {
-      createFakeRepo("my-app", "default", "repo", "main");
-      // Create a worktree with an unreadable HEAD
-      const wsDir = path.join(projectsDir, "my-app", "broken-task", "repo");
-      fs.mkdirSync(wsDir, { recursive: true });
-      const worktreeDataDir = path.join(
-        projectsDir,
-        "my-app",
-        ".worktree-data",
-        "broken-task",
-        "repo",
-      );
-      fs.mkdirSync(worktreeDataDir, { recursive: true });
-      fs.writeFileSync(path.join(wsDir, ".git"), `gitdir: ${worktreeDataDir}\n`);
-      // No HEAD file in worktree data dir
-      const state = new AppState(projectsDir, stateDir);
-
-      const ws = state.getWorkspace("my-app/broken-task");
-      expect(ws).not.toBeNull();
-      expect(ws!.branch).toBe("broken-task"); // falls back to dir name
+      expect(project!.workspaces).toHaveLength(2); // main + feat-x
     });
   });
 
@@ -669,134 +300,10 @@ describe("AppState", () => {
     });
   });
 
-  describe("self-healing JSON (corrupt files)", () => {
-    it("project.json with invalid JSON gets regenerated", () => {
-      const dir = path.join(projectsDir, "corrupt-proj");
-      fs.mkdirSync(dir, { recursive: true });
-      fs.writeFileSync(path.join(dir, "project.json"), "NOT VALID JSON{{{");
-      createFakeRepo("corrupt-proj", "default", "repo", "main");
-
-      const state = new AppState(projectsDir, stateDir);
-      const project = state.getProject("corrupt-proj");
-      expect(project).not.toBeNull();
-      expect(project!.name).toBe("corrupt-proj"); // regenerated from slug
-
-      // File should have been recreated with valid JSON
-      const raw = JSON.parse(fs.readFileSync(path.join(dir, "project.json"), "utf-8"));
-      expect(raw.name).toBe("corrupt-proj");
-    });
-
-    it("workspace.json with invalid JSON gets regenerated", () => {
-      writeProjectJson("my-app", {
-        name: "My App",
-        repoSources: [],
-        createdAt: "2026-03-20T00:00:00.000Z",
-      });
-      createFakeRepo("my-app", "default", "repo", "main");
-      const wsDir = path.join(projectsDir, "my-app", "default");
-      fs.writeFileSync(path.join(wsDir, "workspace.json"), "{{BAD JSON}}");
-
-      const state = new AppState(projectsDir, stateDir);
-      const ws = state.getWorkspace("my-app/default");
-      expect(ws).not.toBeNull();
-      expect(ws!.type).toBe("default");
-
-      const raw = JSON.parse(fs.readFileSync(path.join(wsDir, "workspace.json"), "utf-8"));
-      expect(raw.type).toBe("default");
-    });
-
-    it("project.json with wrong schema (missing required fields) gets regenerated", () => {
-      const dir = path.join(projectsDir, "bad-schema");
-      fs.mkdirSync(dir, { recursive: true });
-      // Valid JSON but missing required fields
-      fs.writeFileSync(path.join(dir, "project.json"), JSON.stringify({ irrelevant: true }));
-      createFakeRepo("bad-schema", "default", "repo", "main");
-
-      const state = new AppState(projectsDir, stateDir);
-      const project = state.getProject("bad-schema");
-      expect(project).not.toBeNull();
-      expect(project!.name).toBe("bad-schema");
-
-      const raw = JSON.parse(fs.readFileSync(path.join(dir, "project.json"), "utf-8"));
-      expect(raw.name).toBe("bad-schema");
-      expect(raw.createdAt).toBeDefined();
-    });
-  });
-
-  describe("per-repo branches in workspace.json", () => {
-    it("auto-created workspace.json for multi-repo task populates branches map", () => {
-      createFakeRepo("multi", "default", "frontend", "main");
-      createFakeRepo("multi", "default", "backend", "main");
-      createFakeWorktree("multi", "feat-x", "frontend", "feat/frontend-x");
-      createFakeWorktree("multi", "feat-x", "backend", "feat/backend-x");
-
-      const state = new AppState(projectsDir, stateDir);
-      const ws = state.getWorkspace("multi/feat-x");
-      expect(ws).not.toBeNull();
-      expect(ws!.type).toBe("task");
-
-      // Read the auto-created workspace.json from disk
-      const raw = JSON.parse(
-        fs.readFileSync(path.join(projectsDir, "multi", "feat-x", "workspace.json"), "utf-8"),
-      );
-      expect(raw.branches).toBeDefined();
-      expect(raw.branches.frontend).toBe("feat/frontend-x");
-      expect(raw.branches.backend).toBe("feat/backend-x");
-    });
-  });
-
-  describe("writeWorkspace with branches", () => {
-    it("persists branches map to disk for task workspace", () => {
-      fs.mkdirSync(path.join(projectsDir, "my-app", "multi-task"), { recursive: true });
-      const state = new AppState(projectsDir, stateDir);
-      state.writeWorkspace("my-app", "multi-task", {
-        type: "task",
-        name: "Multi Task",
-        branch: "feat/multi",
-        branches: { frontend: "feat/multi-fe", backend: "feat/multi-be" },
-      });
-
-      const raw = JSON.parse(
-        fs.readFileSync(path.join(projectsDir, "my-app", "multi-task", "workspace.json"), "utf-8"),
-      );
-      expect(raw.type).toBe("task");
-      expect(raw.branch).toBe("feat/multi");
-      expect(raw.branches).toEqual({ frontend: "feat/multi-fe", backend: "feat/multi-be" });
-    });
-  });
-
-  describe("updateProject preserves other fields", () => {
-    it("preserves repoSources when updating name", () => {
-      writeProjectJson("my-app", {
-        name: "Old",
-        description: "desc",
-        repoSources: ["https://github.com/org/repo"],
-        createdAt: "2026-01-01T00:00:00.000Z",
-      });
-      const state = new AppState(projectsDir, stateDir);
-      state.updateProject("my-app", { name: "New" });
-
-      const raw = JSON.parse(
-        fs.readFileSync(path.join(projectsDir, "my-app", "project.json"), "utf-8"),
-      );
-      expect(raw.name).toBe("New");
-      expect(raw.repoSources).toEqual(["https://github.com/org/repo"]);
-      expect(raw.description).toBe("desc");
-      expect(raw.createdAt).toBe("2026-01-01T00:00:00.000Z");
-    });
-  });
-
-  describe("getProjectDir / getWorkspaceDir", () => {
+  describe("getProjectDir", () => {
     it("returns correct project directory", () => {
       const state = new AppState(projectsDir, stateDir);
       expect(state.getProjectDir("my-app")).toBe(path.join(projectsDir, "my-app"));
-    });
-
-    it("returns correct workspace directory", () => {
-      const state = new AppState(projectsDir, stateDir);
-      expect(state.getWorkspaceDir("my-app/default")).toBe(
-        path.join(projectsDir, "my-app", "default"),
-      );
     });
   });
 });

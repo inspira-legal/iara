@@ -17,8 +17,7 @@ export function getGlobalEnvPath(repo: string): string {
 
 export function getLocalEnvPath(projectSlug: string, workspace: string, repo: string): string {
   const projectDir = path.join(getProjectsDir(), projectSlug);
-  const workspaceDir =
-    workspace === "default" ? path.join(projectDir, "default") : path.join(projectDir, workspace);
+  const workspaceDir = path.join(projectDir, "workspaces", workspace);
   return path.join(workspaceDir, `.env.${repo}.local`);
 }
 
@@ -162,29 +161,38 @@ export function syncEnvSymlinks(): void {
     const projectPath = path.join(projectsDir, name);
     if (!fs.statSync(projectPath).isDirectory()) continue;
 
-    const defaultDir = path.join(projectPath, "default");
-    if (!fs.existsSync(defaultDir)) continue;
-
-    // Discover repos from default/
-    const repoNames = fs.readdirSync(defaultDir).filter((n) => {
-      const full = path.join(defaultDir, n);
-      return fs.statSync(full).isDirectory() && fs.existsSync(path.join(full, ".git"));
+    // Discover repos from project root (not default/)
+    const repoNames = fs.readdirSync(projectPath).filter((n) => {
+      if (n === "workspaces") return false;
+      const full = path.join(projectPath, n);
+      try {
+        return (
+          fs.statSync(full).isDirectory() && fs.statSync(path.join(full, ".git")).isDirectory()
+        );
+      } catch {
+        return false;
+      }
     });
 
     if (repoNames.length === 0) continue;
 
-    // Fix symlinks in default/
-    ensureGlobalSymlinks(name, defaultDir, repoNames);
-
-    // Fix symlinks in task dirs
-    for (const taskName of fs.readdirSync(projectPath)) {
-      if (taskName === "default" || taskName.startsWith(".")) continue;
-      const taskDir = path.join(projectPath, taskName);
-      if (!fs.statSync(taskDir).isDirectory()) continue;
-      // Only fix dirs that look like tasks (have at least one repo worktree)
-      const hasWorktree = repoNames.some((r) => fs.existsSync(path.join(taskDir, r)));
-      if (hasWorktree) {
-        ensureGlobalSymlinks(name, taskDir, repoNames);
+    // Fix symlinks in workspace dirs (under workspaces/)
+    const workspacesDir = path.join(projectPath, "workspaces");
+    if (fs.existsSync(workspacesDir)) {
+      for (const wsName of fs.readdirSync(workspacesDir)) {
+        const wsDir = path.join(workspacesDir, wsName);
+        if (!fs.statSync(wsDir).isDirectory()) continue;
+        // Only fix dirs that look like workspaces (have at least one repo worktree)
+        const hasWorktree = repoNames.some((r) => {
+          try {
+            return fs.statSync(path.join(wsDir, r, ".git")).isFile();
+          } catch {
+            return false;
+          }
+        });
+        if (hasWorktree) {
+          ensureGlobalSymlinks(name, wsDir, repoNames);
+        }
       }
     }
   }

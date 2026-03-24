@@ -6,15 +6,25 @@ import { ScriptSupervisor } from "@iara/orchestrator/supervisor";
 import { PortAllocator } from "@iara/orchestrator/ports";
 import { parseScriptsYaml } from "@iara/orchestrator/parser";
 import { interpolateCommands, interpolateEnv } from "@iara/orchestrator/interpolation";
-import { buildDiscoveryPrompt, BUILD_CONFIG_FILES } from "@iara/orchestrator/discovery";
+import {
+  buildDiscoveryPrompt,
+  BUILD_CONFIG_FILES,
+  DiscoveryResultSchema,
+  discoveryResultToYaml,
+} from "@iara/orchestrator/discovery";
+import { projectPaths } from "@iara/shared/paths";
 import { registerMethod } from "../router.js";
 import { runClaude, activeRuns, streamClaudeRun } from "../services/claude-runner.js";
 import { mergeEnvForWorkspace } from "../services/env.js";
 import type { AppState } from "../services/state.js";
 import type { PushFn } from "./index.js";
 
+/** Track projects with in-flight discovery to avoid duplicates */
+const pendingDiscovery = new Set<string>();
+
 function getScriptsYamlPath(appState: AppState, projectSlug: string): string {
-  return path.join(appState.getProjectDir(projectSlug), "scripts.yaml");
+  const pp = projectPaths(appState.getProjectsDir(), projectSlug);
+  return pp.scriptsYaml;
 }
 
 function getWorkspaceCwd(
@@ -24,7 +34,8 @@ function getWorkspaceCwd(
   serviceName: string,
   repoNames: string[],
 ): string {
-  const base = path.join(appState.getProjectDir(projectSlug), workspaceSlug);
+  // Workspace repos are under workspaces/<wsSlug>/<repoName>
+  const base = path.join(appState.getProjectDir(projectSlug), "workspaces", workspaceSlug);
 
   if (repoNames.includes(serviceName)) {
     return path.join(base, serviceName);
@@ -76,13 +87,17 @@ export function triggerDiscovery(
   pushFn: PushFn,
   existingYaml?: string,
 ): string | null {
+  // Prevent duplicate concurrent discoveries for the same project
+  if (pendingDiscovery.has(projectSlug)) return null;
+
   const repoNames = appState.discoverRepos(projectSlug);
   if (repoNames.length === 0) return null;
 
   const projectDir = appState.getProjectDir(projectSlug);
 
   const repos = repoNames.map((name) => {
-    const repoDir = path.join(projectDir, "default", name);
+    // Repos are at project root now
+    const repoDir = path.join(projectDir, name);
     const files = BUILD_CONFIG_FILES.filter((f) => fs.existsSync(path.join(repoDir, f)));
     return { name, files };
   });
@@ -90,24 +105,22 @@ export function triggerDiscovery(
   // Skip if no repos have any build config files
   if (repos.every((r) => r.files.length === 0)) return null;
 
+  pendingDiscovery.add(projectSlug);
+
   const prompt = buildDiscoveryPrompt(repos, existingYaml);
   const requestId = crypto.randomUUID();
-  const yamlPath = path.join(projectDir, "scripts.yaml");
+  const yamlPath = getScriptsYamlPath(appState, projectSlug);
 
-  const run = runClaude({ prompt, cwd: projectDir });
+  const run = runClaude({ prompt, cwd: projectDir }, DiscoveryResultSchema);
   activeRuns.set(requestId, run);
   streamClaudeRun(
     run,
     requestId,
     yamlPath,
     pushFn,
-    (content) => {
-      return content
-        .replace(/^```ya?ml\s*\n/i, "")
-        .replace(/\n```\s*$/, "")
-        .trim();
-    },
+    (data) => discoveryResultToYaml(data),
     () => {
+      pendingDiscovery.delete(projectSlug);
       pushFn("scripts:reload", { projectId: projectSlug });
     },
   );
@@ -128,9 +141,16 @@ export function registerScriptHandlers(
     const projectSlug = workspace.projectId;
     const yamlPath = getScriptsYamlPath(appState, projectSlug);
     if (!fs.existsSync(yamlPath)) {
+      // Auto-trigger discovery if iara-scripts.yaml doesn't exist yet
+      try {
+        triggerDiscovery(appState, projectSlug, pushFn);
+      } catch {
+        // Best effort — discovery failure is non-fatal
+      }
+
       return {
         services: [],
-        statuses: supervisor.status(params.workspaceId, workspace.slug),
+        statuses: supervisor.status(projectSlug, workspace.slug),
         hasFile: false,
         filePath: yamlPath,
       };
@@ -145,11 +165,11 @@ export function registerScriptHandlers(
     );
 
     // Auto-detect services already running on their ports
-    await supervisor.autoDetect(params.workspaceId, workspace.slug, services);
+    await supervisor.autoDetect(projectSlug, workspace.slug, services);
 
     return {
       services,
-      statuses: supervisor.status(params.workspaceId, workspace.slug),
+      statuses: supervisor.status(projectSlug, workspace.slug),
       hasFile: true,
       filePath: yamlPath,
     };
@@ -179,7 +199,7 @@ export function registerScriptHandlers(
     const resolvedCommands = interpolateCommands(script.run, ports);
 
     await supervisor.startChecked({
-      projectId: params.workspaceId,
+      projectId: projectSlug,
       workspace: workspace.slug,
       service: params.service,
       script: params.script,
@@ -212,7 +232,7 @@ export function registerScriptHandlers(
     );
 
     await supervisor.runAll({
-      projectId: params.workspaceId,
+      projectId: projectSlug,
       workspace: workspace.slug,
       category: params.category,
       services,
@@ -225,14 +245,14 @@ export function registerScriptHandlers(
   registerMethod("scripts.stopAll", async (params) => {
     const workspace = appState.getWorkspace(params.workspaceId);
     if (!workspace) throw new Error(`Workspace not found: ${params.workspaceId}`);
-    supervisor.stopAll(params.workspaceId, workspace.slug);
+    supervisor.stopAll(workspace.projectId, workspace.slug);
   });
 
   registerMethod("scripts.status", async (params) => {
     const workspace = appState.getWorkspace(params.workspaceId);
     if (!workspace) throw new Error(`Workspace not found: ${params.workspaceId}`);
 
-    return supervisor.status(params.workspaceId, workspace.slug);
+    return supervisor.status(workspace.projectId, workspace.slug);
   });
 
   registerMethod("scripts.logs", async (params) => {
@@ -253,7 +273,4 @@ export function registerScriptHandlers(
     }
     return { requestId: requestId ?? "" };
   });
-
-  // Watch scripts.yaml for manual edits
-  // (done per-project when loaded — simplified: watch all project dirs)
 }

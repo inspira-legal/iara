@@ -231,15 +231,23 @@ export const useRegenerateStore = create<RegenerateState>((set, get) => {
 // Subscribe to state changes to auto re-check file when generation completes.
 // Registered immediately after store creation — no setTimeout race.
 let prevLoadingState: Record<string, boolean> = {};
+let isCheckingFile = false;
 
 useRegenerateStore.subscribe((state) => {
+  if (isCheckingFile) return;
   for (const [entityId, entry] of Object.entries(state.entries)) {
     const wasLoading = prevLoadingState[entityId] ?? false;
     if (wasLoading && !entry.isLoading && !entry.error) {
       // Generation completed successfully — re-check file
       const filePath = entityFilePaths.get(entityId);
       if (filePath) {
-        void useRegenerateStore.getState().checkFile(entityId, filePath);
+        isCheckingFile = true;
+        void useRegenerateStore
+          .getState()
+          .checkFile(entityId, filePath)
+          .finally(() => {
+            isCheckingFile = false;
+          });
       }
     }
     prevLoadingState[entityId] = entry.isLoading;

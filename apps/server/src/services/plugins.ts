@@ -1,33 +1,95 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
-import * as os from "node:os";
 
 export interface PluginConfig {
   bridgePath: string;
   socketPath: string;
+  guardrailsPath: string;
 }
 
-export function generatePluginDir(config: PluginConfig): string {
-  const pluginDir = path.join(os.tmpdir(), `iara-plugin-${process.pid}`);
+/**
+ * Generates (or overwrites) a fixed Claude plugin directory colocated with
+ * the server binary. The directory includes slash commands and hooks — all
+ * scoped to the Claude session via `--plugin-dir`, never touching global
+ * `~/.claude/settings.json`.
+ *
+ * Safe to call on every startup — idempotent overwrite, no cleanup needed.
+ */
+export function generatePluginDir(serverDir: string, config: PluginConfig): string {
+  const pluginDir = path.join(serverDir, "claude-plugin");
+  const metaDir = path.join(pluginDir, ".claude-plugin");
   const commandsDir = path.join(pluginDir, "commands");
+  const hooksDir = path.join(pluginDir, "hooks");
+  const scriptsDir = path.join(pluginDir, "scripts");
 
+  fs.mkdirSync(metaDir, { recursive: true });
   fs.mkdirSync(commandsDir, { recursive: true });
+  fs.mkdirSync(hooksDir, { recursive: true });
+  fs.mkdirSync(scriptsDir, { recursive: true });
 
-  // plugin.json
+  // .claude-plugin/plugin.json
   fs.writeFileSync(
-    path.join(pluginDir, "plugin.json"),
+    path.join(metaDir, "plugin.json"),
     JSON.stringify(
       {
         name: "iara",
-        description: "iara server integration — notifications, dev servers",
-        commands: ["notify", "dev"],
+        description: "iara server integration — hooks, notifications, dev servers",
       },
       null,
       2,
     ),
   );
 
-  // /notify command
+  // hooks/hooks.json — PreToolUse guardrails, PostToolUse status, Stop status
+  fs.writeFileSync(
+    path.join(hooksDir, "hooks.json"),
+    JSON.stringify(
+      {
+        hooks: {
+          PreToolUse: [
+            {
+              matcher: "Bash|Edit|Write",
+              hooks: [
+                {
+                  type: "command",
+                  command: "sh ${CLAUDE_PLUGIN_ROOT}/scripts/guardrails.sh",
+                },
+              ],
+            },
+          ],
+          PostToolUse: [
+            {
+              matcher: "",
+              hooks: [
+                {
+                  type: "command",
+                  command: `[ -n "$IARA_SERVER_SOCKET" ] && ${config.bridgePath} status.tool-complete || true`,
+                },
+              ],
+            },
+          ],
+          Stop: [
+            {
+              matcher: "",
+              hooks: [
+                {
+                  type: "command",
+                  command: `[ -n "$IARA_SERVER_SOCKET" ] && ${config.bridgePath} status.session-end || true`,
+                },
+              ],
+            },
+          ],
+        },
+      },
+      null,
+      2,
+    ),
+  );
+
+  // scripts/guardrails.sh — copy from source hooks dir
+  fs.copyFileSync(config.guardrailsPath, path.join(scriptsDir, "guardrails.sh"));
+
+  // commands/notify.md
   fs.writeFileSync(
     path.join(commandsDir, "notify.md"),
     `# /notify
@@ -44,7 +106,7 @@ Pass \`$ARGUMENTS\` as the notification message.
 `,
   );
 
-  // /dev command
+  // commands/dev.md
   fs.writeFileSync(
     path.join(commandsDir, "dev.md"),
     `# /dev
@@ -68,12 +130,4 @@ Pass the subcommand as \`$ARGUMENTS\` (e.g., \`/dev status\`).
   );
 
   return pluginDir;
-}
-
-export function cleanupPluginDir(pluginDir: string): void {
-  try {
-    fs.rmSync(pluginDir, { recursive: true, force: true });
-  } catch {
-    // Best effort cleanup
-  }
 }

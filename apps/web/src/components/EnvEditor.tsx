@@ -138,7 +138,7 @@ export function EnvEditor({ workspaceId, repos, hasActiveTerminal }: EnvEditorPr
           title={showMerged ? "Edit variables" : "Show merged preview"}
         >
           {showMerged ? <EyeOff size={12} /> : <Eye size={12} />}
-          {showMerged ? "Editar" : "Merged"}
+          {showMerged ? "Edit" : "Merged"}
         </button>
       </div>
 
@@ -184,7 +184,7 @@ export function EnvEditor({ workspaceId, repos, hasActiveTerminal }: EnvEditorPr
         <div className="space-y-4">
           <EnvSection
             label="Global"
-            sublabel="shared across all projects and tasks"
+            sublabel="shared across all projects and workspaces"
             entries={repoData?.global ?? []}
             overriddenKeys={new Set()}
             onUpdate={(i, f, v) => updateEntry("global", i, f, v)}
@@ -193,11 +193,7 @@ export function EnvEditor({ workspaceId, repos, hasActiveTerminal }: EnvEditorPr
           />
           <EnvSection
             label="Local"
-            sublabel={
-              workspaceId.endsWith("/default")
-                ? "this Default Workspace only"
-                : "this Task Workspace only"
-            }
+            sublabel="this workspace only"
             entries={repoData?.local ?? []}
             overriddenKeys={globalKeys}
             onUpdate={(i, f, v) => updateEntry("local", i, f, v)}
@@ -248,7 +244,7 @@ function EnvSection({
       </div>
 
       {entries.length === 0 ? (
-        <p className="mb-2 text-xs text-zinc-600">No variables.</p>
+        <p className="mb-2 text-xs text-zinc-500">No variables defined.</p>
       ) : (
         <div className="mb-2 space-y-1">
           {entries.map((entry, idx) => {

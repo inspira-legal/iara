@@ -1,4 +1,4 @@
-import { useEffect, useCallback } from "react";
+import { useEffect, useCallback, useRef } from "react";
 import { useRegenerateStore } from "~/stores/regenerate";
 import type { ClaudeProgress } from "@iara/contracts";
 
@@ -45,8 +45,32 @@ export function useRegenerate({
   const cancel = useCallback(() => cancelFn(entityId), [entityId, cancelFn]);
 
   const isRegenerating = entry?.isLoading ?? false;
+  const hasError = entry?.error != null;
   const showEmptyBanner =
     !fileStatusLoading && fileStatus != null && (!fileStatus.exists || fileStatus.empty);
+
+  // Auto-generate when file is empty — only once per entity
+  const autoTriggeredRef = useRef<Set<string>>(new Set());
+
+  useEffect(() => {
+    if (
+      showEmptyBanner &&
+      !isRegenerating &&
+      !hasError &&
+      !autoTriggeredRef.current.has(entityId)
+    ) {
+      autoTriggeredRef.current.add(entityId);
+      void startRegenerate(entityId, filePath, regenerateFn);
+    }
+  }, [
+    showEmptyBanner,
+    isRegenerating,
+    hasError,
+    entityId,
+    filePath,
+    regenerateFn,
+    startRegenerate,
+  ]);
 
   return {
     isRegenerating,

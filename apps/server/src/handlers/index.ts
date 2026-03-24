@@ -18,6 +18,9 @@ import { registerWorkspaceHandlers } from "./workspaces.js";
 import { registerFileHandlers } from "./files.js";
 import { registerTerminalHandlers } from "./terminal.js";
 
+import { registerMethod } from "../router.js";
+import { activeRuns } from "../services/claude-runner.js";
+
 import type { PushFn } from "../types.js";
 export type { PushFn };
 
@@ -33,6 +36,15 @@ export interface HandlerDeps {
 }
 
 export function registerAllHandlers(deps: HandlerDeps): void {
+  // Claude cancel — abort an active Claude run by requestId
+  registerMethod("claude.cancel", async (params) => {
+    const run = activeRuns.get(params.requestId);
+    if (run) {
+      run.abort();
+      activeRuns.delete(params.requestId);
+    }
+  });
+
   registerAppHandlers(deps.appState);
   registerProjectHandlers(deps.appState, deps.watcher, deps.pushFn);
   registerWorkspaceHandlers(

@@ -47,6 +47,11 @@ function createMockAppState(projectSlug: string, repos: string[] = [], workspace
   return {
     discoverRepos: vi.fn().mockReturnValue(repos),
     getProjectDir: vi.fn().mockReturnValue(path.join(tmpDir, projectSlug)),
+    getWorkspaceDir: vi.fn().mockImplementation((workspaceId: string) => {
+      const [pSlug, wsSlug] = workspaceId.split("/");
+      if (wsSlug === "main") return path.join(tmpDir, pSlug!);
+      return path.join(tmpDir, pSlug!, "workspaces", wsSlug!);
+    }),
     getProject: vi.fn().mockReturnValue({
       slug: projectSlug,
       workspaces,
@@ -136,7 +141,7 @@ describe("addRepo()", () => {
     it("creates an empty git repo", async () => {
       const projectSlug = "proj";
       const projectDir = path.join(tmpDir, projectSlug);
-      fs.mkdirSync(path.join(projectDir, "default"), { recursive: true });
+      fs.mkdirSync(projectDir, { recursive: true });
 
       const appState = createMockAppState(projectSlug);
       const onProgress = vi.fn();
@@ -156,7 +161,7 @@ describe("addRepo()", () => {
       });
       expect(onProgress).toHaveBeenCalledWith({ repo: "new-repo", status: "done" });
 
-      const dest = path.join(projectDir, "default", "new-repo");
+      const dest = path.join(projectDir, "new-repo");
       expect(fs.existsSync(dest)).toBe(true);
       expect(vi.mocked(execSync)).toHaveBeenCalledWith(
         "git init",
@@ -169,7 +174,7 @@ describe("addRepo()", () => {
     it("clones from a URL", async () => {
       const projectSlug = "proj";
       const projectDir = path.join(tmpDir, projectSlug);
-      fs.mkdirSync(path.join(projectDir, "default"), { recursive: true });
+      fs.mkdirSync(projectDir, { recursive: true });
 
       const appState = createMockAppState(projectSlug);
       const onProgress = vi.fn();
@@ -184,7 +189,7 @@ describe("addRepo()", () => {
 
       expect(vi.mocked(gitCloneWithProgress)).toHaveBeenCalledWith(
         "https://github.com/test/repo.git",
-        path.join(projectDir, "default", "cloned"),
+        path.join(projectDir, "cloned"),
         expect.any(Function),
       );
       expect(onProgress).toHaveBeenCalledWith({ repo: "cloned", status: "started" });
@@ -194,7 +199,7 @@ describe("addRepo()", () => {
     it("throws when URL is missing", async () => {
       const projectSlug = "proj";
       const projectDir = path.join(tmpDir, projectSlug);
-      fs.mkdirSync(path.join(projectDir, "default"), { recursive: true });
+      fs.mkdirSync(projectDir, { recursive: true });
 
       const appState = createMockAppState(projectSlug);
       await expect(
@@ -207,7 +212,7 @@ describe("addRepo()", () => {
     it("copies a local folder", async () => {
       const projectSlug = "proj";
       const projectDir = path.join(tmpDir, projectSlug);
-      fs.mkdirSync(path.join(projectDir, "default"), { recursive: true });
+      fs.mkdirSync(projectDir, { recursive: true });
 
       // Create source folder with .git
       const sourceDir = path.join(tmpDir, "source-repo");
@@ -225,7 +230,7 @@ describe("addRepo()", () => {
         onProgress,
       );
 
-      const dest = path.join(projectDir, "default", "local");
+      const dest = path.join(projectDir, "local");
       expect(fs.existsSync(path.join(dest, "file.txt"))).toBe(true);
       expect(onProgress).toHaveBeenCalledWith({ repo: "local", status: "done" });
     });
@@ -233,7 +238,7 @@ describe("addRepo()", () => {
     it("throws when folderPath is missing", async () => {
       const projectSlug = "proj";
       const projectDir = path.join(tmpDir, projectSlug);
-      fs.mkdirSync(path.join(projectDir, "default"), { recursive: true });
+      fs.mkdirSync(projectDir, { recursive: true });
 
       const appState = createMockAppState(projectSlug);
       await expect(
@@ -245,7 +250,7 @@ describe("addRepo()", () => {
   it("throws when repo already exists", async () => {
     const projectSlug = "proj";
     const projectDir = path.join(tmpDir, projectSlug);
-    const dest = path.join(projectDir, "default", "existing");
+    const dest = path.join(projectDir, "existing");
     fs.mkdirSync(dest, { recursive: true });
 
     const appState = createMockAppState(projectSlug);
@@ -257,7 +262,7 @@ describe("addRepo()", () => {
   it("cleans up on clone failure", async () => {
     const projectSlug = "proj";
     const projectDir = path.join(tmpDir, projectSlug);
-    fs.mkdirSync(path.join(projectDir, "default"), { recursive: true });
+    fs.mkdirSync(projectDir, { recursive: true });
 
     vi.mocked(gitCloneWithProgress).mockRejectedValueOnce(new Error("clone failed"));
 
@@ -282,7 +287,7 @@ describe("addRepo()", () => {
   it("cleans up on failure with GitOperationError (authentication)", async () => {
     const projectSlug = "proj";
     const projectDir = path.join(tmpDir, projectSlug);
-    fs.mkdirSync(path.join(projectDir, "default"), { recursive: true });
+    fs.mkdirSync(projectDir, { recursive: true });
 
     const { GitOperationError: GitOpErr } = await import("@iara/shared/git");
     vi.mocked(gitCloneWithProgress).mockRejectedValueOnce(
@@ -308,7 +313,7 @@ describe("addRepo()", () => {
   it("cleans up on failure with GitOperationError (not found)", async () => {
     const projectSlug = "proj";
     const projectDir = path.join(tmpDir, projectSlug);
-    fs.mkdirSync(path.join(projectDir, "default"), { recursive: true });
+    fs.mkdirSync(projectDir, { recursive: true });
 
     const { GitOperationError: GitOpErr } = await import("@iara/shared/git");
     vi.mocked(gitCloneWithProgress).mockRejectedValueOnce(
@@ -329,7 +334,7 @@ describe("addRepo()", () => {
   it("cleans up on failure with GitOperationError (already exists)", async () => {
     const projectSlug = "proj";
     const projectDir = path.join(tmpDir, projectSlug);
-    fs.mkdirSync(path.join(projectDir, "default"), { recursive: true });
+    fs.mkdirSync(projectDir, { recursive: true });
 
     const { GitOperationError: GitOpErr } = await import("@iara/shared/git");
     vi.mocked(gitCloneWithProgress).mockRejectedValueOnce(
@@ -350,7 +355,7 @@ describe("addRepo()", () => {
   it("cleans up on failure with GitOperationError (generic 128)", async () => {
     const projectSlug = "proj";
     const projectDir = path.join(tmpDir, projectSlug);
-    fs.mkdirSync(path.join(projectDir, "default"), { recursive: true });
+    fs.mkdirSync(projectDir, { recursive: true });
 
     const { GitOperationError: GitOpErr } = await import("@iara/shared/git");
     vi.mocked(gitCloneWithProgress).mockRejectedValueOnce(
@@ -371,7 +376,7 @@ describe("addRepo()", () => {
   it("handles local-folder without .git (initializes git)", async () => {
     const projectSlug = "proj";
     const projectDir = path.join(tmpDir, projectSlug);
-    fs.mkdirSync(path.join(projectDir, "default"), { recursive: true });
+    fs.mkdirSync(projectDir, { recursive: true });
 
     // Source folder WITHOUT .git
     const sourceDir = path.join(tmpDir, "source-no-git");
@@ -399,7 +404,7 @@ describe("addRepo()", () => {
     expect(vi.mocked(execSync)).toHaveBeenCalledWith(
       "git init",
       expect.objectContaining({
-        cwd: path.join(projectDir, "default", "local-no-git"),
+        cwd: path.join(projectDir, "local-no-git"),
       }),
     );
   });
@@ -407,7 +412,7 @@ describe("addRepo()", () => {
   it("skips worktree creation when workspace dir does not exist", async () => {
     const projectSlug = "proj";
     const projectDir = path.join(tmpDir, projectSlug);
-    fs.mkdirSync(path.join(projectDir, "default"), { recursive: true });
+    fs.mkdirSync(projectDir, { recursive: true });
     // Do NOT create the workspace directory
 
     const appState = createMockAppState(
@@ -428,7 +433,7 @@ describe("addRepo()", () => {
   it("skips worktree when workspace has no branch", async () => {
     const projectSlug = "proj";
     const projectDir = path.join(tmpDir, projectSlug);
-    fs.mkdirSync(path.join(projectDir, "default"), { recursive: true });
+    fs.mkdirSync(projectDir, { recursive: true });
     fs.mkdirSync(path.join(projectDir, "no-branch"), { recursive: true });
 
     const appState = createMockAppState(
@@ -448,7 +453,7 @@ describe("addRepo()", () => {
   it("handles worktree creation failure gracefully", async () => {
     const projectSlug = "proj";
     const projectDir = path.join(tmpDir, projectSlug);
-    fs.mkdirSync(path.join(projectDir, "default"), { recursive: true });
+    fs.mkdirSync(projectDir, { recursive: true });
     fs.mkdirSync(path.join(projectDir, "feature-1"), { recursive: true });
 
     vi.mocked(gitWorktreeAdd).mockRejectedValueOnce(new Error("branch not found"));
@@ -471,9 +476,9 @@ describe("addRepo()", () => {
   it("creates worktrees for active workspaces", async () => {
     const projectSlug = "proj";
     const projectDir = path.join(tmpDir, projectSlug);
-    fs.mkdirSync(path.join(projectDir, "default"), { recursive: true });
-    // Create workspace directory
-    fs.mkdirSync(path.join(projectDir, "feature-1"), { recursive: true });
+    fs.mkdirSync(projectDir, { recursive: true });
+    // Create workspace directory under workspaces/
+    fs.mkdirSync(path.join(projectDir, "workspaces", "feature-1"), { recursive: true });
 
     const appState = createMockAppState(
       projectSlug,
@@ -487,16 +492,16 @@ describe("addRepo()", () => {
     await addRepo(appState, "id", projectSlug, { method: "empty", name: "my-repo" });
 
     expect(vi.mocked(gitWorktreeAdd)).toHaveBeenCalledWith(
-      path.join(projectDir, "default", "my-repo"),
-      path.join(projectDir, "feature-1", "my-repo"),
-      "feature-1",
+      path.join(projectDir, "my-repo"),
+      path.join(projectDir, "workspaces", "feature-1", "my-repo"),
+      "feat/feature-1",
     );
   });
 
   it("skips worktree when worktree dir already exists", async () => {
     const projectSlug = "proj-wt-exists";
     const projectDir = path.join(tmpDir, projectSlug);
-    fs.mkdirSync(path.join(projectDir, "default"), { recursive: true });
+    fs.mkdirSync(projectDir, { recursive: true });
     // Create workspace dir AND the worktree target already
     fs.mkdirSync(path.join(projectDir, "feature-1", "my-repo"), { recursive: true });
 
@@ -521,7 +526,7 @@ describe("addRepo()", () => {
   it("handles project with no workspaces", async () => {
     const projectSlug = "proj-no-ws";
     const projectDir = path.join(tmpDir, projectSlug);
-    fs.mkdirSync(path.join(projectDir, "default"), { recursive: true });
+    fs.mkdirSync(projectDir, { recursive: true });
 
     const appState = createMockAppState(projectSlug, [], []);
     // getProject returns project with no workspaces
@@ -618,7 +623,7 @@ describe("syncRepos()", () => {
     const results = await syncRepos(appState, projectSlug, "task-1");
 
     expect(results).toEqual([{ repo: "repo1", status: "ok" }]);
-    const expectedPath = path.join(tmpDir, projectSlug, "task-1", "repo1");
+    const expectedPath = path.join(tmpDir, projectSlug, "workspaces", "task-1", "repo1");
     expect(vi.mocked(gitPull)).toHaveBeenCalledWith(expectedPath);
   });
 
@@ -659,7 +664,7 @@ describe("fetchRepos()", () => {
 
     await fetchRepos(appState, projectSlug, "my-task");
 
-    const expectedPath = path.join(tmpDir, projectSlug, "my-task", "repo1");
+    const expectedPath = path.join(tmpDir, projectSlug, "workspaces", "my-task", "repo1");
     expect(vi.mocked(gitFetch)).toHaveBeenCalledWith(expectedPath);
   });
 });
@@ -673,8 +678,8 @@ describe("getRepoInfo() with workspaceSlug", () => {
 
     await getRepoInfo(appState, projectSlug, "my-task");
 
-    // getProjectDir should be called with the project slug
-    expect(appState.getProjectDir).toHaveBeenCalledWith(projectSlug);
+    // getWorkspaceDir should be called with the full workspace id
+    expect(appState.getWorkspaceDir).toHaveBeenCalledWith(`${projectSlug}/my-task`);
   });
 
   it("returns HEAD when branch is empty", async () => {
@@ -697,7 +702,7 @@ describe("getRepoInfo() with workspaceSlug", () => {
   it("handles GitOperationError with non-128 exit code in friendlyGitError", async () => {
     const projectSlug = "proj";
     const projectDir = path.join(tmpDir, projectSlug);
-    fs.mkdirSync(path.join(projectDir, "default"), { recursive: true });
+    fs.mkdirSync(projectDir, { recursive: true });
 
     const { GitOperationError: GitOpErr } = await import("@iara/shared/git");
     vi.mocked(gitCloneWithProgress).mockRejectedValueOnce(new GitOpErr("clone", "some error", 1));

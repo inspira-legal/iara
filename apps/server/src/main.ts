@@ -8,12 +8,12 @@ import { NotificationService } from "./services/notifications.js";
 import { TerminalManager, TERMINAL_KILL_GRACE_MS } from "./services/terminal.js";
 import { SocketServer, registerSocketHandlers } from "./socket.js";
 import { syncShellEnvironment } from "./services/shell-env.js";
-import { mergeHooks, removeHooks } from "./services/hooks.js";
-import { generatePluginDir, cleanupPluginDir } from "./services/plugins.js";
+import { generatePluginDir } from "./services/plugins.js";
 import { SessionWatcher } from "./services/session-watcher.js";
 import { syncEnvSymlinks } from "./services/env.js";
 import { AppState } from "./services/state.js";
 import { ProjectsWatcher } from "./services/watcher.js";
+import { GitWatcher } from "./services/git-watcher.js";
 import { getProjectsDir } from "./services/config.js";
 import { stateDir } from "./env.js";
 
@@ -43,9 +43,11 @@ const socketServer = new SocketServer();
 registerSocketHandlers(socketServer, pushAll);
 const sessionWatcher = new SessionWatcher(pushAll, appState);
 
-// FS watcher
+// FS watchers
 const watcher = new ProjectsWatcher(getProjectsDir(), appState, pushAll);
-watcher.start();
+await watcher.start();
+const gitWatcher = new GitWatcher(appState, pushAll);
+gitWatcher.start();
 
 // Register all WS handlers
 registerAllHandlers({
@@ -64,7 +66,6 @@ sessionWatcher.refresh();
 
 // Start
 const { httpServer, stop: stopWs } = createServer({ port, authToken, webDir });
-let pluginDir: string | null = null;
 
 httpServer.on("listening", async () => {
   console.log(`iara-server listening on http://127.0.0.1:${port}`);
@@ -81,21 +82,15 @@ httpServer.on("listening", async () => {
     console.error("Failed to start socket server:", err);
   }
 
-  // Generate plugin dir for Claude slash commands
+  // Generate plugin dir (hooks + slash commands, scoped per-session via --plugin-dir)
   const bridgePath = path.join(import.meta.dirname, "cli-bridge", "bridge.js");
-  pluginDir = generatePluginDir({
+  const guardrailsPath = path.join(import.meta.dirname, "hooks", "guardrails.sh");
+  const pluginDir = generatePluginDir(stateDir, {
     bridgePath,
     socketPath: socketServer.getSocketPath(),
+    guardrailsPath,
   });
   process.env.IARA_PLUGIN_DIR = pluginDir;
-
-  // Register hooks in Claude settings
-  try {
-    const hooksDir = path.join(import.meta.dirname, "hooks");
-    mergeHooks(bridgePath, hooksDir);
-  } catch (err) {
-    console.error("Failed to merge hooks:", err);
-  }
 });
 
 // Graceful shutdown
@@ -103,6 +98,9 @@ function shutdown() {
   console.log("Shutting down...");
   try {
     watcher.stop();
+  } catch {}
+  try {
+    gitWatcher.stop();
   } catch {}
   try {
     terminalManager.destroyAll();
@@ -114,13 +112,7 @@ function shutdown() {
     void socketServer.stop();
   } catch {}
   try {
-    if (pluginDir) cleanupPluginDir(pluginDir);
-  } catch {}
-  try {
     sessionWatcher.stop();
-  } catch {}
-  try {
-    removeHooks();
   } catch {}
   stopWs();
   // Wait for the SIGKILL grace period in destroyAll() before exiting.

@@ -2,22 +2,16 @@ export interface Project {
   id: string;
   slug: string;
   name: string;
-  description: string;
-  repoSources: string[];
   workspaces: Workspace[];
-  createdAt: string;
 }
 
 export interface Workspace {
   id: string;
   projectId: string;
   slug: string;
-  type: "default" | "task";
   name: string;
-  description: string;
   branch?: string;
   branches?: Record<string, string>;
-  createdAt: string;
 }
 
 export type ClaudeProgress =

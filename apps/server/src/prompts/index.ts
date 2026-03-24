@@ -18,10 +18,9 @@ const SEARCH_DIRS = [
 ];
 
 const PROMPT_NAMES = [
-  "project-analyze",
-  "project-suggest",
-  "task-suggest",
-  "task-regenerate",
+  "analyze-repos",
+  "suggest-project",
+  "suggest-workspace",
   "system-worktrees",
   "system-env",
 ];

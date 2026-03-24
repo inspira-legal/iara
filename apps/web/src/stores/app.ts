@@ -1,48 +1,36 @@
 import { create } from "zustand";
 import type {
-  Project,
-  Workspace,
   CreateProjectInput,
   UpdateProjectInput,
   CreateWorkspaceInput,
+  UpdateWorkspaceInput,
+  Project,
+  Workspace,
   RepoInfo,
   SessionInfo,
 } from "@iara/contracts";
 import { transport } from "~/lib/ws-transport";
 import { LocalCache } from "~/lib/local-cache";
-import { CachedStateSchema, SelectionCacheSchema } from "~/lib/cache-schemas";
+import { AppCacheSchema } from "~/lib/cache-schemas";
 
-// ---------------------------------------------------------------------------
-// Caches
-// ---------------------------------------------------------------------------
+const ROOT_WORKSPACE_SLUG = "main";
 
-const stateCache = new LocalCache({
-  key: "iara:state-cache",
+const appCache = new LocalCache({
+  key: "iara:app",
   version: 1,
-  schema: CachedStateSchema,
+  schema: AppCacheSchema,
 });
 
-const selectionCache = new LocalCache({
-  key: "iara:selection",
-  version: 1,
-  schema: SelectionCacheSchema,
-});
-
-function saveSelection(projectId: string | null, workspaceId: string | null): void {
-  selectionCache.set({ projectId, workspaceId });
+function savePrefs(settings: Record<string, string>, workspaceId: string | null): void {
+  appCache.set({ settings, workspaceId });
 }
 
-// ---------------------------------------------------------------------------
-// Hydrate from cache (sync)
-// ---------------------------------------------------------------------------
+/** Derive projectId from workspaceId (format: "projectId/slug") */
+function projectIdFromWorkspaceId(workspaceId: string): string {
+  return workspaceId.split("/")[0]!;
+}
 
-const cached = stateCache.get() as {
-  projects: Project[];
-  settings: Record<string, string>;
-  repoInfo: Record<string, RepoInfo[]>;
-  sessions: Record<string, SessionInfo[]>;
-} | null;
-const savedSelection = selectionCache.get();
+const cached = appCache.get();
 
 // ---------------------------------------------------------------------------
 // State
@@ -53,10 +41,8 @@ interface AppState {
   settings: Record<string, string>;
   repoInfo: Record<string, RepoInfo[]>;
   sessions: Record<string, SessionInfo[]>;
-  selectedProjectId: string | null;
   selectedWorkspaceId: string | null;
   initialized: boolean;
-  stale: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -68,7 +54,6 @@ interface AppActions {
   init(): Promise<void>;
 
   // Selection
-  selectProject(id: string | null): void;
   selectWorkspace(id: string | null): void;
 
   // Projects
@@ -77,7 +62,11 @@ interface AppActions {
   deleteProject(id: string): Promise<void>;
 
   // Workspaces
-  createWorkspace(projectId: string, input: CreateWorkspaceInput): Promise<Workspace>;
+  createWorkspace(
+    projectId: string,
+    input: CreateWorkspaceInput & { branch?: string },
+  ): Promise<Workspace>;
+  updateWorkspace(workspaceId: string, input: UpdateWorkspaceInput): Promise<void>;
   deleteWorkspace(workspaceId: string): Promise<void>;
 
   // Settings
@@ -85,7 +74,7 @@ interface AppActions {
 
   // Repo info
   getRepoInfo(workspaceId: string): RepoInfo[];
-  refreshRepoInfo(projectId: string, workspaceId: string): Promise<void>;
+  refreshRepoInfo(projectId: string, cacheKey: string, workspaceId?: string): Promise<void>;
 
   // Sessions
   getSessions(key: string): SessionInfo[];
@@ -103,6 +92,7 @@ interface AppActions {
   getWorkspace(workspaceId: string): Workspace | undefined;
   getWorkspacesForProject(projectId: string): Workspace[];
   selectedProject(): Project | undefined;
+  selectedProjectId(): string | null;
   selectedWorkspace(): Workspace | undefined;
 
   // Push subscription
@@ -113,52 +103,36 @@ interface AppActions {
 // Restore selection from cache
 // ---------------------------------------------------------------------------
 
-function restoreSelection(
-  projects: Project[],
-  saved: { projectId: string | null; workspaceId: string | null } | null,
-): {
-  selectedProjectId: string | null;
-  selectedWorkspaceId: string | null;
-} {
-  if (!saved) return { selectedProjectId: null, selectedWorkspaceId: null };
+/** Validate saved workspaceId against fresh project data, falling back to main workspace. */
+function restoreSelection(projects: Project[], workspaceId: string | null): string | null {
+  if (!workspaceId) return null;
 
-  const project = projects.find((p) => p.id === saved.projectId);
-  if (!project) {
-    saveSelection(null, null);
-    return { selectedProjectId: null, selectedWorkspaceId: null };
-  }
+  const projectId = projectIdFromWorkspaceId(workspaceId);
+  const project = projects.find((p) => p.id === projectId);
+  if (!project) return null;
 
-  const workspace = saved.workspaceId
-    ? project.workspaces.find((w) => w.id === saved.workspaceId)
-    : undefined;
+  const workspace = project.workspaces.find((w) => w.id === workspaceId);
+  if (workspace) return workspace.id;
 
-  if (!workspace && saved.workspaceId) {
-    saveSelection(project.id, null);
-  }
-
-  return {
-    selectedProjectId: project.id,
-    selectedWorkspaceId: workspace ? workspace.id : null,
-  };
+  // Fall back to main workspace of this project
+  const main = project.workspaces.find((w) => w.slug === ROOT_WORKSPACE_SLUG);
+  return main?.id ?? null;
 }
-
-const restoredSelection = cached
-  ? restoreSelection(cached.projects, savedSelection)
-  : { selectedProjectId: null, selectedWorkspaceId: null };
 
 // ---------------------------------------------------------------------------
 // Store
 // ---------------------------------------------------------------------------
 
+const EMPTY_REPO_INFO: RepoInfo[] = [];
+const EMPTY_SESSIONS: SessionInfo[] = [];
+
 export const useAppStore = create<AppState & AppActions>((set, get) => ({
-  projects: cached?.projects ?? [],
+  projects: [],
   settings: cached?.settings ?? {},
-  repoInfo: cached?.repoInfo ?? {},
-  sessions: cached?.sessions ?? {},
-  selectedProjectId: restoredSelection.selectedProjectId,
-  selectedWorkspaceId: restoredSelection.selectedWorkspaceId,
-  initialized: !!cached,
-  stale: !!cached,
+  repoInfo: {},
+  sessions: {},
+  selectedWorkspaceId: cached?.workspaceId ?? null,
+  initialized: false,
 
   // ---------------------------------------------------------------------------
   // Initialisation
@@ -166,68 +140,29 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
 
   init: async () => {
     const { projects, settings, repoInfo, sessions } = await transport.request("state.init", {});
-    set({ projects, settings, repoInfo, sessions, initialized: true, stale: false });
 
-    // Persist immediately (don't wait for debounce)
-    stateCache.set({ projects, settings, repoInfo, sessions });
+    // Restore selection against fresh data (re-read cache in case it changed since module load)
+    const freshCache = appCache.get();
+    const workspaceId = restoreSelection(projects, freshCache?.workspaceId ?? null);
 
-    // Restore selection against fresh data
-    const saved = selectionCache.get();
-    const selection = restoreSelection(projects, saved);
-    set(selection);
+    set({
+      projects,
+      settings,
+      repoInfo,
+      sessions,
+      initialized: true,
+      selectedWorkspaceId: workspaceId,
+    });
+    savePrefs(settings, workspaceId);
   },
 
   // ---------------------------------------------------------------------------
   // Selection
   // ---------------------------------------------------------------------------
 
-  selectProject: (id) => {
-    if (id === null) {
-      set({ selectedProjectId: null, selectedWorkspaceId: null });
-      saveSelection(null, null);
-      return;
-    }
-
-    const state = get();
-    const project = state.projects.find((p) => p.id === id);
-    // Keep current workspace if it belongs to the selected project,
-    // otherwise select the default workspace
-    const keepWorkspace =
-      state.selectedWorkspaceId != null &&
-      project?.workspaces.some((w) => w.id === state.selectedWorkspaceId);
-
-    const defaultWorkspace = project?.workspaces.find((w) => w.type === "default");
-    const newWorkspaceId = keepWorkspace
-      ? state.selectedWorkspaceId
-      : (defaultWorkspace?.id ?? null);
-    set({
-      selectedProjectId: id,
-      selectedWorkspaceId: newWorkspaceId,
-    });
-    saveSelection(id, newWorkspaceId);
-  },
-
   selectWorkspace: (id) => {
-    if (id === null) {
-      const state = get();
-      set({ selectedWorkspaceId: null });
-      saveSelection(state.selectedProjectId, null);
-      return;
-    }
-
-    // Derive projectId from the workspace
-    const state = get();
-    for (const project of state.projects) {
-      if (project.workspaces.some((w) => w.id === id)) {
-        set({ selectedWorkspaceId: id, selectedProjectId: project.id });
-        saveSelection(project.id, id);
-        return;
-      }
-    }
-
-    // Workspace not found in any project — just set it
     set({ selectedWorkspaceId: id });
-    saveSelection(state.selectedProjectId, id);
+    savePrefs(get().settings, id);
   },
 
   // ---------------------------------------------------------------------------
@@ -246,15 +181,19 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
   },
 
   deleteProject: async (id) => {
-    const wasSelected = get().selectedProjectId === id;
+    const state = get();
+    const currentProjectId = state.selectedWorkspaceId
+      ? projectIdFromWorkspaceId(state.selectedWorkspaceId)
+      : null;
+    const wasSelected = currentProjectId === id;
+
     // Optimistically remove from state
-    set((state) => ({
-      projects: state.projects.filter((p) => p.id !== id),
-      selectedProjectId: state.selectedProjectId === id ? null : state.selectedProjectId,
-      selectedWorkspaceId: state.selectedProjectId === id ? null : state.selectedWorkspaceId,
+    set((s) => ({
+      projects: s.projects.filter((p) => p.id !== id),
+      selectedWorkspaceId: wasSelected ? null : s.selectedWorkspaceId,
     }));
     if (wasSelected) {
-      saveSelection(null, null);
+      savePrefs(get().settings, null);
     }
     await transport.request("projects.delete", { id });
   },
@@ -269,19 +208,32 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
     return workspace;
   },
 
+  updateWorkspace: async (workspaceId, input) => {
+    await transport.request("workspaces.update", { workspaceId, ...input });
+    // State updates come via push events (workspace:changed)
+  },
+
   deleteWorkspace: async (workspaceId) => {
-    const state = get();
-    const wasSelected = state.selectedWorkspaceId === workspaceId;
+    const wasSelected = get().selectedWorkspaceId === workspaceId;
+    // When deleting the selected workspace, fall back to main workspace of same project
+    let fallbackId: string | null = null;
+    if (wasSelected) {
+      const projectId = projectIdFromWorkspaceId(workspaceId);
+      const project = get().projects.find((p) => p.id === projectId);
+      const main = project?.workspaces.find((w) => w.slug === ROOT_WORKSPACE_SLUG);
+      fallbackId = main?.id ?? null;
+    }
+
     // Optimistically remove from state
     set((s) => ({
       projects: s.projects.map((p) => ({
         ...p,
         workspaces: p.workspaces.filter((w) => w.id !== workspaceId),
       })),
-      selectedWorkspaceId: s.selectedWorkspaceId === workspaceId ? null : s.selectedWorkspaceId,
+      selectedWorkspaceId: wasSelected ? fallbackId : s.selectedWorkspaceId,
     }));
     if (wasSelected) {
-      saveSelection(state.selectedProjectId, null);
+      savePrefs(get().settings, fallbackId);
     }
     await transport.request("workspaces.delete", { workspaceId });
   },
@@ -292,9 +244,9 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
 
   updateSetting: async (key, value) => {
     // Optimistic update
-    set((state) => ({
-      settings: { ...state.settings, [key]: value },
-    }));
+    const newSettings = { ...get().settings, [key]: value };
+    set({ settings: newSettings });
+    savePrefs(newSettings, get().selectedWorkspaceId);
     await transport.request("settings.set", { key, value });
   },
 
@@ -303,14 +255,17 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
   // ---------------------------------------------------------------------------
 
   getRepoInfo: (workspaceId) => {
-    return get().repoInfo[workspaceId] ?? [];
+    return get().repoInfo[workspaceId] ?? EMPTY_REPO_INFO;
   },
 
-  refreshRepoInfo: async (projectId, workspaceId) => {
+  refreshRepoInfo: async (projectId, cacheKey, workspaceId) => {
     try {
-      const info = await transport.request("repos.getInfo", { projectId, workspaceId });
+      const info = await transport.request("repos.getInfo", {
+        projectId,
+        ...(workspaceId ? { workspaceId } : {}),
+      });
       set((state) => ({
-        repoInfo: { ...state.repoInfo, [workspaceId]: info },
+        repoInfo: { ...state.repoInfo, [cacheKey]: info },
       }));
     } catch {
       // ignore — keep stale data
@@ -322,7 +277,7 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
   // ---------------------------------------------------------------------------
 
   getSessions: (key) => {
-    return get().sessions[key] ?? [];
+    return get().sessions[key] ?? EMPTY_SESSIONS;
   },
 
   refreshSessions: async (workspaceId) => {
@@ -403,18 +358,9 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
 
   getWorkspace: (workspaceId) => {
     // workspaceId format: "<projectId>/<slug>" — parse projectId from it
-    const separatorIdx = workspaceId.indexOf("/");
-    if (separatorIdx !== -1) {
-      const projectId = workspaceId.slice(0, separatorIdx);
-      const project = get().projects.find((p) => p.id === projectId);
-      return project?.workspaces.find((w) => w.id === workspaceId);
-    }
-    // Fallback: search all projects
-    for (const project of get().projects) {
-      const ws = project.workspaces.find((w) => w.id === workspaceId);
-      if (ws) return ws;
-    }
-    return undefined;
+    const projectId = projectIdFromWorkspaceId(workspaceId);
+    const project = get().projects.find((p) => p.id === projectId);
+    return project?.workspaces.find((w) => w.id === workspaceId);
   },
 
   getWorkspacesForProject: (projectId) => {
@@ -422,10 +368,16 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
     return project?.workspaces ?? [];
   },
 
+  selectedProjectId: () => {
+    const { selectedWorkspaceId } = get();
+    if (!selectedWorkspaceId) return null;
+    return projectIdFromWorkspaceId(selectedWorkspaceId);
+  },
+
   selectedProject: () => {
-    const { selectedProjectId, projects } = get();
-    if (!selectedProjectId) return undefined;
-    return projects.find((p) => p.id === selectedProjectId);
+    const projectId = get().selectedProjectId();
+    if (!projectId) return undefined;
+    return get().projects.find((p) => p.id === projectId);
   },
 
   selectedWorkspace: () => {
@@ -455,6 +407,12 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
       transport.subscribe("session:changed", ({ workspaceId }) => {
         void get().refreshSessions(workspaceId);
       }),
+      transport.subscribe("repos:changed", ({ projectId, workspaceId, repoInfo }) => {
+        const key = workspaceId ?? `project:${projectId}`;
+        set((state) => ({
+          repoInfo: { ...state.repoInfo, [key]: repoInfo },
+        }));
+      }),
     ];
 
     return () => {
@@ -464,25 +422,3 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
     };
   },
 }));
-
-// ---------------------------------------------------------------------------
-// Debounced cache persistence — auto-writes state after any mutation
-// ---------------------------------------------------------------------------
-
-let persistTimer: ReturnType<typeof setTimeout> | null = null;
-
-useAppStore.subscribe(() => {
-  const current = useAppStore.getState();
-  if (!current.initialized) return;
-
-  if (persistTimer) clearTimeout(persistTimer);
-  persistTimer = setTimeout(() => {
-    const fresh = useAppStore.getState();
-    stateCache.set({
-      projects: fresh.projects,
-      settings: fresh.settings,
-      repoInfo: fresh.repoInfo,
-      sessions: fresh.sessions,
-    });
-  }, 300);
-});

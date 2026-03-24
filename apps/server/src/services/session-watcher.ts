@@ -31,8 +31,6 @@ export class SessionWatcher {
     const newHashes = new Map<string, Set<string>>();
 
     for (const project of projects) {
-      const projectDir = this.appState.getProjectDir(project.slug);
-
       for (const workspace of project.workspaces) {
         const wsDir = this.appState.getWorkspaceDir(workspace.id);
         const hash = computeProjectHash(wsDir);
@@ -41,15 +39,6 @@ export class SessionWatcher {
           newHashes.set(hash, new Set());
         }
         newHashes.get(hash)!.add(workspace.id);
-
-        // Also watch the project root for default workspace
-        if (workspace.slug === "default") {
-          const rootHash = computeProjectHash(projectDir);
-          if (!newHashes.has(rootHash)) {
-            newHashes.set(rootHash, new Set());
-          }
-          newHashes.get(rootHash)!.add(workspace.id);
-        }
       }
     }
 

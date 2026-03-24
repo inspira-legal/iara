@@ -11,6 +11,7 @@ import {
   gitPush,
   gitWorktreeAdd,
 } from "@iara/shared/git";
+import { generateCodeWorkspace } from "./code-workspace.js";
 import type { AppState } from "./state.js";
 
 function friendlyGitError(err: unknown): string {
@@ -72,9 +73,7 @@ export async function addRepo(
   onProgress?: (progress: CloneProgress) => void,
 ): Promise<void> {
   const projectDir = appState.getProjectDir(projectSlug);
-  const reposDir = path.join(projectDir, "default");
-  fs.mkdirSync(reposDir, { recursive: true });
-  const dest = path.join(reposDir, input.name);
+  const dest = path.join(projectDir, input.name);
 
   if (fs.existsSync(dest)) {
     throw new Error(`Repo "${input.name}" already exists in this project`);
@@ -125,16 +124,18 @@ export async function addRepo(
     throw new Error(message, { cause: err });
   }
 
-  // Create worktrees for active workspaces
+  // Create worktrees in existing workspaces
   const project = appState.getProject(projectSlug);
   const workspaces = project?.workspaces ?? [];
   for (const ws of workspaces) {
-    if (ws.slug === "default") continue;
-    const wsDir = path.join(projectDir, ws.slug);
+    const wsDir = path.join(projectDir, "workspaces", ws.slug);
     const wtDir = path.join(wsDir, input.name);
-    if (fs.existsSync(wsDir) && !fs.existsSync(wtDir) && ws.branch) {
+    if (fs.existsSync(wsDir) && !fs.existsSync(wtDir)) {
       try {
-        await gitWorktreeAdd(dest, wtDir, ws.branch);
+        await gitWorktreeAdd(dest, wtDir, `feat/${ws.slug}`);
+        // Regenerate .code-workspace file
+        const allRepos = appState.discoverRepos(projectSlug);
+        generateCodeWorkspace(wsDir, ws.slug, allRepos);
       } catch {
         // Best effort — branch may not exist yet
       }
@@ -143,7 +144,7 @@ export async function addRepo(
 }
 
 /**
- * Sync all repos in default/: pull (ff-only) then push.
+ * Sync all repos: pull (ff-only) then push.
  * Returns per-repo results so the UI can show what happened.
  */
 export async function syncRepos(
@@ -175,7 +176,7 @@ export async function syncRepos(
 }
 
 /**
- * Fetch origin on all repos in default/ (updates ahead/behind without merging).
+ * Fetch origin on all repos (updates ahead/behind without merging).
  * Best-effort: silently skips failures.
  */
 export async function fetchRepos(
@@ -191,10 +192,52 @@ export async function fetchRepos(
   );
 }
 
-/** Resolve the directory containing repos for a workspace (default/ or task slug). */
+/**
+ * List local branches for a repo, filtering out branches checked out in other worktrees.
+ */
+export function listLocalBranches(repoDir: string): string[] {
+  try {
+    const output = execSync("git branch --format='%(refname:short)'", {
+      cwd: repoDir,
+      stdio: "pipe",
+    })
+      .toString()
+      .trim();
+    if (!output) return [];
+    const allBranches = output.split("\n").map((b) => b.trim().replace(/^'|'$/g, ""));
+
+    // Get branches that are checked out in worktrees
+    const worktreeOutput = execSync("git worktree list --porcelain", {
+      cwd: repoDir,
+      stdio: "pipe",
+    }).toString();
+
+    const checkedOut = new Set<string>();
+    for (const line of worktreeOutput.split("\n")) {
+      if (line.startsWith("branch refs/heads/")) {
+        checkedOut.add(line.replace("branch refs/heads/", ""));
+      }
+    }
+
+    // Get the current branch in this worktree — we keep it
+    const currentBranch = getGitBranch(repoDir);
+
+    return allBranches.filter((b) => b === currentBranch || !checkedOut.has(b));
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Resolve the directory containing repos for a context.
+ * "main" workspace (or omitted): project root
+ * Other workspaces: <project>/workspaces/<wsSlug>
+ */
 function resolveReposDir(appState: AppState, projectSlug: string, workspaceSlug?: string): string {
-  const projectDir = appState.getProjectDir(projectSlug);
-  return path.join(projectDir, workspaceSlug ?? "default");
+  if (workspaceSlug) {
+    return appState.getWorkspaceDir(`${projectSlug}/${workspaceSlug}`);
+  }
+  return appState.getProjectDir(projectSlug);
 }
 
 function getGitBranch(repoPath: string): string {

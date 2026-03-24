@@ -1,13 +1,10 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import type { Project, Workspace } from "@iara/contracts";
-import {
-  ProjectFileSchema,
-  SettingsFileSchema,
-  WorkspaceFileSchema,
-} from "@iara/contracts/schemas";
+import { SettingsFileSchema } from "@iara/contracts/schemas";
 import { createJsonFile } from "@iara/shared/json-file";
-import { gitRemoteUrlSync } from "@iara/shared/git";
+import { slugToDisplayName } from "@iara/shared/names";
+import { projectPaths } from "@iara/shared/paths";
 
 interface StateTree {
   projects: Project[];
@@ -30,7 +27,7 @@ export class AppState {
     this.state = this.scan();
   }
 
-  /** Full scan — read all project.json + workspace.json from disk. */
+  /** Full scan — read all projects from disk using filesystem as source of truth. */
   scan(): StateTree {
     const settings = this.settingsFile.read();
     const projects: Project[] = [];
@@ -54,113 +51,79 @@ export class AppState {
 
   /**
    * Read a single project from disk.
-   * A directory IS a project if default/ contains git repos — regardless of project.json.
-   * project.json is just metadata; auto-created if missing or corrupt.
+   * A directory IS a project if it contains at least one subdirectory with a `.git/` directory.
+   * Excludes `workspaces/` from repo scanning.
+   * No JSON metadata — names derived from slugs.
    */
   private readProject(slug: string): Project | null {
-    const projectDir = path.join(this.projectsDir, slug);
-    const defaultDir = path.join(projectDir, "default");
+    const paths = projectPaths(this.projectsDir, slug);
 
-    // Directory structure is the source of truth
-    const repoNames = this.listRepoNames(defaultDir);
+    const repoNames = this.listRepoNames(paths.root);
     if (repoNames.size === 0) return null;
 
-    const projectFile = createJsonFile(
-      path.join(projectDir, "project.json"),
-      ProjectFileSchema,
-      () => {
-        const repoSources: string[] = [];
-        for (const repoName of repoNames) {
-          const url = gitRemoteUrlSync(path.join(defaultDir, repoName));
-          if (url) repoSources.push(url);
-        }
-        return {
-          name: slug,
-          description: "",
-          repoSources,
-          createdAt: new Date().toISOString(),
-        };
-      },
-    );
-    const data = projectFile.read();
-
-    const workspaces = this.scanWorkspaces(slug, projectDir);
+    const workspaces = this.scanWorkspaces(slug);
     return {
       id: slug,
       slug,
-      ...data,
+      name: slugToDisplayName(slug),
       workspaces,
     };
   }
 
   /**
    * Scan workspaces within a project.
-   * Directory structure decides what IS a workspace:
-   *   - default/: must have git repos (.git directories)
-   *   - task dirs: must have worktrees (.git files) matching repos in default/
-   * workspace.json is just metadata; auto-created if missing or corrupt.
+   * Workspaces live under `<project>/workspaces/`.
+   * A subdirectory is a workspace if it contains at least one sub-subdirectory with a `.git` file (worktree).
    */
-  private scanWorkspaces(projectSlug: string, projectDir: string): Workspace[] {
-    const workspaces: Workspace[] = [];
-    const defaultDir = path.join(projectDir, "default");
+  /** Reserved workspace slug for the project root. */
+  static readonly ROOT_WORKSPACE_SLUG = "main";
 
-    // Cache repo names from default/ once — avoids N+1 readdirSync for N task workspaces
-    const defaultRepoNames = this.listRepoNames(defaultDir);
+  private scanWorkspaces(projectSlug: string): Workspace[] {
+    // The project root is always the "main" workspace
+    const workspaces: Workspace[] = [
+      {
+        id: `${projectSlug}/${AppState.ROOT_WORKSPACE_SLUG}`,
+        projectId: projectSlug,
+        slug: AppState.ROOT_WORKSPACE_SLUG,
+        name: "Main",
+      },
+    ];
+    const paths = projectPaths(this.projectsDir, projectSlug);
 
     let entries: fs.Dirent[];
     try {
-      entries = fs.readdirSync(projectDir, { withFileTypes: true });
+      entries = fs.readdirSync(paths.workspacesDir, { withFileTypes: true });
     } catch {
       return workspaces;
     }
 
     for (const entry of entries) {
       if (!entry.isDirectory()) continue;
-      const wsDir = path.join(projectDir, entry.name);
-      const isDefault = entry.name === "default";
+      const wsDir = path.join(paths.workspacesDir, entry.name);
 
-      // Directory structure validation — this decides if it's a workspace
-      if (isDefault) {
-        if (defaultRepoNames.size === 0) continue;
-      } else {
-        if (!this.hasMatchingWorktrees(wsDir, defaultRepoNames)) continue;
-      }
-
-      const wsFile = createJsonFile(path.join(wsDir, "workspace.json"), WorkspaceFileSchema, () => {
-        const now = new Date().toISOString();
-        if (isDefault) {
-          return { type: "default" as const, name: "Default", description: "", createdAt: now };
-        }
-        const branches = this.detectBranches(wsDir);
-        const branch = Object.values(branches)[0] ?? entry.name;
-        return {
-          type: "task" as const,
-          name: entry.name,
-          description: "",
-          branch,
-          ...(Object.keys(branches).length > 0 ? { branches } : {}),
-          createdAt: now,
-        };
-      });
-      const data = wsFile.read();
+      if (!this.hasWorktrees(wsDir)) continue;
 
       workspaces.push({
         id: `${projectSlug}/${entry.name}`,
         projectId: projectSlug,
         slug: entry.name,
-        ...data,
-      } as Workspace);
+        name: slugToDisplayName(entry.name),
+      });
     }
 
     return workspaces;
   }
 
-  /** List repo names in a directory (subdirs where .git is a directory). */
+  /**
+   * List repo names in a directory (subdirs where .git is a directory).
+   * Excludes `workspaces/` directory.
+   */
   private listRepoNames(dir: string): Set<string> {
     try {
       const names = new Set<string>();
       for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
         if (!entry.isDirectory()) continue;
+        if (entry.name === "workspaces") continue;
         try {
           if (fs.statSync(path.join(dir, entry.name, ".git")).isDirectory()) {
             names.add(entry.name);
@@ -175,13 +138,11 @@ export class AppState {
     }
   }
 
-  /** Check if directory has worktrees (.git files) with names matching the given repo set. */
-  private hasMatchingWorktrees(wsDir: string, repoNames: Set<string>): boolean {
-    if (repoNames.size === 0) return false;
+  /** Check if directory has at least one worktree (.git file, not directory). */
+  private hasWorktrees(wsDir: string): boolean {
     try {
       for (const entry of fs.readdirSync(wsDir, { withFileTypes: true })) {
         if (!entry.isDirectory()) continue;
-        if (!repoNames.has(entry.name)) continue;
         try {
           if (fs.statSync(path.join(wsDir, entry.name, ".git")).isFile()) return true;
         } catch {
@@ -192,49 +153,6 @@ export class AppState {
     } catch {
       return false;
     }
-  }
-
-  /** Detect git branch for each repo/worktree in a workspace directory. */
-  private detectBranches(wsDir: string): Record<string, string> {
-    const branches: Record<string, string> = {};
-    try {
-      for (const name of fs.readdirSync(wsDir)) {
-        const branch = this.detectBranchForRepo(path.join(wsDir, name));
-        if (branch) branches[name] = branch;
-      }
-    } catch {
-      // ignore
-    }
-    return branches;
-  }
-
-  /** Detect git branch for a single repo or worktree directory. */
-  private detectBranchForRepo(repoDir: string): string | null {
-    try {
-      const gitPath = path.join(repoDir, ".git");
-      const stat = fs.statSync(gitPath);
-
-      let headPath: string | null = null;
-      if (stat.isDirectory()) {
-        headPath = path.join(gitPath, "HEAD");
-      } else if (stat.isFile()) {
-        const content = fs.readFileSync(gitPath, "utf-8").trim();
-        const match = content.match(/^gitdir:\s*(.+)$/);
-        if (match?.[1]) {
-          headPath = path.join(match[1], "HEAD");
-        }
-      }
-
-      if (headPath) {
-        const head = fs.readFileSync(headPath, "utf-8").trim();
-        if (head.startsWith("ref: refs/heads/")) {
-          return head.replace("ref: refs/heads/", "");
-        }
-      }
-    } catch {
-      // ignore — file missing, not a git dir, etc.
-    }
-    return null;
   }
 
   // ---------------------------------------------------------------------------
@@ -265,27 +183,23 @@ export class AppState {
     return path.join(this.projectsDir, slug);
   }
 
-  /** Get the directory path for a workspace. */
+  /** Get the directory path for a workspace. "main" returns the project root. */
   getWorkspaceDir(workspaceId: string): string {
     const [projectSlug, wsSlug] = workspaceId.split("/") as [string, string];
-    return path.join(this.projectsDir, projectSlug, wsSlug);
+    if (wsSlug === AppState.ROOT_WORKSPACE_SLUG) {
+      return path.join(this.projectsDir, projectSlug);
+    }
+    return path.join(this.projectsDir, projectSlug, "workspaces", wsSlug);
   }
 
   /**
-   * Discover repos by scanning default/ directory of a project.
-   * Each subdirectory containing a .git folder (or file, for worktrees) is a repo.
-   * Returns array of repo names (directory names).
+   * Discover repos by scanning project root directory.
+   * Each subdirectory containing a .git directory is a repo.
+   * Excludes `workspaces/`.
    */
   discoverRepos(projectSlug: string): string[] {
-    const reposDir = path.join(this.getProjectDir(projectSlug), "default");
-    if (!fs.existsSync(reposDir)) return [];
-
-    return fs.readdirSync(reposDir).filter((name) => {
-      const full = path.join(reposDir, name);
-      if (!fs.statSync(full).isDirectory()) return false;
-      // Check for .git (file or directory — worktrees use .git file)
-      return fs.existsSync(path.join(full, ".git"));
-    });
+    const projectDir = this.getProjectDir(projectSlug);
+    return [...this.listRepoNames(projectDir)];
   }
 
   // ---------------------------------------------------------------------------
@@ -307,19 +221,8 @@ export class AppState {
   }
 
   /** Create and register an empty project (no repos on disk yet). */
-  createEmptyProject(
-    slug: string,
-    data: { name: string; description: string; repoSources: string[] },
-  ): Project {
-    const project: Project = {
-      id: slug,
-      slug,
-      name: data.name,
-      description: data.description,
-      repoSources: data.repoSources,
-      createdAt: new Date().toISOString(),
-      workspaces: [],
-    };
+  createEmptyProject(slug: string): Project {
+    const project: Project = { id: slug, slug, name: slugToDisplayName(slug), workspaces: [] };
     this.upsertProject(project);
     return project;
   }
@@ -331,60 +234,6 @@ export class AppState {
     } else {
       this.state.projects.push(project);
     }
-  }
-
-  // ---------------------------------------------------------------------------
-  // Project CRUD
-  // ---------------------------------------------------------------------------
-
-  /** Write project.json for a project. */
-  writeProject(
-    slug: string,
-    data: { name: string; description: string; repoSources: string[] },
-  ): void {
-    const projectDir = this.getProjectDir(slug);
-    const file = createJsonFile(path.join(projectDir, "project.json"), ProjectFileSchema);
-    file.write({
-      ...data,
-      createdAt: new Date().toISOString(),
-    });
-  }
-
-  /** Update project.json for an existing project (preserves createdAt). */
-  updateProject(
-    slug: string,
-    updates: { name?: string; description?: string; repoSources?: string[] },
-  ): void {
-    const projectDir = this.getProjectDir(slug);
-    const file = createJsonFile(path.join(projectDir, "project.json"), ProjectFileSchema);
-    file.update(updates);
-  }
-
-  // ---------------------------------------------------------------------------
-  // Workspace CRUD
-  // ---------------------------------------------------------------------------
-
-  /** Write workspace.json for a workspace. */
-  writeWorkspace(
-    projectSlug: string,
-    wsSlug: string,
-    data:
-      | { type: "default"; name: string; description?: string }
-      | {
-          type: "task";
-          name: string;
-          description?: string;
-          branch: string;
-          branches?: Record<string, string>;
-        },
-  ): void {
-    const wsDir = path.join(this.projectsDir, projectSlug, wsSlug);
-    const file = createJsonFile(path.join(wsDir, "workspace.json"), WorkspaceFileSchema);
-    file.write({
-      ...data,
-      description: data.description ?? "",
-      createdAt: new Date().toISOString(),
-    });
   }
 
   // ---------------------------------------------------------------------------

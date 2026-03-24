@@ -3,11 +3,13 @@ import { Group, Panel, Separator, useDefaultLayout, usePanelRef } from "react-re
 import { BottomPanel } from "./BottomPanel";
 import { useScriptsStore } from "~/stores/scripts";
 import { useWorkspace } from "~/lib/workspace";
+import { useAppStore } from "~/stores/app";
 
 export function MainPanel({ children }: { children: ReactNode }) {
   const bottomPanelRef = usePanelRef();
   const { syncCollapsed } = useScriptsStore();
   const workspace = useWorkspace();
+  const hasProject = useAppStore((s) => s.selectedWorkspaceId !== null);
 
   const contentLayout = useDefaultLayout({ id: "iara:content-layout:v3", storage: localStorage });
 
@@ -31,7 +33,7 @@ export function MainPanel({ children }: { children: ReactNode }) {
         <Panel id="content" defaultSize="70%" minSize="30%">
           <div className="h-full overflow-hidden">{children}</div>
         </Panel>
-        {workspace && (
+        {(workspace || hasProject) && (
           <>
             <Separator className="relative z-10 -my-1.5 h-3 bg-transparent outline-none after:absolute after:inset-x-0 after:top-1/2 after:h-1 after:-translate-y-1/2 after:bg-transparent after:transition-colors hover:after:bg-blue-500/50 data-[resize-handle-active]:after:bg-blue-500/70" />
             <Panel
@@ -41,7 +43,7 @@ export function MainPanel({ children }: { children: ReactNode }) {
               minSize="120px"
               maxSize="600px"
               collapsible
-              collapsedSize="32px"
+              collapsedSize="36px"
               onResize={handleBottomPanelResize}
             >
               <BottomPanel panelRef={bottomPanelRef} />

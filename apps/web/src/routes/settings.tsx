@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useId } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { ArrowLeft } from "lucide-react";
 import { useNavigate } from "@tanstack/react-router";
@@ -28,20 +28,21 @@ function SettingsPage() {
         <button
           type="button"
           onClick={() => void navigate({ to: "/" })}
-          className="rounded p-1 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-300"
+          aria-label="Go back"
+          className="rounded p-1.5 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-300 focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:outline-none"
         >
           <ArrowLeft size={16} />
         </button>
-        <h1 className="text-sm font-semibold text-zinc-200">Configurações</h1>
+        <h1 className="text-sm font-semibold text-zinc-200">Settings</h1>
       </div>
 
       {/* Content */}
       <div className="mx-auto w-full max-w-2xl space-y-8 p-6">
         {/* Notifications */}
-        <SettingsSection title="Notificações">
+        <SettingsSection title="Notifications">
           <ToggleRow
-            label="Notificações nativas do OS"
-            description="Exibir notificações do sistema operacional quando eventos ocorrerem"
+            label="OS native notifications"
+            description="Show operating system notifications when events occur"
             checked={osNotificationsEnabled}
             onChange={handleToggleNotifications}
           />
@@ -53,7 +54,7 @@ function SettingsPage() {
           <div className="mt-3 border-t border-zinc-800 pt-3">
             <ToggleRow
               label="Workspace guardrails"
-              description="Impede que Claude escreva arquivos ou execute comandos fora do diretório do workspace"
+              description="Prevent Claude from writing files or running commands outside the workspace directory"
               checked={guardrailsEnabled}
               onChange={() => {
                 void updateSetting("guardrails.enabled", guardrailsEnabled ? "false" : "true");
@@ -63,8 +64,8 @@ function SettingsPage() {
         </SettingsSection>
 
         {/* Appearance placeholder */}
-        <SettingsSection title="Aparência">
-          <p className="text-xs text-zinc-500">Em breve: tema, tamanho de fonte, etc.</p>
+        <SettingsSection title="Appearance">
+          <p className="text-xs text-zinc-500">Coming soon: theme, font size, etc.</p>
         </SettingsSection>
       </div>
     </div>
@@ -91,18 +92,27 @@ function ToggleRow({
   checked: boolean;
   onChange: () => void;
 }) {
+  const labelId = useId();
+  const descId = useId();
+
   return (
     <div className="flex items-center justify-between gap-4">
       <div>
-        <p className="text-sm text-zinc-200">{label}</p>
-        <p className="text-xs text-zinc-500">{description}</p>
+        <p id={labelId} className="text-sm text-zinc-200">
+          {label}
+        </p>
+        <p id={descId} className="text-xs text-zinc-500">
+          {description}
+        </p>
       </div>
       <button
         type="button"
         role="switch"
         aria-checked={checked}
+        aria-labelledby={labelId}
+        aria-describedby={descId}
         onClick={onChange}
-        className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full transition-colors ${
+        className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full transition-colors focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-900 focus-visible:outline-none ${
           checked ? "bg-blue-600" : "bg-zinc-700"
         }`}
       >
@@ -125,6 +135,7 @@ function AutocompactInput({
 }) {
   const [draft, setDraft] = useState(value);
   const [dirty, setDirty] = useState(false);
+  const inputId = useId();
 
   // Sync draft with external value when it changes (and user hasn't edited)
   if (!dirty && draft !== value) {
@@ -154,13 +165,16 @@ function AutocompactInput({
     <div className="space-y-1">
       <div className="flex items-center gap-3">
         <div className="flex-1">
-          <p className="text-sm text-zinc-200">Auto-compact threshold %</p>
+          <label htmlFor={inputId} className="text-sm text-zinc-200">
+            Auto-compact threshold %
+          </label>
           <p className="text-xs text-zinc-500">
-            Define CLAUDE_AUTOCOMPACT_PCT_OVERRIDE ao lançar sessões
+            Sets CLAUDE_AUTOCOMPACT_PCT_OVERRIDE when launching sessions
           </p>
         </div>
         <div className="flex items-center gap-2">
           <input
+            id={inputId}
             type="text"
             inputMode="numeric"
             value={draft}
@@ -172,7 +186,9 @@ function AutocompactInput({
             placeholder="—"
             className="w-16 rounded border border-zinc-700 bg-zinc-800 px-2 py-1 text-right text-sm text-zinc-200 placeholder-zinc-600 focus:border-blue-500 focus:outline-none"
           />
-          <span className="text-xs text-zinc-500">%</span>
+          <span className="text-xs text-zinc-500" aria-hidden="true">
+            %
+          </span>
         </div>
       </div>
     </div>

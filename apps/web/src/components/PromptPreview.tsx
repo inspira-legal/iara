@@ -3,7 +3,7 @@ import { ChevronDown, ChevronRight, FileText, ExternalLink } from "lucide-react"
 import { transport } from "~/lib/ws-transport.js";
 
 interface PromptPreviewProps {
-  /** Relative path to the .md file (e.g. "slug/PROJECT.md") */
+  /** Relative path to the .md file (e.g. "slug/CLAUDE.md") */
   filePath: string;
   /** Label shown in the header */
   label: string;

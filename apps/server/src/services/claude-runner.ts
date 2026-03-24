@@ -196,6 +196,10 @@ function buildResultInstruction(tempFile: string, schema?: z.ZodType<unknown>): 
       return `  - "${key}": ${desc}`;
     });
     lines.push("The JSON must match this structure:", ...fields);
+  } else {
+    lines.push(
+      'The JSON must have a single key "content" with the full result as a string. Example: {"content": "..."}',
+    );
   }
   return lines.join("\n");
 }
@@ -269,8 +273,18 @@ export function runClaude<T>(
           throw new Error("Claude did not write the result file");
         }
 
-        // No schema — return raw content
-        if (!schema) return content;
+        // No schema — extract "content" from JSON wrapper
+        if (!schema) {
+          try {
+            const parsed = JSON.parse(content);
+            if (typeof parsed === "object" && parsed !== null && "content" in parsed) {
+              return String(parsed.content);
+            }
+          } catch {
+            // Not valid JSON — return as-is
+          }
+          return content;
+        }
 
         // Parse JSON
         let parsed: unknown;

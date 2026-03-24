@@ -32,6 +32,30 @@ let ws: WebSocket | null = null;
 let quitting = false;
 let osNotificationsEnabled = true;
 
+// Dev: listen for "restart-server" on stdin from dev-electron.mjs.
+// Kills only the server child — Electron window stays open.
+if (isDevelopment && process.stdin.readable) {
+  process.stdin.setEncoding("utf-8");
+  process.stdin.on("data", (data: string) => {
+    if (data.trim() === "restart-server" && serverChild) {
+      console.log("[desktop] Restarting server (hot-reload)...");
+      const child = serverChild;
+      serverChild = null;
+      child.removeAllListeners("exit");
+      child.kill("SIGTERM");
+      child.once("exit", () => {
+        restartAttempt = 0;
+        spawnServer();
+      });
+      setTimeout(() => {
+        try {
+          child.kill("SIGKILL");
+        } catch {}
+      }, 2000);
+    }
+  });
+}
+
 const RENDERER_LOG_TAGS: Record<string, string> = {
   debug: "[renderer]",
   info: "[renderer]",

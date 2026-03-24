@@ -16,10 +16,13 @@ import {
   Search,
   FlaskConical,
   Workflow,
+  AlertCircle,
 } from "lucide-react";
 import type { EssencialKey, ResolvedServiceDef, ScriptStatus } from "@iara/contracts";
 import { isScriptActive, isScriptUnhealthy } from "~/lib/script-status";
-import { useScriptsStore, useIsDiscovering } from "~/stores/scripts";
+import { statusTextColor, statusBgTint } from "~/lib/status-colors";
+import { StatusButton } from "~/components/ui/StatusButton";
+import { useScriptsStore, useIsDiscovering, useDiscoveryError } from "~/stores/scripts";
 import { useWorkspace } from "~/lib/workspace";
 import { transport } from "~/lib/ws-transport";
 
@@ -142,11 +145,12 @@ export function BottomPanel({ panelRef }: { panelRef: RefObject<PanelImperativeH
   return (
     <div className="flex h-full flex-col">
       {/* Tab bar — always visible (panel collapses to 32px) */}
-      <div className="flex h-8 shrink-0 items-center bg-zinc-900 px-2">
+      <div className="flex h-9 shrink-0 items-center bg-zinc-900 px-2">
         <button
           type="button"
           onClick={toggleCollapse}
-          className="mr-1 rounded p-0.5 text-zinc-500 hover:text-zinc-300"
+          aria-label={collapsed ? "Expand panel" : "Collapse panel"}
+          className="mr-1 rounded p-1 text-zinc-500 hover:text-zinc-300 focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:outline-none"
         >
           {collapsed ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
         </button>
@@ -202,7 +206,11 @@ function TabButton({
     >
       {label}
       {badge !== undefined && badge > 0 && (
-        <span className="rounded-full bg-green-600/20 px-1.5 text-xs text-green-400">{badge}</span>
+        <span
+          className={`rounded-full px-1.5 text-xs ${statusBgTint.success} ${statusTextColor.success}`}
+        >
+          {badge}
+        </span>
       )}
     </button>
   );
@@ -216,6 +224,7 @@ function ScriptsTab() {
   const config = useScriptsStore((s) => s.config);
   const discover = useScriptsStore((s) => s.discover);
   const discovering = useIsDiscovering();
+  const discoveryError = useDiscoveryError();
   const workspace = useWorkspace();
   const projectId = workspace?.split("/")[0] ?? null;
   if (!projectId) {
@@ -227,6 +236,26 @@ function ScriptsTab() {
       <div className="flex items-center justify-center gap-2 p-8 text-sm text-zinc-500">
         <Loader2 size={14} className="animate-spin" />
         Discovering scripts...
+      </div>
+    );
+  }
+
+  if (discoveryError) {
+    return (
+      <div className="flex flex-col items-center justify-center gap-3 p-8">
+        <div className="flex items-center gap-2">
+          <AlertCircle size={14} className="shrink-0 text-red-400" />
+          <div className="text-sm text-red-300">Failed to discover scripts</div>
+        </div>
+        <div className="text-xs text-red-400/70">{discoveryError}</div>
+        <button
+          type="button"
+          onClick={() => void discover(projectId)}
+          className="flex items-center gap-2 rounded-md bg-red-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-red-500"
+        >
+          <Sparkles size={14} />
+          Rediscover
+        </button>
       </div>
     );
   }
@@ -320,16 +349,16 @@ function CommandBar() {
             if (projectId) void discover(projectId);
           }}
           disabled={discovering}
-          className="flex items-center gap-1.5 rounded px-2.5 py-1.5 text-xs text-zinc-600 transition-colors hover:bg-zinc-800 hover:text-zinc-400 disabled:opacity-50"
-          title="Rediscover scripts"
+          aria-label="Rediscover scripts"
+          className="flex items-center gap-1.5 rounded px-2.5 py-1.5 text-xs text-zinc-600 transition-colors hover:bg-zinc-800 hover:text-zinc-400 disabled:opacity-50 focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:outline-none"
         >
           {discovering ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />}
         </button>
         <button
           type="button"
           onClick={openScriptsFile}
-          className="flex items-center gap-1.5 rounded px-2.5 py-1.5 text-xs text-zinc-600 transition-colors hover:bg-zinc-800 hover:text-zinc-400"
-          title="Edit scripts.yaml"
+          aria-label="Edit scripts.yaml"
+          className="flex items-center gap-1.5 rounded px-2.5 py-1.5 text-xs text-zinc-600 transition-colors hover:bg-zinc-800 hover:text-zinc-400 focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:outline-none"
         >
           <FileEdit size={12} />
         </button>
@@ -351,88 +380,32 @@ function CategoryButton({
 }) {
   const Icon = ESSENCIAL_ICONS[category];
   const label = category.charAt(0).toUpperCase() + category.slice(1);
+  const isActive = state === "starting" || state === "running";
 
-  if (state === "starting") {
-    return (
-      <button
-        type="button"
-        onClick={onStop}
-        className="flex items-center gap-1.5 rounded border border-yellow-600/30 bg-yellow-900/10 px-2.5 py-1.5 text-xs text-yellow-400 transition-colors hover:bg-yellow-900/20"
-        title={`Stop ${label}`}
-      >
-        <Loader2 size={10} className="animate-spin" />
-        Starting {category}
-      </button>
-    );
-  }
+  const titleMap: Record<typeof state, string> = {
+    starting: `Stop ${label}`,
+    running: `Stop ${label}`,
+    partial: `${label} All (some running)`,
+    failed: `${label} All (retry)`,
+    success: `${label} All`,
+    idle: `${label} All`,
+  };
 
-  if (state === "running") {
-    return (
-      <button
-        type="button"
-        onClick={onStop}
-        className="flex items-center gap-1.5 rounded border border-green-600/30 bg-green-900/10 px-2.5 py-1.5 text-xs text-green-400 transition-colors hover:bg-red-900/10 hover:border-red-600/30 hover:text-red-400"
-        title={`Stop ${label}`}
-      >
-        <Square size={8} />
-        Stop {category}
-      </button>
-    );
-  }
-
-  if (state === "partial") {
-    return (
-      <button
-        type="button"
-        onClick={onRun}
-        className="flex items-center gap-1.5 rounded border border-yellow-600/30 bg-yellow-900/10 px-2.5 py-1.5 text-xs text-yellow-400 transition-colors hover:bg-zinc-800 hover:text-zinc-300 hover:border-zinc-700/50"
-        title={`${label} All (some running)`}
-      >
-        <Icon size={12} />
-        {category}
-      </button>
-    );
-  }
-
-  if (state === "success") {
-    return (
-      <button
-        type="button"
-        onClick={onRun}
-        className="flex items-center gap-1.5 rounded border border-green-600/30 px-2.5 py-1.5 text-xs text-green-400 transition-colors hover:bg-zinc-800 hover:text-zinc-300 hover:border-zinc-700/50"
-        title={`${label} All`}
-      >
-        <Icon size={12} />
-        {category}
-      </button>
-    );
-  }
-
-  if (state === "failed") {
-    return (
-      <button
-        type="button"
-        onClick={onRun}
-        className="flex items-center gap-1.5 rounded border border-red-600/30 px-2.5 py-1.5 text-xs text-red-400 transition-colors hover:bg-zinc-800 hover:text-zinc-300 hover:border-zinc-700/50"
-        title={`${label} All (retry)`}
-      >
-        <Icon size={12} />
-        {category}
-      </button>
-    );
-  }
-
-  // idle
   return (
-    <button
-      type="button"
-      onClick={onRun}
-      className="flex items-center gap-1.5 rounded border border-transparent px-2.5 py-1.5 text-xs text-zinc-500 transition-colors hover:bg-zinc-800 hover:text-zinc-300"
-      title={`${label} All`}
-    >
-      <Icon size={12} />
-      {category}
-    </button>
+    <StatusButton state={state} onClick={isActive ? onStop : onRun} title={titleMap[state]}>
+      {state === "starting" ? (
+        <Loader2 size={10} className="animate-spin" />
+      ) : state === "running" ? (
+        <Square size={8} />
+      ) : (
+        <Icon size={12} />
+      )}
+      {state === "starting"
+        ? `Starting ${category}`
+        : state === "running"
+          ? `Stop ${category}`
+          : category}
+    </StatusButton>
   );
 }
 
@@ -461,7 +434,7 @@ function ServiceCard({
         <HealthDot health={worstHealth} />
         <span className="text-xs font-medium text-zinc-300">{service.name}</span>
         {service.resolvedPort > 0 && (
-          <code className="text-xs text-zinc-600">:{service.resolvedPort}</code>
+          <code className="text-[11px] text-zinc-600/60">:{service.resolvedPort}</code>
         )}
         {service.isRepo && (
           <span className="rounded bg-zinc-800 px-1 text-xs text-zinc-600">repo</span>
@@ -540,71 +513,49 @@ function ScriptButton({
 }) {
   const isStarting = status?.health === "starting";
   const isRunning = status && isScriptActive(status);
-  const healthColor = getHealthBorderColor(status);
-  const textColor = variant === "advanced" ? "text-zinc-600" : "text-zinc-400";
   const ButtonIcon = Icon ?? Play;
 
   const handleStop = () => {
     if (status?.scriptId) onStop(status.scriptId);
   };
 
-  if (isStarting) {
-    return (
-      <button
-        type="button"
-        onClick={handleStop}
-        className="flex items-center gap-1 rounded border border-yellow-600/30 bg-yellow-900/10 px-2 py-0.5 text-xs text-yellow-400 hover:bg-yellow-900/20"
-        title={`Stop ${script}`}
-      >
-        <Loader2 size={8} className="animate-spin" />
-        Starting {script}
-      </button>
-    );
-  }
-
-  if (isRunning) {
-    return (
-      <button
-        type="button"
-        onClick={handleStop}
-        className="flex items-center gap-1 rounded border border-green-600/30 bg-green-900/10 px-2 py-0.5 text-xs text-green-400 hover:bg-red-900/10 hover:border-red-600/30 hover:text-red-400"
-        title={`Stop ${script}`}
-      >
-        <Square size={8} />
-        Stop {script}
-      </button>
-    );
-  }
+  const state = isStarting ? "starting" : isRunning ? "running" : getHealthState(status);
 
   return (
-    <button
-      type="button"
-      onClick={onRun}
-      className={`flex items-center gap-1 rounded border px-2 py-0.5 text-xs ${healthColor} ${textColor} hover:bg-zinc-800 hover:text-zinc-300`}
-      title={`Run ${script}`}
+    <StatusButton
+      state={state}
+      size="sm"
+      onClick={isStarting || isRunning ? handleStop : onRun}
+      title={isStarting || isRunning ? `Stop ${script}` : `Run ${script}`}
+      className={!isStarting && !isRunning && variant === "advanced" ? "text-zinc-600" : undefined}
     >
-      <ButtonIcon size={8} />
-      {script}
-    </button>
+      {isStarting ? (
+        <Loader2 size={8} className="animate-spin" />
+      ) : isRunning ? (
+        <Square size={8} />
+      ) : (
+        <ButtonIcon size={8} />
+      )}
+      {isStarting ? `Starting ${script}` : isRunning ? `Stop ${script}` : script}
+    </StatusButton>
   );
 }
 
-function getHealthBorderColor(status: ScriptStatus | undefined): string {
-  if (!status) return "border-zinc-700/50";
-  if (status.health === "healthy") return "border-green-600/40";
-  if (isScriptActive(status)) return "border-yellow-600/40";
-  if (isScriptUnhealthy(status)) return "border-red-600/40";
-  return "border-zinc-700/50";
+function getHealthState(status: ScriptStatus | undefined): "idle" | "success" | "failed" {
+  if (!status) return "idle";
+  if (status.health === "healthy") return "success";
+  if (isScriptUnhealthy(status)) return "failed";
+  return "idle";
 }
 
 function HealthDot({ health }: { health: string | null }) {
   let color = "text-zinc-700";
   if (health === "healthy") {
-    color = "text-green-500";
+    color = statusTextColor.success;
   } else if (health === "starting" || health === "running") {
-    color = "text-yellow-500";
+    color = statusTextColor.warning;
   } else if (health === "failed" || health === "unhealthy") {
-    color = "text-red-500";
+    color = statusTextColor.error;
   }
 
   return (
@@ -627,9 +578,8 @@ function getWorstHealth(statuses: ScriptStatus[]): string | null {
 // Output Tab
 // ---------------------------------------------------------------------------
 
-let nextLineId = 0;
-
 function OutputTab() {
+  const nextLineIdRef = useRef(0);
   const config = useScriptsStore((s) => s.config);
   const logs = useScriptsStore((s) => s.logs);
   const selectedLog = useScriptsStore((s) => s.selectedLog);
@@ -674,15 +624,22 @@ function OutputTab() {
     // Reuse existing keyed entries, append new ones with fresh IDs
     const result: { id: number; text: string }[] = raw.map((text, idx) => {
       const existing = prev[idx];
-      return existing && existing.text === text ? existing : { id: nextLineId++, text };
+      return existing && existing.text === text ? existing : { id: nextLineIdRef.current++, text };
     });
     keyedLinesRef.current = result;
     return result;
   }, [selectedStatus, logs]);
 
-  // Auto-scroll
+  const logContainerRef = useRef<HTMLDivElement>(null);
+
+  // Auto-scroll only when user is already at the bottom
   useEffect(() => {
-    logsEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    const container = logContainerRef.current;
+    if (!container) return;
+    const isAtBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 40;
+    if (isAtBottom) {
+      logsEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    }
   }, [currentLines]);
 
   if ((config?.statuses ?? []).length === 0 && !selectedLog) {
@@ -704,7 +661,10 @@ function OutputTab() {
       </div>
 
       {/* Log output */}
-      <div className="flex-1 overflow-y-auto p-2 font-mono text-xs text-zinc-400">
+      <div
+        ref={logContainerRef}
+        className="flex-1 overflow-y-auto p-2 font-mono text-xs text-zinc-400"
+      >
         {currentLines.map(({ id, text }) => (
           <div
             key={id}
@@ -745,9 +705,9 @@ function OutputScriptEntry({
           size={6}
           className={`shrink-0 fill-current ${
             isScriptActive(status)
-              ? "text-green-500"
+              ? statusTextColor.success
               : isScriptUnhealthy(status)
-                ? "text-red-500"
+                ? statusTextColor.error
                 : "text-zinc-600"
           }`}
         />
@@ -785,7 +745,9 @@ function OutputGroup({
           <Circle
             size={5}
             className={`shrink-0 fill-current ${
-              group.scripts.some(isScriptUnhealthy) ? "text-red-500" : "text-green-500"
+              group.scripts.some(isScriptUnhealthy)
+                ? statusTextColor.error
+                : statusTextColor.success
             }`}
           />
         )}

@@ -97,9 +97,8 @@ describe("ProjectsWatcher", () => {
       const w = watcher as any;
 
       // Simulate pending changes
-      w.pendingChanges.set(`proj1${path.sep}project.json`, "project");
-      w.pendingChanges.set(`proj1${path.sep}ws1${path.sep}workspace.json`, "workspace");
-      w.pendingChanges.set(`proj2${path.sep}project.json`, "project");
+      w.pendingProjectSlugs.add("proj1");
+      w.pendingProjectSlugs.add("proj2");
 
       w.flush();
 
@@ -122,8 +121,8 @@ describe("ProjectsWatcher", () => {
       const watcher = new ProjectsWatcher(tmpDir, appState, pushFn);
       const w = watcher as any;
 
-      w.pendingChanges.set(`proj1${path.sep}project.json`, "project");
-      w.pendingChanges.set(`proj2${path.sep}project.json`, "project");
+      w.pendingProjectSlugs.add("proj1");
+      w.pendingProjectSlugs.add("proj2");
       w.flush();
 
       expect(pushFn).toHaveBeenCalledWith("project:changed", { project: project1 });
@@ -141,7 +140,7 @@ describe("ProjectsWatcher", () => {
       const watcher = new ProjectsWatcher(tmpDir, appState, pushFn);
       const w = watcher as any;
 
-      w.pendingChanges.set(`deleted${path.sep}project.json`, "project");
+      w.pendingProjectSlugs.add("deleted");
       w.flush();
 
       expect(appState.scan).toHaveBeenCalled();
@@ -153,10 +152,10 @@ describe("ProjectsWatcher", () => {
       const watcher = new ProjectsWatcher(tmpDir, appState, pushFn);
       const w = watcher as any;
 
-      w.pendingChanges.set(`proj${path.sep}project.json`, "project");
+      w.pendingProjectSlugs.add("proj");
       w.flush();
 
-      expect(w.pendingChanges.size).toBe(0);
+      expect(w.pendingProjectSlugs.size).toBe(0);
     });
 
     it("catches errors and does full resync", () => {
@@ -171,7 +170,7 @@ describe("ProjectsWatcher", () => {
       const watcher = new ProjectsWatcher(tmpDir, appState, pushFn);
       const w = watcher as any;
 
-      w.pendingChanges.set(`proj${path.sep}project.json`, "project");
+      w.pendingProjectSlugs.add("proj");
       w.flush();
 
       expect(appState.scan).toHaveBeenCalled();
@@ -186,7 +185,7 @@ describe("ProjectsWatcher", () => {
       const w = watcher as any;
       const flushSpy = vi.spyOn(w, "flush");
 
-      w.pendingChanges.set(`proj${path.sep}project.json`, "project");
+      w.pendingProjectSlugs.add("proj");
       w.scheduleFlush();
       w.scheduleFlush();
       w.scheduleFlush();
@@ -263,7 +262,7 @@ describe("ProjectsWatcher", () => {
       const watcher = new ProjectsWatcher(tmpDir, appState, pushFn);
       const w = watcher as any;
 
-      w.pendingChanges.set(`unknown${path.sep}project.json`, "project");
+      w.pendingProjectSlugs.add("unknown");
       w.flush();
 
       // No resync, no project:changed event
@@ -279,7 +278,7 @@ describe("ProjectsWatcher", () => {
       const w = watcher as any;
 
       // Schedule a flush to set debounceTimer
-      w.pendingChanges.set(`proj${path.sep}project.json`, "project");
+      w.pendingProjectSlugs.add("proj");
       w.scheduleFlush();
       expect(w.debounceTimer).not.toBeNull();
 

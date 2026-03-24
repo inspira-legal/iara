@@ -1,4 +1,4 @@
-import { useRef, useEffect, useCallback } from "react";
+import { useRef, useEffect, useCallback, type RefCallback } from "react";
 import { WebglAddon } from "@xterm/addon-webgl";
 import "@xterm/xterm/css/xterm.css";
 import { transport } from "~/lib/ws-transport.js";
@@ -8,13 +8,13 @@ import { useToast } from "~/components/Toast";
 import { RotateCw } from "lucide-react";
 
 interface TerminalViewProps {
-  taskId: string;
+  workspaceId: string;
   resumeSessionId?: string;
 }
 
-export function TerminalView({ taskId, resumeSessionId }: TerminalViewProps) {
+export function TerminalView({ workspaceId, resumeSessionId }: TerminalViewProps) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const entry = useTerminalStore((s) => s.getEntry(taskId));
+  const entry = useTerminalStore((s) => s.getEntry(workspaceId));
   const createTerminal = useTerminalStore((s) => s.create);
   const restartTerminal = useTerminalStore((s) => s.restart);
   const { terminalId, status, exitCode } = entry;
@@ -25,9 +25,9 @@ export function TerminalView({ taskId, resumeSessionId }: TerminalViewProps) {
 
   useEffect(() => {
     if (status === "idle") {
-      void createTerminal(taskId, resumeSessionId);
+      void createTerminal(workspaceId, resumeSessionId);
     }
-  }, [status, createTerminal, taskId, resumeSessionId]);
+  }, [status, createTerminal, workspaceId, resumeSessionId]);
 
   // Attach/detach the cached xterm instance to the DOM
   useEffect(() => {
@@ -122,20 +122,26 @@ export function TerminalView({ taskId, resumeSessionId }: TerminalViewProps) {
   }, [status, terminalId]);
 
   const handleRestart = useCallback(() => {
-    void restartTerminal(taskId);
-  }, [restartTerminal, taskId]);
+    void restartTerminal(workspaceId);
+  }, [restartTerminal, workspaceId]);
+
+  // Auto-focus restart button when terminal exits
+  const restartButtonRef: RefCallback<HTMLButtonElement> = useCallback((node) => {
+    node?.focus();
+  }, []);
 
   return (
     <div className="relative flex flex-1 flex-col overflow-hidden">
       <div ref={containerRef} className="flex-1 overflow-hidden p-3" />
       {status === "exited" && (
         <div className="absolute inset-0 flex items-center justify-center bg-zinc-950/80">
-          <div className="flex flex-col items-center gap-3 text-zinc-400">
+          <div className="flex flex-col items-center gap-3 text-zinc-400" role="alert">
             <p className="text-sm">Claude exited{exitCode != null ? ` (code ${exitCode})` : ""}</p>
             <button
+              ref={restartButtonRef}
               type="button"
               onClick={handleRestart}
-              className="flex items-center gap-1.5 rounded-md bg-blue-600 px-3 py-1.5 text-sm font-medium text-white transition-colors hover:bg-blue-500"
+              className="flex items-center gap-1.5 rounded-md bg-blue-600 px-3 py-1.5 text-sm font-medium text-white transition-colors hover:bg-blue-500 focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:outline-none"
             >
               <RotateCw size={14} />
               Restart
@@ -144,7 +150,10 @@ export function TerminalView({ taskId, resumeSessionId }: TerminalViewProps) {
         </div>
       )}
       {status === "connecting" && (
-        <div className="absolute inset-0 flex items-center justify-center bg-zinc-950">
+        <div
+          className="absolute inset-0 flex items-center justify-center bg-zinc-950"
+          role="status"
+        >
           <p className="text-sm text-zinc-500">Starting Claude...</p>
         </div>
       )}

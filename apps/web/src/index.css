@@ -1,5 +1,44 @@
 @import "tailwindcss";
 
+@theme {
+  /* ── Surface ─────────────────────────────────────── */
+  --color-surface-base: oklch(0.141 0.005 285.823); /* zinc-950 */
+  --color-surface-raised: oklch(0.21 0.006 285.885); /* zinc-900 */
+  --color-surface-overlay: oklch(0.274 0.006 286.033); /* zinc-800 */
+  --color-surface-active: oklch(0.336 0.007 285.775); /* zinc-700 */
+
+  /* ── Text ────────────────────────────────────────── */
+  --color-text-primary: oklch(0.92 0.004 286.717); /* zinc-100 */
+  --color-text-secondary: oklch(0.716 0.007 286.286); /* zinc-300 */
+  --color-text-tertiary: oklch(0.552 0.016 285.938); /* zinc-400 */
+  --color-text-muted: oklch(0.442 0.017 285.786); /* zinc-500 */
+  --color-text-faint: oklch(0.395 0.015 285.812); /* zinc-600 */
+
+  /* ── Border ──────────────────────────────────────── */
+  --color-border-default: oklch(0.336 0.007 285.775); /* zinc-700 */
+  --color-border-subtle: oklch(0.395 0.015 285.812); /* zinc-600 */
+
+  /* ── Accent (blue) ──────────────────────────────── */
+  --color-accent: oklch(0.546 0.245 262.881); /* blue-600 */
+  --color-accent-hover: oklch(0.623 0.214 259.815); /* blue-500 */
+  --color-accent-ring: oklch(0.623 0.214 259.815); /* blue-500 */
+  --color-accent-soft: oklch(0.707 0.165 254.624); /* blue-400 */
+
+  /* ── Danger (red) ───────────────────────────────── */
+  --color-danger: oklch(0.577 0.245 27.325); /* red-600 */
+  --color-danger-hover: oklch(0.637 0.237 25.331); /* red-500 */
+  --color-danger-soft: oklch(0.704 0.191 22.216); /* red-400 */
+
+  /* ── Status ──────────────────────────────────────── */
+  --color-status-success: oklch(0.792 0.209 151.711); /* green-400 */
+  --color-status-error: oklch(0.704 0.191 22.216); /* red-400 */
+  --color-status-warning: oklch(0.852 0.199 91.936); /* yellow-400 */
+  --color-status-info: oklch(0.552 0.016 285.938); /* zinc-400 */
+
+  /* ── Font ────────────────────────────────────────── */
+  --font-mono: "JetBrainsMono NF", ui-monospace, monospace;
+}
+
 @font-face {
   font-family: "JetBrainsMono NF";
   src: url("./assets/fonts/JetBrainsMonoNerdFont-Regular.ttf") format("truetype");

@@ -10,16 +10,17 @@ import {
   buildSystemPrompt,
   buildSystemPromptFromDir,
   type LaunchConfig,
-  type TaskContext,
+  type WorkspaceContext,
 } from "./launcher.js";
 
 interface TerminalCreateConfig {
-  taskId: string;
-  taskDir: string;
+  workspaceId: string;
+  workspaceDir: string;
   repoDirs: string[];
-  taskContext?: TaskContext;
+  workspaceContext?: WorkspaceContext;
   appendSystemPrompt?: string;
   resumeSessionId?: string;
+  pluginDir?: string;
   env?: Record<string, string>;
   cols?: number;
   rows?: number;
@@ -27,7 +28,7 @@ interface TerminalCreateConfig {
 
 interface ManagedTerminal {
   id: string;
-  taskId: string;
+  workspaceId: string;
   sessionId: string;
   initialCwd: string;
   pty: pty.IPty;
@@ -49,8 +50,8 @@ export class TerminalManager {
   }
 
   create(config: TerminalCreateConfig): { terminalId: string; sessionId: string } {
-    // If terminal already exists for this task, return it
-    const existing = this.getByTaskId(config.taskId);
+    // If terminal already exists for this workspace, return it
+    const existing = this.getByWorkspaceId(config.workspaceId);
     if (existing) {
       return { terminalId: existing.id, sessionId: existing.sessionId };
     }
@@ -59,16 +60,17 @@ export class TerminalManager {
     const sessionId = config.resumeSessionId ?? crypto.randomUUID();
     const systemPrompt =
       config.appendSystemPrompt ??
-      (config.taskContext
-        ? buildSystemPrompt(config.taskContext)
-        : buildSystemPromptFromDir(config.taskDir));
+      (config.workspaceContext
+        ? buildSystemPrompt(config.workspaceContext)
+        : buildSystemPromptFromDir(config.workspaceDir));
 
     const launchConfig: LaunchConfig = {
-      taskDir: config.taskDir,
+      workspaceDir: config.workspaceDir,
       repoDirs: config.repoDirs,
       resumeSessionId: config.resumeSessionId,
       sessionId,
       appendSystemPrompt: systemPrompt,
+      pluginDir: config.pluginDir ?? process.env.IARA_PLUGIN_DIR,
       env: config.env,
     };
 
@@ -88,21 +90,21 @@ export class TerminalManager {
       COLORTERM: "truecolor",
     } as Record<string, string>;
 
-    console.log("[terminal] spawn claude", { cwd: config.taskDir, args });
+    console.log("[terminal] spawn claude", { cwd: config.workspaceDir, args });
 
     const ptyProcess = pty.spawn("claude", args, {
       name: "xterm-256color",
       cols: config.cols ?? 80,
       rows: config.rows ?? 24,
-      cwd: config.taskDir,
+      cwd: config.workspaceDir,
       env,
     });
 
     const managed: ManagedTerminal = {
       id: terminalId,
-      taskId: config.taskId,
+      workspaceId: config.workspaceId,
       sessionId,
-      initialCwd: config.taskDir,
+      initialCwd: config.workspaceDir,
       pty: ptyProcess,
       cancelKill: null,
     };
@@ -132,8 +134,8 @@ export class TerminalManager {
 
       if (exitCode !== 0) {
         console.error(`[terminal] claude exited with code ${exitCode}`, {
-          taskId: config.taskId,
-          cwd: config.taskDir,
+          workspaceId: config.workspaceId,
+          cwd: config.workspaceDir,
           output: outputBuffer.slice(0, 2000),
         });
       }
@@ -173,8 +175,8 @@ export class TerminalManager {
     terminal.cancelKill = cancelKill;
   }
 
-  destroyByTaskId(taskId: string): void {
-    const terminal = this.getByTaskId(taskId);
+  destroyByWorkspaceId(workspaceId: string): void {
+    const terminal = this.getByWorkspaceId(workspaceId);
     if (terminal) {
       this.destroy(terminal.id);
     }
@@ -215,9 +217,9 @@ export class TerminalManager {
     return terminal.initialCwd;
   }
 
-  getByTaskId(taskId: string): ManagedTerminal | undefined {
+  getByWorkspaceId(workspaceId: string): ManagedTerminal | undefined {
     for (const terminal of this.terminals.values()) {
-      if (terminal.taskId === taskId) {
+      if (terminal.workspaceId === workspaceId) {
         return terminal;
       }
     }

@@ -7,13 +7,13 @@ import { useAppStore } from "~/stores/app";
 import { useSidebarStore } from "~/stores/sidebar";
 import { isElectron } from "~/env";
 
-type NavigableItem =
-  | { type: "root"; projectId: string }
-  | { type: "task"; projectId: string; taskId: string };
+interface NavigableItem {
+  projectId: string;
+  workspaceId: string;
+}
 
 export function AppShell({ children }: { children: ReactNode }) {
   const projects = useAppStore((s) => s.projects);
-  const selectProject = useAppStore((s) => s.selectProject);
   const selectWorkspace = useAppStore((s) => s.selectWorkspace);
   const getWorkspacesForProject = useAppStore((s) => s.getWorkspacesForProject);
   const { expandedProjectIds, projectOrder } = useSidebarStore();
@@ -33,10 +33,10 @@ export function AppShell({ children }: { children: ReactNode }) {
     const items: NavigableItem[] = [];
     for (const project of sorted) {
       if (!expandedProjectIds.has(project.id)) continue;
-      items.push({ type: "root", projectId: project.id });
+      // All workspaces (including "main") are navigable — no separate root item
       const workspaces = getWorkspacesForProject(project.id);
       for (const ws of workspaces) {
-        items.push({ type: "task", projectId: project.id, taskId: ws.id });
+        items.push({ projectId: project.id, workspaceId: ws.id });
       }
     }
     return items;
@@ -48,10 +48,9 @@ export function AppShell({ children }: { children: ReactNode }) {
       const idx = index === 0 ? 9 : index - 1;
       const item = navigableItems[idx];
       if (!item) return;
-      selectProject(item.projectId);
-      selectWorkspace(item.type === "task" ? item.taskId : null);
+      selectWorkspace(item.workspaceId);
     },
-    [navigableItems, selectProject, selectWorkspace],
+    [navigableItems, selectWorkspace],
   );
 
   const shortcuts = useMemo(

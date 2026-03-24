@@ -28,10 +28,7 @@ function makeWorkspace(overrides: Partial<Workspace> = {}): Workspace {
     id: "proj1/ws1",
     projectId: "proj1",
     slug: "ws1",
-    type: "default",
     name: "Workspace 1",
-    description: "",
-    createdAt: "2025-01-01",
     ...overrides,
   };
 }
@@ -41,10 +38,7 @@ function makeProject(overrides: Partial<Project> = {}): Project {
     id: "proj1",
     slug: "proj1",
     name: "Project 1",
-    description: "",
-    repoSources: [],
     workspaces: [makeWorkspace()],
-    createdAt: "2025-01-01",
     ...overrides,
   };
 }
@@ -54,17 +48,13 @@ const INITIAL_STATE = {
   settings: {},
   repoInfo: {},
   sessions: {},
-  selectedProjectId: null,
   selectedWorkspaceId: null,
   initialized: false,
-  stale: false,
 };
 
 // ---------------------------------------------------------------------------
 // localStorage mock
 // ---------------------------------------------------------------------------
-
-const SELECTION_KEY = "iara:selection";
 
 const localStorageStore: Record<string, string> = {};
 const localStorageMock = {
@@ -87,22 +77,6 @@ const localStorageMock = {
 };
 
 vi.stubGlobal("localStorage", localStorageMock);
-
-/** Helper to read selection from the versioned LocalCache envelope */
-function readSelection(): { projectId: string | null; workspaceId: string | null } | null {
-  const raw = localStorageStore[SELECTION_KEY];
-  if (!raw) return null;
-  const envelope = JSON.parse(raw);
-  return envelope.data;
-}
-
-/** Helper to write selection into the versioned LocalCache envelope */
-function writeSelection(projectId: string | null, workspaceId: string | null): void {
-  localStorageStore[SELECTION_KEY] = JSON.stringify({
-    v: 1,
-    data: { projectId, workspaceId },
-  });
-}
 
 // ---------------------------------------------------------------------------
 // Tests
@@ -136,7 +110,6 @@ describe("useAppStore", () => {
       expect(state.projects).toEqual(projects);
       expect(state.settings).toEqual(settings);
       expect(state.initialized).toBe(true);
-      expect(state.stale).toBe(false);
     });
 
     it("propagates transport errors", async () => {
@@ -147,87 +120,56 @@ describe("useAppStore", () => {
   });
 
   // -----------------------------------------------------------------------
-  // selectProject
-  // -----------------------------------------------------------------------
-
-  describe("selectProject()", () => {
-    it("null clears both selections", () => {
-      useAppStore.setState({ selectedProjectId: "proj1", selectedWorkspaceId: "proj1/ws1" });
-      useAppStore.getState().selectProject(null);
-      expect(useAppStore.getState().selectedProjectId).toBeNull();
-      expect(useAppStore.getState().selectedWorkspaceId).toBeNull();
-    });
-
-    it("selecting project clears workspace if workspace does not belong to it", () => {
-      const proj1 = makeProject({
-        id: "proj1",
-        workspaces: [makeWorkspace({ id: "proj1/ws1", projectId: "proj1" })],
-      });
-      const proj2 = makeProject({ id: "proj2", workspaces: [] });
-      useAppStore.setState({
-        projects: [proj1, proj2],
-        selectedProjectId: "proj1",
-        selectedWorkspaceId: "proj1/ws1",
-      });
-
-      useAppStore.getState().selectProject("proj2");
-      expect(useAppStore.getState().selectedProjectId).toBe("proj2");
-      expect(useAppStore.getState().selectedWorkspaceId).toBeNull();
-    });
-
-    it("keeps workspace selection if workspace belongs to the selected project", () => {
-      const proj = makeProject({
-        id: "proj1",
-        workspaces: [makeWorkspace({ id: "proj1/ws1", projectId: "proj1" })],
-      });
-      useAppStore.setState({
-        projects: [proj],
-        selectedProjectId: "proj1",
-        selectedWorkspaceId: "proj1/ws1",
-      });
-
-      useAppStore.getState().selectProject("proj1");
-      expect(useAppStore.getState().selectedWorkspaceId).toBe("proj1/ws1");
-    });
-
-    it("clears workspace when selecting a project without workspaces", () => {
-      const proj = makeProject({ id: "proj1", workspaces: [] });
-      useAppStore.setState({
-        projects: [proj],
-        selectedProjectId: null,
-        selectedWorkspaceId: "other/ws",
-      });
-
-      useAppStore.getState().selectProject("proj1");
-      expect(useAppStore.getState().selectedWorkspaceId).toBeNull();
-    });
-  });
-
-  // -----------------------------------------------------------------------
   // selectWorkspace
   // -----------------------------------------------------------------------
 
   describe("selectWorkspace()", () => {
-    it("null clears workspace selection only", () => {
-      useAppStore.setState({ selectedProjectId: "proj1", selectedWorkspaceId: "proj1/ws1" });
+    it("null clears workspace selection", () => {
+      useAppStore.setState({ selectedWorkspaceId: "proj1/ws1" });
       useAppStore.getState().selectWorkspace(null);
       expect(useAppStore.getState().selectedWorkspaceId).toBeNull();
-      expect(useAppStore.getState().selectedProjectId).toBe("proj1");
     });
 
-    it("derives projectId from the workspace", () => {
+    it("sets workspace id", () => {
       const proj = makeProject({ id: "proj1", workspaces: [makeWorkspace({ id: "proj1/ws1" })] });
       useAppStore.setState({ projects: [proj] });
 
       useAppStore.getState().selectWorkspace("proj1/ws1");
       expect(useAppStore.getState().selectedWorkspaceId).toBe("proj1/ws1");
-      expect(useAppStore.getState().selectedProjectId).toBe("proj1");
     });
 
     it("sets workspace even if not found in any project", () => {
       useAppStore.setState({ projects: [] });
       useAppStore.getState().selectWorkspace("unknown/ws");
       expect(useAppStore.getState().selectedWorkspaceId).toBe("unknown/ws");
+    });
+  });
+
+  // -----------------------------------------------------------------------
+  // selectedProjectId / selectedProject (selectors)
+  // -----------------------------------------------------------------------
+
+  describe("selectedProjectId()", () => {
+    it("derives projectId from selectedWorkspaceId", () => {
+      useAppStore.setState({ selectedWorkspaceId: "proj1/ws1" });
+      expect(useAppStore.getState().selectedProjectId()).toBe("proj1");
+    });
+
+    it("returns null when no workspace selected", () => {
+      useAppStore.setState({ selectedWorkspaceId: null });
+      expect(useAppStore.getState().selectedProjectId()).toBeNull();
+    });
+  });
+
+  describe("selectedProject()", () => {
+    it("returns selected project", () => {
+      const proj = makeProject({ id: "proj1" });
+      useAppStore.setState({ projects: [proj], selectedWorkspaceId: "proj1/ws1" });
+      expect(useAppStore.getState().selectedProject()).toEqual(proj);
+    });
+
+    it("returns undefined when nothing selected", () => {
+      expect(useAppStore.getState().selectedProject()).toBeUndefined();
     });
   });
 
@@ -275,14 +217,13 @@ describe("useAppStore", () => {
       const proj = makeProject({ id: "proj1" });
       useAppStore.setState({
         projects: [proj],
-        selectedProjectId: "proj1",
         selectedWorkspaceId: "proj1/ws1",
       });
       mockRequest.mockResolvedValueOnce(undefined);
 
       await useAppStore.getState().deleteProject("proj1");
 
-      expect(useAppStore.getState().selectedProjectId).toBeNull();
+      expect(useAppStore.getState().selectedProjectId()).toBeNull();
       expect(useAppStore.getState().selectedWorkspaceId).toBeNull();
     });
 
@@ -291,14 +232,13 @@ describe("useAppStore", () => {
       const proj2 = makeProject({ id: "proj2", workspaces: [] });
       useAppStore.setState({
         projects: [proj1, proj2],
-        selectedProjectId: "proj1",
         selectedWorkspaceId: "proj1/ws1",
       });
       mockRequest.mockResolvedValueOnce(undefined);
 
       await useAppStore.getState().deleteProject("proj2");
 
-      expect(useAppStore.getState().selectedProjectId).toBe("proj1");
+      expect(useAppStore.getState().selectedProjectId()).toBe("proj1");
       expect(useAppStore.getState().selectedWorkspaceId).toBe("proj1/ws1");
       expect(useAppStore.getState().projects).toHaveLength(1);
     });
@@ -497,13 +437,6 @@ describe("useAppStore", () => {
       expect(useAppStore.getState().getWorkspace("proj1/ws1")).toEqual(ws);
     });
 
-    it("falls back to searching all projects for ids without separator", () => {
-      const ws = makeWorkspace({ id: "flat-ws" });
-      const proj = makeProject({ id: "proj1", workspaces: [ws] });
-      useAppStore.setState({ projects: [proj] });
-      expect(useAppStore.getState().getWorkspace("flat-ws")).toEqual(ws);
-    });
-
     it("returns undefined for unknown workspace", () => {
       useAppStore.setState({ projects: [makeProject()] });
       expect(useAppStore.getState().getWorkspace("proj1/nonexistent")).toBeUndefined();
@@ -520,18 +453,6 @@ describe("useAppStore", () => {
 
     it("returns empty array for unknown project", () => {
       expect(useAppStore.getState().getWorkspacesForProject("unknown")).toEqual([]);
-    });
-  });
-
-  describe("selectedProject()", () => {
-    it("returns selected project", () => {
-      const proj = makeProject({ id: "proj1" });
-      useAppStore.setState({ projects: [proj], selectedProjectId: "proj1" });
-      expect(useAppStore.getState().selectedProject()).toEqual(proj);
-    });
-
-    it("returns undefined when nothing selected", () => {
-      expect(useAppStore.getState().selectedProject()).toBeUndefined();
     });
   });
 
@@ -553,20 +474,20 @@ describe("useAppStore", () => {
   // -----------------------------------------------------------------------
 
   describe("subscribePush()", () => {
-    it("subscribes to five events and returns unsubscribe function", () => {
-      const unsubs = Array.from({ length: 5 }, () => vi.fn());
+    it("subscribes to events and returns unsubscribe function", () => {
+      const unsubs = Array.from({ length: 6 }, () => vi.fn());
       for (const unsub of unsubs) {
         mockSubscribe.mockReturnValueOnce(unsub);
       }
 
       const unsubAll = useAppStore.getState().subscribePush();
 
-      expect(mockSubscribe).toHaveBeenCalledTimes(5);
       expect(mockSubscribe).toHaveBeenCalledWith("project:changed", expect.any(Function));
       expect(mockSubscribe).toHaveBeenCalledWith("workspace:changed", expect.any(Function));
       expect(mockSubscribe).toHaveBeenCalledWith("state:resync", expect.any(Function));
       expect(mockSubscribe).toHaveBeenCalledWith("settings:changed", expect.any(Function));
       expect(mockSubscribe).toHaveBeenCalledWith("session:changed", expect.any(Function));
+      expect(mockSubscribe).toHaveBeenCalledWith("repos:changed", expect.any(Function));
 
       unsubAll();
       for (const unsub of unsubs) {
@@ -633,101 +554,6 @@ describe("useAppStore", () => {
       useAppStore.getState().subscribePush();
 
       expect(useAppStore.getState().settings.theme).toBe("dark");
-    });
-  });
-
-  // -----------------------------------------------------------------------
-  // localStorage selection persistence
-  // -----------------------------------------------------------------------
-
-  describe("localStorage persistence", () => {
-    it("selectProject saves to localStorage", () => {
-      const proj = makeProject({ id: "proj1" });
-      useAppStore.setState({ projects: [proj] });
-
-      useAppStore.getState().selectProject("proj1");
-
-      const saved = readSelection();
-      expect(saved!.projectId).toBe("proj1");
-    });
-
-    it("selectWorkspace saves to localStorage", () => {
-      const ws = makeWorkspace({ id: "proj1/ws1", projectId: "proj1" });
-      const proj = makeProject({ id: "proj1", workspaces: [ws] });
-      useAppStore.setState({ projects: [proj] });
-
-      useAppStore.getState().selectWorkspace("proj1/ws1");
-
-      const saved = readSelection();
-      expect(saved!.projectId).toBe("proj1");
-      expect(saved!.workspaceId).toBe("proj1/ws1");
-    });
-
-    it("init() restores valid selection from localStorage", async () => {
-      const ws = makeWorkspace({ id: "proj1/ws1", projectId: "proj1" });
-      const proj = makeProject({ id: "proj1", workspaces: [ws] });
-      writeSelection("proj1", "proj1/ws1");
-      mockRequest.mockResolvedValueOnce({
-        projects: [proj],
-        settings: {},
-        repoInfo: {},
-        sessions: {},
-      });
-
-      await useAppStore.getState().init();
-
-      expect(useAppStore.getState().selectedProjectId).toBe("proj1");
-      expect(useAppStore.getState().selectedWorkspaceId).toBe("proj1/ws1");
-    });
-
-    it("init() clears stale selection (project deleted) from localStorage", async () => {
-      writeSelection("deleted-proj", "deleted-proj/ws1");
-      mockRequest.mockResolvedValueOnce({ projects: [], settings: {}, repoInfo: {}, sessions: {} });
-
-      await useAppStore.getState().init();
-
-      expect(useAppStore.getState().selectedProjectId).toBeNull();
-      expect(useAppStore.getState().selectedWorkspaceId).toBeNull();
-      // localStorage should have been cleared (saved as null/null)
-      const saved = readSelection();
-      expect(saved).toEqual({ projectId: null, workspaceId: null });
-    });
-
-    it("init() clears stale workspace but keeps valid project from localStorage", async () => {
-      const proj = makeProject({ id: "proj1", workspaces: [] });
-      writeSelection("proj1", "proj1/deleted-ws");
-      mockRequest.mockResolvedValueOnce({
-        projects: [proj],
-        settings: {},
-        repoInfo: {},
-        sessions: {},
-      });
-
-      await useAppStore.getState().init();
-
-      expect(useAppStore.getState().selectedProjectId).toBe("proj1");
-      expect(useAppStore.getState().selectedWorkspaceId).toBeNull();
-      // localStorage should have been updated to keep project but clear workspace
-      const saved = readSelection();
-      expect(saved!.projectId).toBe("proj1");
-      expect(saved!.workspaceId).toBeNull();
-    });
-
-    it("deleteProject clears selection from localStorage when deleted project was selected", async () => {
-      const proj = makeProject({ id: "proj1" });
-      useAppStore.setState({
-        projects: [proj],
-        selectedProjectId: "proj1",
-        selectedWorkspaceId: "proj1/ws1",
-      });
-      writeSelection("proj1", "proj1/ws1");
-      mockRequest.mockResolvedValueOnce(undefined);
-
-      await useAppStore.getState().deleteProject("proj1");
-
-      const saved = readSelection();
-      expect(saved!.projectId).toBeNull();
-      expect(saved!.workspaceId).toBeNull();
     });
   });
 

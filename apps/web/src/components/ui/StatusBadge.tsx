@@ -1,18 +1,12 @@
 import { cn } from "~/lib/utils";
+import { statusTextColor, type StatusVariant } from "~/lib/status-colors";
 
 // ---------------------------------------------------------------------------
 // StatusBadge
 // ---------------------------------------------------------------------------
 
-const badgeColors = {
-  success: "text-green-400",
-  error: "text-red-400",
-  warning: "text-yellow-400",
-  info: "text-zinc-400",
-} as const;
-
 interface StatusBadgeProps {
-  variant: keyof typeof badgeColors;
+  variant: StatusVariant;
   icon?: React.ReactNode;
   className?: string;
   children: React.ReactNode;
@@ -21,7 +15,11 @@ interface StatusBadgeProps {
 export function StatusBadge({ variant, icon, className, children }: StatusBadgeProps) {
   return (
     <span
-      className={cn("flex shrink-0 items-center gap-1 text-xs", badgeColors[variant], className)}
+      className={cn(
+        "flex shrink-0 items-center gap-1 text-xs",
+        statusTextColor[variant],
+        className,
+      )}
     >
       {icon}
       {children}

@@ -1,13 +1,13 @@
-import * as fs from "node:fs";
 import * as path from "node:path";
+import type { AsyncSubscription } from "@parcel/watcher";
 import type { PushFn } from "../types.js";
 import type { AppState } from "./state.js";
 
 export class ProjectsWatcher {
-  private watcher: fs.FSWatcher | null = null;
+  private subscription: AsyncSubscription | null = null;
   private ownWrites = new Map<string, ReturnType<typeof setTimeout>>();
   private debounceTimer: ReturnType<typeof setTimeout> | null = null;
-  private pendingChanges = new Map<string, "project" | "workspace">();
+  private pendingProjectSlugs = new Set<string>();
 
   constructor(
     private readonly projectsDir: string,
@@ -15,36 +15,66 @@ export class ProjectsWatcher {
     private readonly pushFn: PushFn,
   ) {}
 
-  start(): void {
+  async start(): Promise<void> {
     try {
-      this.watcher = fs.watch(this.projectsDir, { recursive: true }, (_event, filename) => {
-        try {
-          if (!filename) return;
+      const watcher = await import("@parcel/watcher");
+      this.subscription = await watcher.subscribe(
+        this.projectsDir,
+        (_err, events) => {
+          try {
+            for (const event of events) {
+              const fullPath = event.path;
 
-          const basename = path.basename(filename);
-          if (basename !== "project.json" && basename !== "workspace.json") return;
+              // Suppress own writes
+              if (this.ownWrites.has(fullPath)) {
+                const timer = this.ownWrites.get(fullPath);
+                if (timer) clearTimeout(timer);
+                this.ownWrites.delete(fullPath);
+                continue;
+              }
 
-          const fullPath = path.join(this.projectsDir, filename);
-          if (this.ownWrites.has(fullPath)) {
-            const timer = this.ownWrites.get(fullPath);
-            if (timer) clearTimeout(timer);
-            this.ownWrites.delete(fullPath);
-            return;
+              const rel = path.relative(this.projectsDir, fullPath);
+              const parts = rel.split(path.sep);
+
+              // We care about:
+              // 1. iara-scripts.yaml changes at project root
+              // 2. workspaces/ subdirectory add/remove
+              // 3. Repo add/remove at project root
+              const projectSlug = parts[0];
+              if (!projectSlug) continue;
+
+              const basename = parts[parts.length - 1];
+
+              // iara-scripts.yaml change
+              if (basename === "iara-scripts.yaml" && parts.length === 2) {
+                this.pendingProjectSlugs.add(projectSlug);
+                this.scheduleFlush();
+                continue;
+              }
+
+              // workspaces/ dir change (workspace added/removed)
+              if (parts[1] === "workspaces") {
+                this.pendingProjectSlugs.add(projectSlug);
+                this.scheduleFlush();
+                continue;
+              }
+
+              // Repo added/removed at project root (dir with .git/)
+              if (parts.length <= 2 && basename === ".git") {
+                this.pendingProjectSlugs.add(projectSlug);
+                this.scheduleFlush();
+                continue;
+              }
+            }
+          } catch {
+            // FS may be in inconsistent state during deletions — trigger full resync
+            this.scheduleFlush();
           }
-
-          const type = basename === "project.json" ? "project" : "workspace";
-          this.pendingChanges.set(filename, type);
-          this.scheduleFlush();
-        } catch {
-          // Watcher callback can fire during/after directory deletion
-          this.scheduleFlush();
-        }
-      });
-
-      this.watcher.on("error", () => {
-        // Watcher errors on directory deletion are expected — trigger resync
-        this.scheduleFlush();
-      });
+        },
+        {
+          ignore: ["**/.git/**", "**/node_modules/**"],
+        },
+      );
     } catch {
       // Projects dir may not exist yet
     }
@@ -65,19 +95,16 @@ export class ProjectsWatcher {
 
   private flush(): void {
     try {
-      const projectSlugs = new Set<string>();
-
-      for (const [filename] of this.pendingChanges) {
-        const parts = filename.split(path.sep);
-        projectSlugs.add(parts[0] as string);
-      }
+      const slugs = [...this.pendingProjectSlugs];
+      this.pendingProjectSlugs.clear();
 
       let needsFullResync = false;
       const rescanned = new Map<
         string,
         NonNullable<ReturnType<typeof this.appState.rescanProject>>
       >();
-      for (const projectSlug of projectSlugs) {
+
+      for (const projectSlug of slugs) {
         const wasPreviouslyKnown = !!this.appState.getProject(projectSlug);
         const project = this.appState.rescanProject(projectSlug);
         if (project) {
@@ -100,13 +127,11 @@ export class ProjectsWatcher {
       this.appState.scan();
       this.pushFn("state:resync", { state: this.appState.getState() });
     }
-
-    this.pendingChanges.clear();
   }
 
   stop(): void {
     if (this.debounceTimer) clearTimeout(this.debounceTimer);
-    this.watcher?.close();
-    this.watcher = null;
+    void this.subscription?.unsubscribe();
+    this.subscription = null;
   }
 }

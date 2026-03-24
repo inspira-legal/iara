@@ -3,30 +3,31 @@ import * as path from "node:path";
 import { loadPrompt } from "../prompts/index.js";
 
 export interface LaunchConfig {
-  taskDir: string;
+  workspaceDir: string;
   repoDirs: string[];
   sessionId?: string | undefined;
   resumeSessionId?: string | undefined;
   appendSystemPrompt?: string | undefined;
-  taskContext?: TaskContext | undefined;
+  workspaceContext?: WorkspaceContext | undefined;
+  pluginDir?: string | undefined;
   env?: Record<string, string> | undefined;
 }
 
-/** Context about the task environment, used to build a richer system prompt. */
-export interface TaskContext {
-  taskDir: string;
+/** Context about the workspace environment, used to build a richer system prompt. */
+export interface WorkspaceContext {
+  workspaceDir: string;
   projectName: string;
-  taskName: string;
-  taskDescription: string;
-  branch: string;
+  workspaceName: string;
   repos: RepoContext[];
 }
 
 export interface RepoContext {
   name: string;
-  /** Absolute path to this repo's worktree inside the task directory. */
+  /** Current git branch of this worktree. */
+  branch: string;
+  /** Absolute path to this repo's worktree inside the workspace directory. */
   worktreePath: string;
-  /** Absolute path to the main repo in default/. */
+  /** Absolute path to the main repo at project root. */
   mainRepoPath: string;
 }
 
@@ -45,6 +46,11 @@ export function buildClaudeArgs(config: LaunchConfig): string[] {
     args.push("--add-dir", dir);
   }
 
+  // Plugin dir (hooks + slash commands scoped to this session)
+  if (config.pluginDir) {
+    args.push("--plugin-dir", config.pluginDir);
+  }
+
   // System prompt
   if (config.appendSystemPrompt) {
     args.push("--append-system-prompt", config.appendSystemPrompt);
@@ -53,13 +59,13 @@ export function buildClaudeArgs(config: LaunchConfig): string[] {
   return args;
 }
 
-export function buildSystemPrompt(ctx: TaskContext): string {
+export function buildSystemPrompt(ctx: WorkspaceContext): string {
   const sections: string[] = [];
 
   // # WORKTREES
   if (ctx.repos.length > 0) {
     const worktreeList = ctx.repos
-      .map((r) => `./${r.name}/  ← git worktree (branch: ${ctx.branch}, origin: ${r.mainRepoPath})`)
+      .map((r) => `./${r.name}/  ← git worktree (branch: ${r.branch}, origin: ${r.mainRepoPath})`)
       .join("\n");
     const defaultWorkspacePath = path.dirname(ctx.repos[0]!.mainRepoPath);
     sections.push(
@@ -76,79 +82,30 @@ export function buildSystemPrompt(ctx: TaskContext): string {
     sections.push(buildEnvSection(ctx.repos.map((r) => r.name)));
   }
 
-  // PROJECT.md and TASK.md — wrapped in tags, only if non-empty
-  for (const [file, tag] of [
-    ["PROJECT.md", "project"],
-    ["TASK.md", "task"],
-  ] as const) {
-    const filePath = path.join(ctx.taskDir, file);
-    if (fs.existsSync(filePath)) {
-      const content = fs.readFileSync(filePath, "utf-8").trim();
-      if (content) {
-        sections.push(`<${tag}>\n${content}\n</${tag}>`);
-      }
-    }
-  }
-
-  return sections.join("\n\n");
-}
-
-/** Fallback: build system prompt from just the task directory (no structured context). */
-export function buildSystemPromptFromDir(taskDir: string): string {
-  const parts: string[] = [];
-
-  const taskMd = path.join(taskDir, "TASK.md");
-  if (fs.existsSync(taskMd)) {
-    const content = fs.readFileSync(taskMd, "utf-8").trim();
-    if (content) parts.push(content);
-  }
-
-  const projectMd = path.join(taskDir, "PROJECT.md");
-  if (fs.existsSync(projectMd)) {
-    const content = fs.readFileSync(projectMd, "utf-8").trim();
-    if (content) parts.push(content);
-  }
-
-  return parts.join("\n\n---\n\n");
-}
-
-export interface RootContext {
-  projectDir: string;
-  projectName: string;
-  repos: Array<{ name: string; branch: string; repoPath: string }>;
-}
-
-export function buildRootPrompt(ctx: RootContext): string {
-  const sections: string[] = [];
-
-  // # REPOS
-  if (ctx.repos.length > 0) {
-    const repoList = ctx.repos
-      .map((r) => `./${r.name}/  ← git repository (branch: ${r.branch})`)
-      .join("\n");
-    sections.push(
-      loadPrompt("system-repos", {
-        repo_list: repoList,
-        example_repo_name: ctx.repos[0]?.name ?? "<repo>",
-      }),
-    );
-  }
-
-  // # ENV FILES
-  if (ctx.repos.length > 0) {
-    sections.push(buildEnvSection(ctx.repos.map((r) => r.name)));
-  }
-
-  // PROJECT.md wrapped in tags, only if non-empty
-  const projectMdPath = path.join(ctx.projectDir, "PROJECT.md");
-  if (fs.existsSync(projectMdPath)) {
-    const content = fs.readFileSync(projectMdPath, "utf-8").trim();
+  // Only CLAUDE.md — wrapped in tags, only if non-empty
+  const claudeMdPath = path.join(ctx.workspaceDir, "CLAUDE.md");
+  if (fs.existsSync(claudeMdPath)) {
+    const content = fs.readFileSync(claudeMdPath, "utf-8").trim();
     if (content) {
       sections.push(`<project>\n${content}\n</project>`);
     }
   }
 
   return sections.join("\n\n");
+}
+
+/** Fallback: build system prompt from just the directory (no structured context). */
+export function buildSystemPromptFromDir(workspaceDir: string): string {
+  const parts: string[] = [];
+
+  // Only CLAUDE.md
+  const claudeMd = path.join(workspaceDir, "CLAUDE.md");
+  if (fs.existsSync(claudeMd)) {
+    const content = fs.readFileSync(claudeMd, "utf-8").trim();
+    if (content) parts.push(content);
+  }
+
+  return parts.join("\n\n---\n\n");
 }
 
 function buildEnvSection(repoNames: string[]): string {

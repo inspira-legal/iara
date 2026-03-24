@@ -2,28 +2,36 @@ import * as crypto from "node:crypto";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { execFileSync } from "node:child_process";
-import type { CreateWorkspaceInput, Workspace } from "@iara/contracts";
+import type { CreateWorkspaceInput, CreationStage, Workspace } from "@iara/contracts";
 import type { PortAllocator } from "@iara/orchestrator/ports";
 import { gitWorktreeAdd, gitWorktreeRemove } from "@iara/shared/git";
+import { projectPaths, workspacePaths } from "@iara/shared/paths";
 import { z } from "zod";
 import { registerMethod } from "../router.js";
 import type { SessionWatcher } from "../services/session-watcher.js";
-import type { AppState } from "../services/state.js";
+import { AppState } from "../services/state.js";
 import type { ProjectsWatcher } from "../services/watcher.js";
 import { ensureGlobalSymlinks } from "../services/env.js";
 import { runClaude, activeRuns, streamClaudeRun } from "../services/claude-runner.js";
 import { loadPrompt } from "../prompts/index.js";
+import { getRepoInfo } from "../services/repos.js";
+import { generateCodeWorkspace } from "../services/code-workspace.js";
 import type { PushFn } from "./index.js";
 
+function toSlug(s: string): string {
+  return s
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "");
+}
+
 // Quick schema — metadata only, no code exploration needed
-const TaskMetadataSchema = z.object({
-  name: z.string().min(1).describe("nome curto e descritivo da task"),
-  description: z.string().min(1).describe("descrição concisa do objetivo"),
-  branches: z
-    .record(z.string(), z.string().min(1))
-    .describe(
-      "mapa repoName → branchName, seguindo o padrão de nomenclatura de branches existente em cada repo",
-    ),
+const WorkspaceMetadataSchema = z.object({
+  name: z.string().min(1).describe("nome curto e descritivo do workspace"),
+  branch: z
+    .string()
+    .min(1)
+    .describe("nome da branch para o workspace, seguindo o padrão de nomenclatura existente"),
 });
 
 function listRepoBranches(repoDir: string): string[] {
@@ -50,16 +58,33 @@ export function registerWorkspaceHandlers(
   portAllocator: PortAllocator,
 ): void {
   registerMethod("workspaces.create", async (params) => {
-    const { projectId, ...input } = params;
-    const workspace = await createWorkspace(appState, watcher, projectId, input, pushFn);
+    const { projectId, branch, ...input } = params;
+    const workspace = await createWorkspace(appState, projectId, input, pushFn, branch);
     sessionWatcher.refresh();
     return workspace;
+  });
+
+  registerMethod("workspaces.update", async (params) => {
+    const { workspaceId } = params;
+    const workspace = appState.getWorkspace(workspaceId);
+    if (!workspace) throw new Error(`Workspace not found: ${workspaceId}`);
+
+    // No metadata to update — names derived from slugs.
+    // Rescan and push in case filesystem changed.
+    const project = appState.rescanProject(workspace.projectId);
+    if (project) {
+      const updated = project.workspaces.find((w) => w.id === workspaceId);
+      if (updated) pushFn("workspace:changed", { workspace: updated });
+    }
   });
 
   registerMethod("workspaces.delete", async (params) => {
     const { workspaceId } = params;
     const workspace = appState.getWorkspace(workspaceId);
     if (!workspace) throw new Error(`Workspace not found: ${workspaceId}`);
+    if (workspace.slug === AppState.ROOT_WORKSPACE_SLUG) {
+      throw new Error("Cannot delete the main workspace");
+    }
 
     const project = appState.getProject(workspace.projectId);
     if (!project) throw new Error(`Project not found: ${workspace.projectId}`);
@@ -67,15 +92,13 @@ export function registerWorkspaceHandlers(
     const projectDir = appState.getProjectDir(project.slug);
     const wsDir = appState.getWorkspaceDir(workspaceId);
 
-    // Remove git worktrees first
+    // Remove git worktrees first (from source repos at project root)
     await cleanupWorktrees(projectDir, wsDir);
 
     // Release port allocation for the deleted workspace
     portAllocator.release(`${workspace.projectId}:${workspace.slug}`);
 
     // Rescan project state and push update
-    const wsJsonPath = path.join(wsDir, "workspace.json");
-    watcher.suppressNext(wsJsonPath);
     appState.rescanProject(project.slug);
     pushFn("state:resync", { state: appState.getState() });
 
@@ -88,12 +111,11 @@ export function registerWorkspaceHandlers(
     if (!project) throw new Error(`Project not found: ${projectId}`);
 
     const projectDir = appState.getProjectDir(project.slug);
-    const defaultDir = path.join(projectDir, "default");
     const repos = appState.discoverRepos(project.slug);
 
-    // List branches per repo
+    // List branches per repo (from project root repos)
     const reposBranchInfo = repos.map((repo: string) => {
-      const repoDir = path.join(defaultDir, repo);
+      const repoDir = path.join(projectDir, repo);
       const branches = listRepoBranches(repoDir);
       return { name: repo, branches };
     });
@@ -110,59 +132,42 @@ ${repoLines}
 
 NÃO explore arquivos. Responda apenas com base nas informações acima.`;
 
-    const prompt = loadPrompt("task-suggest", { userGoal });
+    const prompt = loadPrompt("suggest-workspace", { userGoal });
 
     const requestId = crypto.randomUUID();
     const run = runClaude(
-      { cwd: defaultDir, prompt, systemPrompt, maxTurns: 3 },
-      TaskMetadataSchema,
+      { cwd: projectDir, prompt, systemPrompt, maxTurns: 3 },
+      WorkspaceMetadataSchema,
     );
     activeRuns.set(requestId, run);
     streamClaudeRun(run, requestId, null, pushFn);
     return { requestId };
   });
 
-  registerMethod("workspaces.regenerate", async (params) => {
-    const { workspaceId } = params;
+  registerMethod("workspaces.checkoutBranch", async (params) => {
+    const { workspaceId, repoName, branch } = params;
     const workspace = appState.getWorkspace(workspaceId);
     if (!workspace) throw new Error(`Workspace not found: ${workspaceId}`);
 
-    const project = appState.getProject(workspace.projectId);
-    if (!project) throw new Error(`Project not found: ${workspace.projectId}`);
-
-    const projectDir = appState.getProjectDir(project.slug);
     const wsDir = appState.getWorkspaceDir(workspaceId);
+    const repoDir = path.join(wsDir, repoName);
 
-    // Read PROJECT.md
-    let projectMdContent = "";
-    const projectMdPath = path.join(projectDir, "PROJECT.md");
-    try {
-      projectMdContent = (await fs.promises.readFile(projectMdPath, "utf-8")).trim();
-    } catch {
-      // File doesn't exist or unreadable — leave empty
-    }
+    execFileSync("git", ["checkout", branch], {
+      cwd: repoDir,
+      encoding: "utf-8",
+      timeout: 10000,
+    });
 
-    const systemPrompt = `${projectMdContent}
-
-Task: ${workspace.name}
-Descrição: ${workspace.description}
-Branch: ${workspace.branch}`;
-
-    const taskMdPath = path.join(wsDir, "TASK.md");
-    const prompt = loadPrompt("task-regenerate");
-
-    const requestId = crypto.randomUUID();
-    const run = runClaude({ cwd: wsDir, prompt, systemPrompt });
-    activeRuns.set(requestId, run);
-    streamClaudeRun(run, requestId, taskMdPath, pushFn);
-
-    return { requestId };
+    return getRepoInfo(appState, workspace.projectId, workspace.slug);
   });
 
   registerMethod("workspaces.renameBranch", async (params) => {
     const { workspaceId, repoName, newBranch } = params;
     const workspace = appState.getWorkspace(workspaceId);
     if (!workspace) throw new Error(`Workspace not found: ${workspaceId}`);
+    if (workspace.slug === AppState.ROOT_WORKSPACE_SLUG) {
+      throw new Error("Cannot rename branches in the main workspace");
+    }
 
     const wsDir = appState.getWorkspaceDir(workspaceId);
     const repoDir = path.join(wsDir, repoName);
@@ -172,6 +177,97 @@ Branch: ${workspace.branch}`;
       encoding: "utf-8",
       timeout: 10000,
     });
+
+    // Return fresh repo info after rename
+    return getRepoInfo(appState, workspace.projectId, workspace.slug);
+  });
+
+  // ---------------------------------------------------------------------------
+  // Background creation orchestration
+  // ---------------------------------------------------------------------------
+
+  registerMethod("workspaces.createFromPrompt", async (params) => {
+    const { projectId, prompt: userGoal } = params;
+    const requestId = crypto.randomUUID();
+
+    const project = appState.getProject(projectId);
+    if (!project) throw new Error(`Project not found: ${projectId}`);
+
+    const pushProgress = (
+      stage: CreationStage,
+      extra?: { name?: string; entityId?: string; error?: string },
+    ) => {
+      pushFn("creation:progress", { requestId, type: "workspace", stage, ...extra });
+    };
+
+    void (async () => {
+      try {
+        // Stage 1: Suggest metadata via Claude
+        pushProgress("suggesting");
+        const projectDir = appState.getProjectDir(project.slug);
+        const repos = appState.discoverRepos(project.slug);
+
+        const reposBranchInfo = repos.map((repo: string) => {
+          const repoDir = path.join(projectDir, repo);
+          const branches = listRepoBranches(repoDir);
+          return { name: repo, branches };
+        });
+
+        const repoLines = reposBranchInfo
+          .map(
+            (r: { name: string; branches: string[] }) =>
+              `- ${r.name}: branches existentes: ${r.branches.join(", ") || "nenhuma"}`,
+          )
+          .join("\n");
+
+        const systemPrompt = `Repositórios do projeto:\n${repoLines}\n\nNÃO explore arquivos. Responda apenas com base nas informações acima.`;
+        const suggestPrompt = loadPrompt("suggest-workspace", { userGoal });
+
+        const suggestRun = runClaude(
+          { cwd: projectDir, prompt: suggestPrompt, systemPrompt, maxTurns: 3 },
+          WorkspaceMetadataSchema,
+        );
+
+        let suggested: { name: string; branch: string };
+        try {
+          suggested = await suggestRun.result;
+        } catch {
+          pushProgress("error", { error: "Claude suggestion failed" });
+          return;
+        }
+
+        const slug = toSlug(suggested.name);
+        if (!slug) {
+          pushProgress("error", { error: "Invalid workspace name" });
+          return;
+        }
+        pushProgress("suggested", { name: suggested.name });
+
+        // Stage 2: Create workspace (worktrees)
+        pushProgress("creating", { name: suggested.name });
+        const input: CreateWorkspaceInput = {
+          slug,
+          name: suggested.name,
+        };
+        const workspace = await createWorkspace(
+          appState,
+          projectId,
+          input,
+          pushFn,
+          suggested.branch,
+        );
+        sessionWatcher.refresh();
+
+        const entityId = workspace.id;
+        pushProgress("created", { name: suggested.name, entityId });
+
+        pushProgress("done", { name: suggested.name, entityId });
+      } catch (err) {
+        pushProgress("error", { error: err instanceof Error ? err.message : String(err) });
+      }
+    })();
+
+    return { requestId };
   });
 }
 
@@ -181,60 +277,60 @@ Branch: ${workspace.branch}`;
 
 async function createWorkspace(
   appState: AppState,
-  watcher: ProjectsWatcher,
   projectId: string,
   input: CreateWorkspaceInput,
   pushFn: PushFn,
+  /** Transient branch name for git worktree creation */
+  branch?: string,
 ): Promise<Workspace> {
-  if (input.slug === "default") {
-    throw new Error('Slug "default" is reserved and cannot be used for workspaces');
-  }
-
   const project = appState.getProject(projectId);
   if (!project) throw new Error(`Project not found: ${projectId}`);
 
-  const branch = input.branch ?? `feat/${input.slug}`;
-  const branchesMap = input.branches;
+  if (input.slug === AppState.ROOT_WORKSPACE_SLUG) {
+    throw new Error(`"${AppState.ROOT_WORKSPACE_SLUG}" is reserved for the project root workspace`);
+  }
 
-  const projectDir = appState.getProjectDir(project.slug);
-  const wsDir = path.join(projectDir, input.slug);
+  if (project.workspaces.some((w) => w.slug === input.slug)) {
+    throw new Error(`Workspace "${input.slug}" already exists in project "${projectId}"`);
+  }
+
+  const worktreeBranch = branch ?? `feat/${input.slug}`;
+
+  const pp = projectPaths(appState.getProjectsDir(), project.slug);
+  const wp = workspacePaths(appState.getProjectsDir(), project.slug, input.slug);
 
   try {
-    fs.mkdirSync(wsDir, { recursive: true });
+    fs.mkdirSync(wp.root, { recursive: true });
 
-    // Create empty TASK.md — content will be generated by workspaces.regenerate
-    fs.writeFileSync(path.join(wsDir, "TASK.md"), "");
-
-    // Symlink PROJECT.md
-    const projectMdSrc = path.join(projectDir, "PROJECT.md");
-    const projectMdDest = path.join(wsDir, "PROJECT.md");
-    if (fs.existsSync(projectMdSrc) && !fs.existsSync(projectMdDest)) {
-      fs.symlinkSync(projectMdSrc, projectMdDest);
+    // Symlink CLAUDE.md → ../../CLAUDE.md
+    if (fs.existsSync(pp.claudeMd) && !fs.existsSync(wp.claudeMdSymlink)) {
+      fs.symlinkSync(path.relative(wp.root, pp.claudeMd), wp.claudeMdSymlink);
     }
 
-    // Create worktrees from default/
-    const reposDir = path.join(projectDir, "default");
-    if (fs.existsSync(reposDir)) {
-      const repos = fs.readdirSync(reposDir).filter((name) => {
-        return fs.statSync(path.join(reposDir, name)).isDirectory();
-      });
-
-      await Promise.all(
-        repos.map((repo: string) => {
-          const repoDir = path.join(reposDir, repo);
-          const wtDir = path.join(wsDir, repo);
-          const repoBranch = branchesMap?.[repo] ?? branch;
-          return gitWorktreeAdd(repoDir, wtDir, repoBranch);
-        }),
-      );
-
-      // Create global env symlinks in workspace dir
-      ensureGlobalSymlinks(project.slug, wsDir, repos);
+    // Symlink iara-scripts.yaml → ../../iara-scripts.yaml
+    if (fs.existsSync(pp.scriptsYaml) && !fs.existsSync(wp.scriptsYamlSymlink)) {
+      fs.symlinkSync(path.relative(wp.root, pp.scriptsYaml), wp.scriptsYamlSymlink);
     }
+
+    // Create worktrees from project root repos
+    const repoNames = appState.discoverRepos(project.slug);
+    await Promise.all(
+      repoNames.map((repo: string) => {
+        const repoDir = pp.repo(repo);
+        const wtDir = wp.repo(repo);
+        return gitWorktreeAdd(repoDir, wtDir, worktreeBranch);
+      }),
+    );
+
+    // Create global env symlinks in workspace dir
+    ensureGlobalSymlinks(project.slug, wp.root, repoNames);
+
+    // Generate .code-workspace file
+    generateCodeWorkspace(wp.root, input.slug, repoNames);
   } catch (err) {
     // Rollback: clean up partial filesystem state
     try {
-      fs.rmSync(wsDir, { recursive: true, force: true });
+      fs.rmSync(wp.root, { recursive: true, force: true });
     } catch {
       // Best effort
     }
@@ -243,17 +339,6 @@ async function createWorkspace(
       { cause: err },
     );
   }
-
-  // Write workspace.json via appState
-  const wsJsonPath = path.join(wsDir, "workspace.json");
-  watcher.suppressNext(wsJsonPath);
-  appState.writeWorkspace(project.slug, input.slug, {
-    type: "task",
-    name: input.name,
-    ...(input.description !== undefined ? { description: input.description } : {}),
-    branch,
-    ...(branchesMap ? { branches: branchesMap } : {}),
-  });
 
   // Rescan project and push updated state
   appState.rescanProject(project.slug);
@@ -266,19 +351,30 @@ async function createWorkspace(
 }
 
 async function cleanupWorktrees(projectDir: string, wsDir: string): Promise<void> {
-  const reposDir = path.join(projectDir, "default");
-
-  // Remove git worktrees first
-  if (fs.existsSync(reposDir)) {
-    const repos = fs.readdirSync(reposDir).filter((name) => {
-      return fs.statSync(path.join(reposDir, name)).isDirectory();
-    });
+  // Remove git worktrees from source repos at project root
+  if (fs.existsSync(wsDir)) {
+    let entries: string[];
+    try {
+      entries = fs.readdirSync(wsDir);
+    } catch {
+      entries = [];
+    }
 
     await Promise.all(
-      repos.map(async (repo: string) => {
-        const wtDir = path.join(wsDir, repo);
+      entries.map(async (name) => {
+        const wtDir = path.join(wsDir, name);
+        const gitFile = path.join(wtDir, ".git");
         try {
-          await gitWorktreeRemove(path.join(reposDir, repo), wtDir);
+          // Only process worktrees (dirs with .git file)
+          if (!fs.statSync(gitFile).isFile()) return;
+        } catch {
+          return;
+        }
+
+        // Find the source repo at project root
+        const sourceRepo = path.join(projectDir, name);
+        try {
+          await gitWorktreeRemove(sourceRepo, wtDir);
         } catch {
           // Worktree may already be removed
         }
@@ -286,7 +382,7 @@ async function cleanupWorktrees(projectDir: string, wsDir: string): Promise<void
     );
   }
 
-  // Remove the workspace directory (TASK.md, PROJECT.md symlink, any remaining files)
+  // Remove the workspace directory
   if (fs.existsSync(wsDir)) {
     try {
       fs.rmSync(wsDir, { recursive: true, force: true });

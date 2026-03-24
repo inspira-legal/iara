@@ -43,12 +43,20 @@ export function RegenerationBanner({
 
       {/* Error banner */}
       {error && !isRegenerating && (
-        <div className="mb-6 flex items-start gap-2 rounded-lg border border-red-700/50 bg-red-900/20 px-4 py-3">
-          <AlertCircle size={14} className="mt-0.5 shrink-0 text-red-400" />
-          <div>
+        <div className="mb-6 flex items-center gap-3 rounded-lg border border-red-700/50 bg-red-900/20 px-4 py-3">
+          <AlertCircle size={14} className="shrink-0 text-red-400" />
+          <div className="flex-1">
             <p className="text-sm text-red-300">Failed to generate {fileName}</p>
             <p className="mt-1 text-xs text-red-400/70">{error}</p>
           </div>
+          <button
+            type="button"
+            onClick={onGenerate}
+            className="flex items-center gap-1.5 rounded-md bg-red-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-red-500"
+          >
+            <Sparkles size={12} />
+            Regenerate
+          </button>
         </div>
       )}
 

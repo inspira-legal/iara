@@ -1,28 +1,28 @@
 import { useEffect } from "react";
-import { Clock, MessageSquare, Play, Plus } from "lucide-react";
+import { Clock, MessageSquare, Play, Plus, Terminal } from "lucide-react";
 import type { SessionInfo } from "@iara/contracts";
 import { useAppStore } from "~/stores/app";
 
 type SessionListProps = {
   onLaunch?: (resumeSessionId?: string | undefined, sessionCwd?: string | undefined) => void;
-} & ({ taskId: string; projectId?: never } | { projectId: string; taskId?: never });
+} & ({ workspaceId: string; projectId?: never } | { projectId: string; workspaceId?: never });
 
-export function SessionList({ taskId, projectId, onLaunch }: SessionListProps) {
+export function SessionList({ workspaceId, projectId, onLaunch }: SessionListProps) {
   const refreshSessions = useAppStore((s) => s.refreshSessions);
   const refreshSessionsByProject = useAppStore((s) => s.refreshSessionsByProject);
   const getSessions = useAppStore((s) => s.getSessions);
 
-  const key = taskId ?? `project:${projectId}`;
+  const key = workspaceId ?? `project:${projectId}`;
   const sessions = getSessions(key);
 
   // SWR: background refresh
   useEffect(() => {
-    if (taskId) {
-      void refreshSessions(taskId);
+    if (workspaceId) {
+      void refreshSessions(workspaceId);
     } else {
       void refreshSessionsByProject(projectId!);
     }
-  }, [taskId, projectId, refreshSessions, refreshSessionsByProject]);
+  }, [workspaceId, projectId, refreshSessions, refreshSessionsByProject]);
 
   return (
     <div>
@@ -41,7 +41,20 @@ export function SessionList({ taskId, projectId, onLaunch }: SessionListProps) {
       </div>
 
       {sessions.length === 0 ? (
-        <p className="py-2 text-xs text-zinc-600">No sessions yet.</p>
+        <div className="flex flex-col items-center gap-2 rounded-lg border border-dashed border-zinc-700/60 px-4 py-5 text-center">
+          <Terminal size={16} className="text-zinc-600" />
+          <p className="text-xs text-zinc-500">No sessions yet.</p>
+          {onLaunch && (
+            <button
+              type="button"
+              onClick={() => onLaunch()}
+              className="flex items-center gap-1 rounded-md px-3 py-1.5 text-xs text-blue-400 hover:bg-zinc-800"
+            >
+              <Plus size={12} />
+              Launch session
+            </button>
+          )}
+        </div>
       ) : (
         <ul className="space-y-1">
           {sessions.map((session: SessionInfo, index: number) => (

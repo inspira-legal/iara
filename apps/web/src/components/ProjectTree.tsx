@@ -9,7 +9,7 @@ import {
 } from "@dnd-kit/core";
 import { SortableContext, verticalListSortingStrategy, useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { GripVertical } from "lucide-react";
+import { GripVertical, FolderOpen } from "lucide-react";
 import type { Project } from "@iara/contracts";
 import { ProjectNode } from "./ProjectNode";
 import { useSidebarStore } from "~/stores/sidebar";
@@ -17,7 +17,7 @@ import { useAppStore } from "~/stores/app";
 
 interface ProjectTreeProps {
   projects: Project[];
-  onCreateTask: (projectId: string) => void;
+  onCreateWorkspace: (projectId: string) => void;
   onDeleteProject: (id: string) => void;
   onRenameProject: (id: string, newName: string) => Promise<void>;
   onCreateFirstProject: () => void;
@@ -26,12 +26,11 @@ interface ProjectTreeProps {
 
 type TreeItem =
   | { type: "project"; id: string }
-  | { type: "root"; id: string }
-  | { type: "task"; id: string; projectId: string };
+  | { type: "workspace"; id: string; projectId: string };
 
 export function ProjectTree({
   projects,
-  onCreateTask,
+  onCreateWorkspace,
   onDeleteProject,
   onRenameProject,
   onCreateFirstProject,
@@ -45,11 +44,10 @@ export function ProjectTree({
     collapseProject,
     setProjectOrder,
   } = useSidebarStore();
-  const selectedTaskId = useAppStore((s) => s.selectedWorkspaceId);
-  const selectTask = useAppStore((s) => s.selectWorkspace);
-  const getTasksForProject = useAppStore((s) => s.getWorkspacesForProject);
-  const selectProject = useAppStore((s) => s.selectProject);
-  const selectedProjectId = useAppStore((s) => s.selectedProjectId);
+  const selectedWorkspaceId = useAppStore((s) => s.selectedWorkspaceId);
+  const selectWorkspace = useAppStore((s) => s.selectWorkspace);
+  const getWorkspacesForProject = useAppStore((s) => s.getWorkspacesForProject);
+  const selectedProjectId = useAppStore((s) => s.selectedProjectId());
   const containerRef = useRef<HTMLDivElement>(null);
 
   // Sort projects by persisted order, unordered ones go to the end
@@ -87,34 +85,29 @@ export function ProjectTree({
     for (const project of sortedProjects) {
       items.push({ type: "project", id: project.id });
       if (expandedProjectIds.has(project.id)) {
-        items.push({ type: "root", id: project.id });
-        const tasks = getTasksForProject(project.id);
-        for (const task of tasks) {
-          items.push({ type: "task", id: task.id, projectId: project.id });
+        const workspaces = getWorkspacesForProject(project.id);
+        for (const ws of workspaces) {
+          items.push({ type: "workspace", id: ws.id, projectId: project.id });
         }
       }
     }
     return items;
-  }, [sortedProjects, expandedProjectIds, getTasksForProject]);
+  }, [sortedProjects, expandedProjectIds, getWorkspacesForProject]);
 
   // Find current focused item index
   const getCurrentIndex = useCallback(() => {
-    if (selectedTaskId) {
-      return flatItems.findIndex((item) => item.type === "task" && item.id === selectedTaskId);
-    }
-    if (selectedProjectId && !selectedTaskId) {
-      // Check if we're on the root item (project expanded, no task selected)
-      const rootIdx = flatItems.findIndex(
-        (item) => item.type === "root" && item.id === selectedProjectId,
+    if (selectedWorkspaceId) {
+      return flatItems.findIndex(
+        (item) => item.type === "workspace" && item.id === selectedWorkspaceId,
       );
-      if (rootIdx !== -1) return rootIdx;
-      // Fallback to project header
+    }
+    if (selectedProjectId && !selectedWorkspaceId) {
       return flatItems.findIndex(
         (item) => item.type === "project" && item.id === selectedProjectId,
       );
     }
     return -1;
-  }, [flatItems, selectedTaskId, selectedProjectId]);
+  }, [flatItems, selectedWorkspaceId, selectedProjectId]);
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
@@ -125,16 +118,11 @@ export function ProjectTree({
           e.preventDefault();
           const nextIdx = Math.min(currentIdx + 1, flatItems.length - 1);
           const item = flatItems[nextIdx];
-          if (item?.type === "task") {
-            selectProject(item.projectId);
-            selectTask(item.id);
+          if (item?.type === "workspace") {
+            selectWorkspace(item.id);
           } else if (item?.type === "project") {
-            selectProject(item.id);
-            selectTask(null);
+            selectWorkspace(null);
             expandProject(item.id);
-          } else if (item?.type === "root") {
-            selectProject(item.id);
-            selectTask(null);
           }
           break;
         }
@@ -142,34 +130,25 @@ export function ProjectTree({
           e.preventDefault();
           const prevIdx = Math.max(currentIdx - 1, 0);
           const item = flatItems[prevIdx];
-          if (item?.type === "task") {
-            selectProject(item.projectId);
-            selectTask(item.id);
+          if (item?.type === "workspace") {
+            selectWorkspace(item.id);
           } else if (item?.type === "project") {
-            selectProject(item.id);
-            selectTask(null);
-          } else if (item?.type === "root") {
-            selectProject(item.id);
-            selectTask(null);
+            selectWorkspace(null);
           }
           break;
         }
         case "ArrowRight": {
           e.preventDefault();
-          // Expand current project
           const item = currentIdx >= 0 ? flatItems[currentIdx] : flatItems[0];
           if (item?.type === "project") expandProject(item.id);
-          else if (item?.type === "root") expandProject(item.id);
-          else if (item?.type === "task") expandProject(item.projectId);
+          else if (item?.type === "workspace") expandProject(item.projectId);
           break;
         }
         case "ArrowLeft": {
           e.preventDefault();
-          // Collapse current project
           const item = currentIdx >= 0 ? flatItems[currentIdx] : null;
           if (item?.type === "project") collapseProject(item.id);
-          else if (item?.type === "root") collapseProject(item.id);
-          else if (item?.type === "task") collapseProject(item.projectId);
+          else if (item?.type === "workspace") collapseProject(item.projectId);
           break;
         }
         case "Enter":
@@ -177,29 +156,19 @@ export function ProjectTree({
           e.preventDefault();
           const item = currentIdx >= 0 ? flatItems[currentIdx] : null;
           if (item?.type === "project") toggleProject(item.id);
-          else if (item?.type === "root") {
-            selectProject(item.id);
-            selectTask(null);
-          } else if (item?.type === "task") selectTask(item.id);
+          else if (item?.type === "workspace") selectWorkspace(item.id);
           break;
         }
       }
     },
-    [
-      getCurrentIndex,
-      flatItems,
-      selectTask,
-      selectProject,
-      expandProject,
-      collapseProject,
-      toggleProject,
-    ],
+    [getCurrentIndex, flatItems, selectWorkspace, expandProject, collapseProject, toggleProject],
   );
 
   if (projects.length === 0) {
     return (
-      <div className="flex flex-col items-center gap-2 px-4 py-8">
-        <p className="text-xs text-zinc-600">No projects yet</p>
+      <div className="mx-3 flex flex-col items-center gap-3 rounded-lg border border-dashed border-zinc-700/60 px-4 py-8 text-center">
+        <FolderOpen size={20} className="text-zinc-600" />
+        <p className="text-xs text-zinc-500">No projects yet</p>
         <button
           type="button"
           onClick={onCreateFirstProject}
@@ -217,32 +186,30 @@ export function ProjectTree({
         <div
           ref={containerRef}
           role="tree"
+          aria-label="Project tree"
           tabIndex={0}
           onKeyDown={handleKeyDown}
-          className="flex flex-col gap-0.5 px-1 py-1 outline-none focus-visible:ring-1 focus-visible:ring-blue-500/50"
+          className="flex flex-col gap-2 px-1 py-1 outline-none focus-visible:ring-1 focus-visible:ring-blue-500/50"
         >
           {sortedProjects.map((project) => (
             <SortableProjectNode
               key={project.id}
               project={project}
               isExpanded={expandedProjectIds.has(project.id)}
-              isSelected={selectedProjectId === project.id && !selectedTaskId}
+              isSelected={selectedProjectId === project.id && !selectedWorkspaceId}
               onToggle={() => {
                 if (expandedProjectIds.has(project.id)) {
-                  // Collapsing: deselect task/root if it belongs to this project
                   if (selectedProjectId === project.id) {
-                    selectTask(null);
-                    selectProject(null);
+                    selectWorkspace(null);
                   }
                 }
                 toggleProject(project.id);
               }}
-              selectedTaskId={selectedTaskId}
-              onSelectTask={(id) => {
-                selectProject(project.id);
-                selectTask(id);
+              selectedWorkspaceId={selectedWorkspaceId}
+              onSelectWorkspace={(id) => {
+                selectWorkspace(id);
               }}
-              onCreateTask={() => onCreateTask(project.id)}
+              onCreateWorkspace={() => onCreateWorkspace(project.id)}
               onDeleteProject={() => onDeleteProject(project.id)}
               onRenameProject={(newName) => onRenameProject(project.id, newName)}
               onAddRepo={onAddRepo ? () => onAddRepo(project.id) : undefined}
@@ -262,9 +229,9 @@ function SortableProjectNode({
   isExpanded: boolean;
   isSelected: boolean;
   onToggle: () => void;
-  selectedTaskId: string | null;
-  onSelectTask: (id: string | null) => void;
-  onCreateTask: () => void;
+  selectedWorkspaceId: string | null;
+  onSelectWorkspace: (id: string | null) => void;
+  onCreateWorkspace: () => void;
   onDeleteProject: () => void;
   onRenameProject: (newName: string) => Promise<void>;
   onAddRepo?: (() => void) | undefined;
@@ -280,11 +247,12 @@ function SortableProjectNode({
   };
 
   return (
-    <div ref={setNodeRef} style={style}>
+    <div ref={setNodeRef} style={style} className="group/project">
       <div className="flex items-start">
         <button
           type="button"
-          className="mt-2 shrink-0 cursor-grab rounded p-0.5 text-zinc-700 hover:text-zinc-500 active:cursor-grabbing"
+          aria-label={`Reorder ${project.name}`}
+          className="mt-2 shrink-0 cursor-grab rounded p-0.5 text-zinc-700 opacity-0 transition-opacity group-hover/project:opacity-100 hover:text-zinc-500 active:cursor-grabbing focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:outline-none"
           {...attributes}
           {...listeners}
         >

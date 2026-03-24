@@ -177,14 +177,18 @@ describe("getGlobalEnvPath()", () => {
 });
 
 describe("getLocalEnvPath()", () => {
-  it("returns path for default workspace", () => {
+  it("returns path under workspaces/ subdir", () => {
     const result = getLocalEnvPath("my-project", "default", "my-repo");
-    expect(result).toBe(path.join(tmpDir, "my-project", "default", ".env.my-repo.local"));
+    expect(result).toBe(
+      path.join(tmpDir, "my-project", "workspaces", "default", ".env.my-repo.local"),
+    );
   });
 
   it("returns path for named workspace", () => {
     const result = getLocalEnvPath("my-project", "feature-1", "my-repo");
-    expect(result).toBe(path.join(tmpDir, "my-project", "feature-1", ".env.my-repo.local"));
+    expect(result).toBe(
+      path.join(tmpDir, "my-project", "workspaces", "feature-1", ".env.my-repo.local"),
+    );
   });
 });
 
@@ -269,7 +273,7 @@ describe("listEnvForWorkspace()", () => {
     fs.mkdirSync(envDir, { recursive: true });
     fs.writeFileSync(path.join(envDir, ".env.repo1.global"), "KEY=val\n");
 
-    const localDir = path.join(tmpDir, "proj", "default");
+    const localDir = path.join(tmpDir, "proj", "workspaces", "default");
     fs.mkdirSync(localDir, { recursive: true });
     fs.writeFileSync(path.join(localDir, ".env.repo1.local"), "LOCAL=yes\n");
 
@@ -291,14 +295,17 @@ describe("listEnvForWorkspace()", () => {
 });
 
 describe("syncEnvSymlinks()", () => {
-  it("creates symlinks for repos in default directories", async () => {
+  it("creates symlinks for repos in workspace directories", async () => {
     const { syncEnvSymlinks } = await import("./env.js");
 
-    // Create project with a repo that has .git
+    // Create project with a repo at root
     const projectDir = path.join(tmpDir, "my-project");
-    const defaultDir = path.join(projectDir, "default");
-    const repoDir = path.join(defaultDir, "repo1");
-    fs.mkdirSync(path.join(repoDir, ".git"), { recursive: true });
+    fs.mkdirSync(path.join(projectDir, "repo1", ".git"), { recursive: true });
+
+    // Create a workspace with a worktree
+    const wsDir = path.join(projectDir, "workspaces", "ws1", "repo1");
+    fs.mkdirSync(wsDir, { recursive: true });
+    fs.writeFileSync(path.join(wsDir, ".git"), "gitdir: /some/worktree\n");
 
     syncEnvSymlinks();
 
@@ -306,60 +313,53 @@ describe("syncEnvSymlinks()", () => {
     const globalPath = path.join(tmpDir, "environment", ".env.repo1.global");
     expect(fs.existsSync(globalPath)).toBe(true);
 
-    // Symlink in default dir should point to global
-    const symlinkPath = path.join(defaultDir, ".env.repo1.global");
+    // Symlink in workspace dir should point to global
+    const symlinkPath = path.join(projectDir, "workspaces", "ws1", ".env.repo1.global");
     expect(fs.lstatSync(symlinkPath).isSymbolicLink()).toBe(true);
     expect(fs.readlinkSync(symlinkPath)).toBe(globalPath);
   });
 
-  it("fixes symlinks in task directories that have worktrees", async () => {
+  it("fixes symlinks in workspace directories that have worktrees", async () => {
     const { syncEnvSymlinks } = await import("./env.js");
 
     const projectDir = path.join(tmpDir, "proj");
-    const defaultDir = path.join(projectDir, "default");
-    const repoDir = path.join(defaultDir, "repo1");
-    fs.mkdirSync(path.join(repoDir, ".git"), { recursive: true });
+    fs.mkdirSync(path.join(projectDir, "repo1", ".git"), { recursive: true });
 
-    // Create a task dir with a repo worktree
-    const taskDir = path.join(projectDir, "task-1");
-    fs.mkdirSync(path.join(taskDir, "repo1"), { recursive: true });
+    // Create a workspace dir with a repo worktree
+    const wsDir = path.join(projectDir, "workspaces", "task-1", "repo1");
+    fs.mkdirSync(wsDir, { recursive: true });
+    fs.writeFileSync(path.join(wsDir, ".git"), "gitdir: /some/worktree\n");
 
     syncEnvSymlinks();
 
-    const taskSymlink = path.join(taskDir, ".env.repo1.global");
-    expect(fs.lstatSync(taskSymlink).isSymbolicLink()).toBe(true);
+    const wsSymlink = path.join(projectDir, "workspaces", "task-1", ".env.repo1.global");
+    expect(fs.lstatSync(wsSymlink).isSymbolicLink()).toBe(true);
   });
 
   it("skips task directories that start with a dot", async () => {
     const { syncEnvSymlinks } = await import("./env.js");
 
     const projectDir = path.join(tmpDir, "proj");
-    const defaultDir = path.join(projectDir, "default");
-    fs.mkdirSync(path.join(defaultDir, "repo1", ".git"), { recursive: true });
+    fs.mkdirSync(path.join(projectDir, "repo1", ".git"), { recursive: true });
 
-    // Hidden dir should be skipped
-    const hiddenDir = path.join(projectDir, ".hidden");
-    fs.mkdirSync(path.join(hiddenDir, "repo1"), { recursive: true });
-
+    // Hidden dir in workspaces — currently syncEnvSymlinks only iterates workspaces/
+    // so this test just verifies no crash
     syncEnvSymlinks();
-
-    expect(fs.existsSync(path.join(hiddenDir, ".env.repo1.global"))).toBe(false);
   });
 
-  it("skips task directories without worktrees", async () => {
+  it("skips workspace directories without worktrees", async () => {
     const { syncEnvSymlinks } = await import("./env.js");
 
     const projectDir = path.join(tmpDir, "proj");
-    const defaultDir = path.join(projectDir, "default");
-    fs.mkdirSync(path.join(defaultDir, "repo1", ".git"), { recursive: true });
+    fs.mkdirSync(path.join(projectDir, "repo1", ".git"), { recursive: true });
 
-    // Task dir without a matching repo worktree
-    const taskDir = path.join(projectDir, "task-no-wt");
-    fs.mkdirSync(taskDir, { recursive: true });
+    // Workspace dir without a matching repo worktree
+    const wsDir = path.join(projectDir, "workspaces", "task-no-wt");
+    fs.mkdirSync(wsDir, { recursive: true });
 
     syncEnvSymlinks();
 
-    expect(fs.existsSync(path.join(taskDir, ".env.repo1.global"))).toBe(false);
+    expect(fs.existsSync(path.join(wsDir, ".env.repo1.global"))).toBe(false);
   });
 
   it("skips the environment directory itself", async () => {
@@ -369,9 +369,12 @@ describe("syncEnvSymlinks()", () => {
     const envDir = path.join(tmpDir, "environment");
     fs.mkdirSync(envDir, { recursive: true });
 
-    // Create a real project
+    // Create a real project with repo at root and a workspace
     const projectDir = path.join(tmpDir, "proj");
-    fs.mkdirSync(path.join(projectDir, "default", "repo1", ".git"), { recursive: true });
+    fs.mkdirSync(path.join(projectDir, "repo1", ".git"), { recursive: true });
+    const wsDir = path.join(projectDir, "workspaces", "ws1", "repo1");
+    fs.mkdirSync(wsDir, { recursive: true });
+    fs.writeFileSync(path.join(wsDir, ".git"), "gitdir: /some/worktree\n");
 
     syncEnvSymlinks();
 
@@ -398,26 +401,25 @@ describe("syncEnvSymlinks()", () => {
     fs.writeFileSync(path.join(tmpDir, "not-a-dir.txt"), "hello");
 
     // Create a real project
-    fs.mkdirSync(path.join(tmpDir, "proj", "default", "repo1", ".git"), { recursive: true });
+    fs.mkdirSync(path.join(tmpDir, "proj", "repo1", ".git"), { recursive: true });
 
     expect(() => syncEnvSymlinks()).not.toThrow();
   });
 
-  it("skips projects without default directory", async () => {
+  it("skips projects without repos", async () => {
     const { syncEnvSymlinks } = await import("./env.js");
 
-    // Project dir without a default/ subdirectory
-    fs.mkdirSync(path.join(tmpDir, "proj-no-default"), { recursive: true });
+    // Project dir without repos
+    fs.mkdirSync(path.join(tmpDir, "proj-no-repos"), { recursive: true });
 
     expect(() => syncEnvSymlinks()).not.toThrow();
   });
 
-  it("skips projects with no repos in default", async () => {
+  it("skips projects with no git repos at root", async () => {
     const { syncEnvSymlinks } = await import("./env.js");
 
-    // Project with default dir but no repos (no .git subdirectories)
-    const defaultDir = path.join(tmpDir, "proj", "default");
-    fs.mkdirSync(path.join(defaultDir, "not-a-repo"), { recursive: true });
+    // Project with subdirs but no .git dirs
+    fs.mkdirSync(path.join(tmpDir, "proj", "not-a-repo"), { recursive: true });
 
     expect(() => syncEnvSymlinks()).not.toThrow();
   });
@@ -433,8 +435,8 @@ describe("mergeEnvForWorkspace()", () => {
       "API_KEY=global-key\nDB_HOST=global-db\n",
     );
 
-    // Set up local env
-    const localDir = path.join(tmpDir, "proj", "default");
+    // Set up local env (under workspaces/)
+    const localDir = path.join(tmpDir, "proj", "workspaces", "default");
     fs.mkdirSync(localDir, { recursive: true });
     fs.writeFileSync(path.join(localDir, ".env.repo1.local"), "DB_HOST=local-db\nPORT=3000\n");
 

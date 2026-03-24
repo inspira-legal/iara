@@ -1,7 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useAppStore } from "~/stores/app";
-import { TaskWorkspace } from "~/components/TaskWorkspace";
-import { DefaultWorkspace } from "~/components/DefaultWorkspace";
+import { WorkspaceView } from "~/components/WorkspaceView";
 
 export const Route = createFileRoute("/")({
   component: HomePage,
@@ -11,12 +10,14 @@ function HomePage() {
   const workspace = useAppStore((s) => s.selectedWorkspace());
   const project = useAppStore((s) => s.selectedProject());
 
-  if (workspace && workspace.type === "task" && project) {
-    return <TaskWorkspace key={workspace.id} project={project} task={workspace} />;
-  }
+  // Default to "main" workspace when only a project is selected
+  const effectiveWorkspace =
+    workspace ?? project?.workspaces.find((w) => w.slug === "main") ?? undefined;
 
-  if (project) {
-    return <DefaultWorkspace project={project} />;
+  if (project && effectiveWorkspace) {
+    return (
+      <WorkspaceView key={effectiveWorkspace.id} project={project} workspace={effectiveWorkspace} />
+    );
   }
 
   return (

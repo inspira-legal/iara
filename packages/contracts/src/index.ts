@@ -2,6 +2,8 @@ export type {
   AddRepoInput,
   AppInfo,
   AppNotification,
+  CreationProgress,
+  CreationStage,
   CreateProjectInput,
   CreateWorkspaceInput,
   DesktopBridge,
@@ -15,6 +17,7 @@ export type {
   ServiceDef,
   SessionInfo,
   UpdateProjectInput,
+  UpdateWorkspaceInput,
 } from "./ipc.js";
 export type {
   ClaudeProgress,

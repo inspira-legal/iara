@@ -1,13 +1,21 @@
 import * as crypto from "node:crypto";
 import * as fs from "node:fs";
 import * as path from "node:path";
+import type { CreationStage } from "@iara/contracts";
 import { gitClone } from "@iara/shared/git";
+import { projectPaths } from "@iara/shared/paths";
 import { z } from "zod";
 import { registerMethod } from "../router.js";
 import { runClaude, activeRuns, streamClaudeRun } from "../services/claude-runner.js";
-import { ensureGlobalSymlinks } from "../services/env.js";
 import { loadPrompt } from "../prompts/index.js";
-import { getRepoInfo, addRepo, validateGitUrl, fetchRepos, syncRepos } from "../services/repos.js";
+import {
+  getRepoInfo,
+  addRepo,
+  validateGitUrl,
+  fetchRepos,
+  syncRepos,
+  listLocalBranches,
+} from "../services/repos.js";
 import type { AppState } from "../services/state.js";
 import type { ProjectsWatcher } from "../services/watcher.js";
 import type { PushFn } from "./index.js";
@@ -15,17 +23,19 @@ import { triggerDiscovery } from "./scripts.js";
 
 const ProjectMetadataSchema = z.object({
   name: z.string().min(1).describe("nome curto e descritivo do projeto"),
-  description: z
-    .string()
-    .min(1)
-    .describe("descri\u00e7\u00e3o concisa do projeto em 1-2 fra\u0073es"),
 });
 
-/** Extract workspace slug from a workspaceId like "project/task-slug". */
+function toSlug(s: string): string {
+  return s
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "");
+}
+
+/** Extract workspace slug from a workspaceId like "project/ws-slug". */
 function extractWorkspaceSlug(workspaceId?: string): string | undefined {
   if (!workspaceId) return undefined;
-  const slug = workspaceId.split("/")[1];
-  return slug === "default" ? undefined : slug;
+  return workspaceId.split("/")[1];
 }
 
 /** Extract repo name from a source URL or path. */
@@ -41,59 +51,37 @@ export function registerProjectHandlers(
   pushFn: PushFn,
 ): void {
   registerMethod("projects.create", async (params) => {
-    const { slug, name, description, repoSources } = params;
+    const { slug, repoSources } = params;
 
-    const projectDir = appState.getProjectDir(slug);
-    const defaultDir = path.join(projectDir, "default");
-    fs.mkdirSync(defaultDir, { recursive: true });
+    if (appState.getProject(slug)) {
+      throw new Error(`Project "${slug}" already exists`);
+    }
 
-    // Clone repos into default/
-    const repoNames: string[] = [];
+    const paths = projectPaths(appState.getProjectsDir(), slug);
+    fs.mkdirSync(paths.root, { recursive: true });
+
+    // Clone repos into project root
     for (const source of repoSources) {
       const repoName = repoNameFromSource(source);
-      repoNames.push(repoName);
-      const dest = path.join(defaultDir, repoName);
+      const dest = paths.repo(repoName);
       if (!fs.existsSync(dest)) {
         await gitClone(source, dest);
       }
     }
 
-    // Create global env symlinks in default/
-    ensureGlobalSymlinks(slug, defaultDir, repoNames);
-
-    // Write project.json
-    const projectJsonPath = path.join(projectDir, "project.json");
-    appState.writeProject(slug, {
-      name,
-      description: description ?? "",
-      repoSources,
-    });
-    watcher.suppressNext(projectJsonPath);
-
-    // Write workspace.json for default/
-    const workspaceJsonPath = path.join(defaultDir, "workspace.json");
-    appState.writeWorkspace(slug, "default", {
-      type: "default",
-      name: "Default",
-    });
-    watcher.suppressNext(workspaceJsonPath);
-
-    // Write empty PROJECT.md
-    const projectMdPath = path.join(projectDir, "PROJECT.md");
-    if (!fs.existsSync(projectMdPath)) {
-      fs.writeFileSync(projectMdPath, "");
+    // Write empty CLAUDE.md
+    if (!fs.existsSync(paths.claudeMd)) {
+      fs.writeFileSync(paths.claudeMd, "");
     }
 
-    // readProject requires repos in default/ — skip disk rescan when none were cloned
-    const project = repoSources.length > 0 ? appState.rescanProject(slug) : null;
+    // Write empty iara-scripts.yaml
+    if (!fs.existsSync(paths.scriptsYaml)) {
+      fs.writeFileSync(paths.scriptsYaml, "");
+    }
 
-    const result =
-      project ??
-      appState.createEmptyProject(slug, {
-        name,
-        description: description ?? "",
-        repoSources,
-      });
+    // Rescan from filesystem
+    const project = repoSources.length > 0 ? appState.rescanProject(slug) : null;
+    const result = project ?? appState.createEmptyProject(slug);
 
     pushFn("project:changed", { project: result });
 
@@ -108,17 +96,12 @@ export function registerProjectHandlers(
   });
 
   registerMethod("projects.update", async (params) => {
-    const { id, ...input } = params;
+    const { id } = params;
     const existing = appState.getProject(id);
     if (!existing) throw new Error(`Project not found: ${id}`);
 
-    const projectDir = appState.getProjectDir(existing.slug);
-    const projectJsonPath = path.join(projectDir, "project.json");
-
-    appState.updateProject(existing.slug, input);
-    watcher.suppressNext(projectJsonPath);
-
-    // Rescan and push
+    // No JSON metadata to update — names are derived from slugs.
+    // Rescan and push in case filesystem changed.
     const project = appState.rescanProject(existing.slug);
     if (project) {
       pushFn("project:changed", { project });
@@ -169,9 +152,29 @@ export function registerProjectHandlers(
     return syncRepos(appState, project.slug, wsSlug);
   });
 
+  registerMethod("repos.listBranches", async (params) => {
+    const project = appState.getProject(params.projectId);
+    if (!project) throw new Error(`Project not found: ${params.projectId}`);
+    const wsSlug = extractWorkspaceSlug(params.workspaceId);
+    // For workspaces, repos are under workspaces/<wsSlug>/<repoName>
+    // For project root, repos are under <project>/<repoName>
+    let repoDir: string;
+    if (wsSlug) {
+      repoDir = path.join(
+        appState.getProjectDir(project.slug),
+        "workspaces",
+        wsSlug,
+        params.repoName,
+      );
+    } else {
+      repoDir = path.join(appState.getProjectDir(project.slug), params.repoName);
+    }
+    return listLocalBranches(repoDir);
+  });
+
   registerMethod("projects.suggest", async (params) => {
     const { userGoal } = params;
-    const prompt = loadPrompt("project-suggest", { userGoal });
+    const prompt = loadPrompt("suggest-project", { userGoal });
     const requestId = crypto.randomUUID();
     const run = runClaude({ cwd: process.cwd(), prompt, maxTurns: 3 }, ProjectMetadataSchema);
     activeRuns.set(requestId, run);
@@ -184,27 +187,13 @@ export function registerProjectHandlers(
     const project = appState.getProject(projectId);
     if (!project) throw new Error(`Project not found: ${projectId}`);
 
-    // Update description in project.json
     const projectDir = appState.getProjectDir(project.slug);
-    const projectJsonPath = path.join(projectDir, "project.json");
-    appState.updateProject(project.slug, { description });
-    watcher.suppressNext(projectJsonPath);
-
     const requestId = crypto.randomUUID();
-    const defaultDir = path.join(projectDir, "default");
     const repoNames = appState.discoverRepos(project.slug);
-
-    console.log("[projects.analyze] projectId:", projectId);
-    console.log("[projects.analyze] project.slug:", project.slug);
-    console.log("[projects.analyze] projectDir:", projectDir);
-    console.log("[projects.analyze] defaultDir:", defaultDir);
-    console.log("[projects.analyze] repoNames:", repoNames);
-    console.log("[projects.analyze] process.cwd():", process.cwd());
 
     if (repoNames.length === 0) throw new Error("No repos found to analyze");
 
-    const repoPaths = repoNames.map((name) => path.join(defaultDir, name));
-    console.log("[projects.analyze] repoPaths:", repoPaths);
+    const repoPaths = repoNames.map((name) => path.join(projectDir, name));
 
     const systemPrompt = [
       `The user described this project as: "${description}"`,
@@ -212,15 +201,127 @@ export function registerProjectHandlers(
       "Analyze ONLY these directories. Do not navigate outside of them.",
     ].join("\n");
 
-    const projectMdPath = path.join(projectDir, "PROJECT.md");
-    const prompt = loadPrompt("project-analyze");
+    const claudeMdPath = path.join(projectDir, "CLAUDE.md");
+    const prompt = loadPrompt("analyze-repos");
 
-    console.log("[projects.analyze] systemPrompt:", systemPrompt);
-    console.log("[projects.analyze] cwd for claude:", defaultDir);
-
-    const run = runClaude({ cwd: defaultDir, prompt, systemPrompt });
+    const run = runClaude({ cwd: projectDir, prompt, systemPrompt });
     activeRuns.set(requestId, run);
-    streamClaudeRun(run, requestId, projectMdPath, pushFn);
+    streamClaudeRun(run, requestId, claudeMdPath, pushFn);
+
+    return { requestId };
+  });
+
+  // ---------------------------------------------------------------------------
+  // Background creation orchestration
+  // ---------------------------------------------------------------------------
+
+  registerMethod("projects.createFromPrompt", async (params) => {
+    const { repoSources, prompt: userGoal } = params;
+    const requestId = crypto.randomUUID();
+
+    const pushProgress = (
+      stage: CreationStage,
+      extra?: { name?: string; entityId?: string; error?: string },
+    ) => {
+      pushFn("creation:progress", { requestId, type: "project", stage, ...extra });
+    };
+
+    // Run the full pipeline asynchronously
+    void (async () => {
+      try {
+        // Stage 1: Suggest metadata via Claude
+        pushProgress("suggesting");
+        const suggestPrompt = loadPrompt("suggest-project", { userGoal });
+        const suggestRun = runClaude(
+          { cwd: process.cwd(), prompt: suggestPrompt, maxTurns: 3 },
+          ProjectMetadataSchema,
+        );
+        let suggested: { name: string };
+        try {
+          suggested = await suggestRun.result;
+        } catch {
+          pushProgress("error", { error: "Claude suggestion failed" });
+          return;
+        }
+
+        const slug = toSlug(suggested.name);
+        if (!slug) {
+          pushProgress("error", { error: "Could not derive slug from name" });
+          return;
+        }
+        if (appState.getProject(slug)) {
+          pushProgress("error", { error: `Project "${slug}" already exists` });
+          return;
+        }
+        pushProgress("suggested", { name: suggested.name });
+
+        // Stage 2: Create project (clone repos to project root)
+        pushProgress("creating", { name: suggested.name });
+        const paths = projectPaths(appState.getProjectsDir(), slug);
+        fs.mkdirSync(paths.root, { recursive: true });
+
+        const repoNames: string[] = [];
+        for (const source of repoSources) {
+          const repoName = repoNameFromSource(source);
+          repoNames.push(repoName);
+          const dest = paths.repo(repoName);
+          if (!fs.existsSync(dest)) {
+            await gitClone(source, dest);
+          }
+        }
+
+        // Write CLAUDE.md and iara-scripts.yaml
+        if (!fs.existsSync(paths.claudeMd)) {
+          fs.writeFileSync(paths.claudeMd, "");
+        }
+        if (!fs.existsSync(paths.scriptsYaml)) {
+          fs.writeFileSync(paths.scriptsYaml, "");
+        }
+
+        const project =
+          repoSources.length > 0 ? appState.rescanProject(slug) : appState.createEmptyProject(slug);
+
+        if (project) pushFn("project:changed", { project });
+
+        const entityId = slug;
+        pushProgress("created", { name: suggested.name, entityId });
+
+        // Stage 3: Analyze (CLAUDE.md generation) — non-blocking for "created" state
+        if (repoNames.length > 0) {
+          pushProgress("analyzing", { name: suggested.name, entityId });
+          try {
+            const repoPaths = repoNames.map((name) => path.join(paths.root, name));
+            const analyzeSystemPrompt = [
+              `The repositories are at: ${repoPaths.join(", ")}`,
+              "Analyze ONLY these directories. Do not navigate outside of them.",
+            ].join("\n");
+            const analyzePrompt = loadPrompt("analyze-repos");
+            const analyzeRun = runClaude({
+              cwd: paths.root,
+              prompt: analyzePrompt,
+              systemPrompt: analyzeSystemPrompt,
+            });
+            const analyzeResult = await analyzeRun.result;
+            const content =
+              typeof analyzeResult === "string" ? analyzeResult : JSON.stringify(analyzeResult);
+            await fs.promises.writeFile(paths.claudeMd, content, "utf-8");
+          } catch {
+            // Analysis failure is non-fatal — project is already created
+          }
+        }
+
+        // Auto-discover scripts
+        try {
+          triggerDiscovery(appState, slug, pushFn);
+        } catch {
+          // Best effort
+        }
+
+        pushProgress("done", { name: suggested.name, entityId });
+      } catch (err) {
+        pushProgress("error", { error: err instanceof Error ? err.message : String(err) });
+      }
+    })();
 
     return { requestId };
   });

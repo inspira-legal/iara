@@ -3,7 +3,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { mergeEnvForWorkspace } from "../services/env.js";
 import type { RepoContext } from "../services/launcher.js";
-import { buildRootPrompt } from "../services/launcher.js";
+import { buildSystemPrompt, buildSystemPromptFromDir } from "../services/launcher.js";
 import { registerMethod } from "../router.js";
 import type { AppState } from "../services/state.js";
 import type { TerminalManager } from "../services/terminal.js";
@@ -36,91 +36,30 @@ export function registerTerminalHandlers(appState: AppState, manager: TerminalMa
     const projectDir = appState.getProjectDir(projectSlug);
     const workspaceDir = appState.getWorkspaceDir(params.workspaceId);
 
-    if (workspace.type === "default") {
-      // Default workspace mode: launch Claude at the project level
-      const reposDir = workspaceDir;
-
-      const repoDirs: string[] = [];
-      const repos: Array<{ name: string; branch: string; repoPath: string }> = [];
-
-      if (fs.existsSync(reposDir)) {
-        const repoNames = fs
-          .readdirSync(reposDir)
-          .filter((name) => fs.statSync(path.join(reposDir, name)).isDirectory());
-        for (const name of repoNames) {
-          const repoPath = path.join(reposDir, name);
-          repoDirs.push(repoPath);
-
-          let branch = "main";
-          try {
-            branch = execFileSync("git", ["branch", "--show-current"], {
-              cwd: repoPath,
-              encoding: "utf-8",
-            }).trim();
-          } catch {
-            // fallback to "main"
-          }
-
-          repos.push({ name, branch, repoPath });
-        }
-      }
-
-      if (repoDirs.length === 0) {
-        repoDirs.push(projectDir);
-      }
-
-      const systemPrompt = buildRootPrompt({
-        projectDir,
-        projectName: project.name,
-        repos,
-      });
-
-      // Merge env files (global + local) for all repos
-      const repoNames = repoDirs.map((d) => path.basename(d));
-      const envVars = mergeEnvForWorkspace(projectSlug, workspace.slug, repoNames);
-
-      // Use reposDir as cwd so Claude opens directly where repos live.
-      // When resuming a session, honour sessionCwd so the hash matches the original.
-      const defaultCwd = repoDirs.length > 0 ? reposDir : projectDir;
-      const rootCwd = params.resumeSessionId && params.sessionCwd ? params.sessionCwd : defaultCwd;
-
-      return manager.create({
-        taskId: `default:${projectSlug}`,
-        taskDir: rootCwd,
-        repoDirs,
-        appendSystemPrompt: systemPrompt,
-        ...(params.resumeSessionId != null ? { resumeSessionId: params.resumeSessionId } : {}),
-        env: {
-          ...envVars,
-          ...getAutocompactEnv(appState),
-          ...getGuardrailsEnv(appState),
-          IARA_WORKSPACE_TYPE: "default",
-          IARA_WORKSPACE_ID: params.workspaceId,
-          IARA_WORKSPACE_DIR: rootCwd,
-          IARA_PROJECT_ID: projectSlug,
-          IARA_PROJECT_DIR: projectDir,
-        },
-      });
-    }
-
-    // Task workspace mode
+    // Workspace mode: repos are worktrees under workspaces/<slug>/<repoName>
     const repoDirs: string[] = [];
     const repos: RepoContext[] = [];
-    const reposDir = path.join(projectDir, "default");
-    if (fs.existsSync(reposDir)) {
-      const repoNames = fs
-        .readdirSync(reposDir)
-        .filter((name) => fs.statSync(path.join(reposDir, name)).isDirectory());
-      for (const name of repoNames) {
-        const wtDir = path.join(workspaceDir, name);
-        if (fs.existsSync(wtDir)) {
-          repoDirs.push(wtDir);
-          repos.push({
-            name,
-            worktreePath: wtDir,
-            mainRepoPath: path.join(reposDir, name),
-          });
-        }
+
+    // Discover repos from project root and find matching worktrees in the workspace
+    const repoNames = appState.discoverRepos(projectSlug);
+    for (const name of repoNames) {
+      const wtDir = path.join(workspaceDir, name);
+      if (fs.existsSync(wtDir)) {
+        let branch = "main";
+        try {
+          branch = execFileSync("git", ["rev-parse", "--abbrev-ref", "HEAD"], {
+            cwd: wtDir,
+            encoding: "utf-8",
+            timeout: 5000,
+          }).trim();
+        } catch {}
+        repoDirs.push(wtDir);
+        repos.push({
+          name,
+          branch,
+          worktreePath: wtDir,
+          mainRepoPath: path.join(projectDir, name),
+        });
       }
     }
 
@@ -129,31 +68,45 @@ export function registerTerminalHandlers(appState: AppState, manager: TerminalMa
     }
 
     // Merge env files (global + local) for all repos
-    const repoNames = repos.map((r) => r.name);
-    const envVars = mergeEnvForWorkspace(projectSlug, workspace.slug, repoNames);
+    const envRepoNames = repos.map((r) => r.name);
+    const envVars = mergeEnvForWorkspace(projectSlug, workspace.slug, envRepoNames);
 
     // When resuming a session, honour sessionCwd so the hash matches the original
     const effectiveCwd =
       params.resumeSessionId && params.sessionCwd ? params.sessionCwd : workspaceDir;
 
+    // Build system prompt
+    const systemPrompt =
+      repos.length > 0
+        ? buildSystemPrompt({
+            workspaceDir: effectiveCwd,
+            projectName: project.name,
+            workspaceName: workspace.name,
+            repos,
+          })
+        : buildSystemPromptFromDir(effectiveCwd);
+
+    const workspaceContext =
+      repos.length > 0
+        ? {
+            workspaceDir: effectiveCwd,
+            projectName: project.name,
+            workspaceName: workspace.name,
+            repos,
+          }
+        : undefined;
+
     return manager.create({
-      taskId: params.workspaceId,
-      taskDir: effectiveCwd,
+      workspaceId: params.workspaceId,
+      workspaceDir: effectiveCwd,
       repoDirs,
-      taskContext: {
-        taskDir: effectiveCwd,
-        projectName: project.name,
-        taskName: workspace.name,
-        taskDescription: workspace.description,
-        branch: workspace.branch ?? "main",
-        repos,
-      },
+      ...(workspaceContext ? { workspaceContext } : {}),
+      appendSystemPrompt: systemPrompt,
       ...(params.resumeSessionId != null ? { resumeSessionId: params.resumeSessionId } : {}),
       env: {
         ...envVars,
         ...getAutocompactEnv(appState),
         ...getGuardrailsEnv(appState),
-        IARA_WORKSPACE_TYPE: "task",
         IARA_WORKSPACE_ID: params.workspaceId,
         IARA_WORKSPACE_DIR: workspaceDir,
         IARA_PROJECT_ID: projectSlug,

@@ -29,7 +29,7 @@ let restarting = false;
 function startElectron() {
   child = spawn(electronBin, ["."], {
     cwd: desktopDir,
-    stdio: "inherit",
+    stdio: ["pipe", "inherit", "inherit"],
     env: { ...process.env, VITE_DEV_SERVER_URL: devServerUrl },
   });
 
@@ -45,6 +45,7 @@ let debounceTimer = null;
 function scheduleRestart(source) {
   if (debounceTimer) clearTimeout(debounceTimer);
   debounceTimer = setTimeout(() => {
+    if (restarting) return; // already restarting — skip duplicate
     console.log(`[dev-electron] Restarting (${source} changed)...`);
     restarting = true;
 
@@ -56,7 +57,7 @@ function scheduleRestart(source) {
         } catch {}
       }, forcedShutdownTimeoutMs);
 
-      child.on("exit", () => {
+      child.once("exit", () => {
         clearTimeout(forceKill);
         restarting = false;
         startElectron();
@@ -75,10 +76,12 @@ watch(join(desktopDir, "dist-electron"), (_, filename) => {
   }
 });
 
-// Watch server dist (main.mjs changes → restart Electron so it spawns new server)
+// Server hot-restart: signal Electron to restart only the server child process.
+// Electron window stays open — only the server is killed and respawned.
 watch(serverDistDir, (_, filename) => {
-  if (filename === "main.mjs") {
-    scheduleRestart("server/dist/main.mjs");
+  if (filename === "main.mjs" && child?.stdin?.writable) {
+    console.log("[dev-electron] Server bundle changed — sending restart signal...");
+    child.stdin.write("restart-server\n");
   }
 });
 

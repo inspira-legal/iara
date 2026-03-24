@@ -260,8 +260,8 @@ describe("git service", () => {
       await expect(gitBranchCreate(repoDir, "main")).rejects.toThrow(GitOperationError);
     });
 
-    it("throws GitNotInstalledError when cwd does not exist", async () => {
-      await expect(gitStatus("/nonexistent/path")).rejects.toThrow(GitNotInstalledError);
+    it("throws GitOperationError when cwd does not exist", async () => {
+      await expect(gitStatus("/nonexistent/path")).rejects.toThrow(GitOperationError);
     });
 
     it("GitOperationError stores command, stderr, and exitCode", async () => {

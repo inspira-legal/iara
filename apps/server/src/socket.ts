@@ -16,9 +16,7 @@ interface SocketResponse {
 
 type SocketHandler = (params: Record<string, unknown>) => unknown | Promise<unknown>;
 
-import type { WsPushEvents } from "@iara/contracts";
-
-export type PushFn = <E extends keyof WsPushEvents>(event: E, params: WsPushEvents[E]) => void;
+import type { PushFn } from "./types.js";
 
 export class SocketServer {
   private server: net.Server | null = null;

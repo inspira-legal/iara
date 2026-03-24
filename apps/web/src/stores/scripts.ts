@@ -1,27 +1,10 @@
 import { create } from "zustand";
 import type { EssencialKey, ScriptStatus, ScriptsConfig } from "@iara/contracts";
 import { transport } from "../lib/ws-transport.js";
-import { LocalCache, MapCache } from "../lib/local-cache.js";
-import { ScriptsPanelSchema, ScriptsConfigSchema } from "../lib/cache-schemas.js";
 
 const MAX_LOG_LINES = 1000;
 
 type PanelTab = "scripts" | "output" | null;
-
-const panelCache = new LocalCache({
-  key: "iara:scripts-panel",
-  version: 1,
-  schema: ScriptsPanelSchema,
-});
-
-const cachedPanel = panelCache.get();
-
-const scriptsConfigCache = new MapCache({
-  key: "iara:scripts-config",
-  version: 1,
-  schema: ScriptsConfigSchema,
-  maxEntries: 20,
-});
 
 interface ScriptsState {
   config: ScriptsConfig | null;
@@ -29,6 +12,8 @@ interface ScriptsState {
   loading: boolean;
   /** Projects currently running discovery */
   discoveringProjects: Set<string>;
+  /** Discovery error per project */
+  discoveryErrors: Map<string, string>;
   /** Logs keyed by ScriptStatus.id */
   logs: Map<string, string[]>;
   selectedLog: { service: string; script: string } | null;
@@ -63,24 +48,22 @@ export const useScriptsStore = create<ScriptsState & ScriptsActions>((set, get) 
   currentWorkspaceId: null as string | null,
   loading: false,
   discoveringProjects: new Set<string>(),
+  discoveryErrors: new Map<string, string>(),
   logs: new Map(),
   selectedLog: null,
-  activeTab: cachedPanel?.activeTab ?? null,
+  activeTab: null as PanelTab,
 
   loadConfig: async (workspaceId) => {
-    // Show cached config immediately if available
-    const cachedConfig = scriptsConfigCache.getEntry(workspaceId);
     set({
-      loading: !cachedConfig,
+      loading: true,
       selectedLog: null,
       activeTab: "scripts",
       currentWorkspaceId: workspaceId,
-      config: cachedConfig,
+      config: null,
     });
     try {
       const config = await transport.request("scripts.load", { workspaceId });
       set({ config, loading: false });
-      scriptsConfigCache.setEntry(workspaceId, config);
     } catch {
       set({ loading: false });
     }
@@ -105,17 +88,21 @@ export const useScriptsStore = create<ScriptsState & ScriptsActions>((set, get) 
   discover: async (projectId) => {
     const next = new Set(get().discoveringProjects);
     next.add(projectId);
-    // Clear stale outputs if discovering for the current workspace's project
+    // Clear stale outputs and previous errors if discovering for the current workspace's project
     const currentProject = projectIdFromWorkspaceId(get().currentWorkspaceId);
     const clearState =
       currentProject === projectId ? { config: null, logs: new Map(), selectedLog: null } : {};
-    set({ discoveringProjects: next, ...clearState });
+    const errors = new Map(get().discoveryErrors);
+    errors.delete(projectId);
+    set({ discoveringProjects: next, discoveryErrors: errors, ...clearState });
     try {
       await transport.request("scripts.discover", { projectId });
-    } catch {
+    } catch (err) {
       const cleared = new Set(get().discoveringProjects);
       cleared.delete(projectId);
-      set({ discoveringProjects: cleared });
+      const nextErrors = new Map(get().discoveryErrors);
+      nextErrors.set(projectId, err instanceof Error ? err.message : String(err));
+      set({ discoveringProjects: cleared, discoveryErrors: nextErrors });
     }
   },
 
@@ -142,15 +129,12 @@ export const useScriptsStore = create<ScriptsState & ScriptsActions>((set, get) 
 
   setActiveTab: (tab) => {
     set({ activeTab: tab });
-    panelCache.set({ activeTab: tab });
   },
   syncCollapsed: (isCollapsed) => {
     if (isCollapsed && get().activeTab !== null) {
       set({ activeTab: null });
-      panelCache.set({ activeTab: null });
     } else if (!isCollapsed && get().activeTab === null) {
       set({ activeTab: "scripts" });
-      panelCache.set({ activeTab: "scripts" });
     }
   },
 
@@ -198,7 +182,9 @@ export const useScriptsStore = create<ScriptsState & ScriptsActions>((set, get) 
     const unsubReload = transport.subscribe("scripts:reload", ({ projectId }) => {
       const next = new Set(get().discoveringProjects);
       next.delete(projectId);
-      set({ discoveringProjects: next });
+      const errors = new Map(get().discoveryErrors);
+      errors.delete(projectId);
+      set({ discoveringProjects: next, discoveryErrors: errors });
     });
 
     return () => {
@@ -215,4 +201,12 @@ export function useIsDiscovering(): boolean {
   const currentWorkspaceId = useScriptsStore((s) => s.currentWorkspaceId);
   const projectId = projectIdFromWorkspaceId(currentWorkspaceId);
   return projectId ? discoveringProjects.has(projectId) : false;
+}
+
+/** Derived selector: discovery error for the current workspace's project */
+export function useDiscoveryError(): string | null {
+  const discoveryErrors = useScriptsStore((s) => s.discoveryErrors);
+  const currentWorkspaceId = useScriptsStore((s) => s.currentWorkspaceId);
+  const projectId = projectIdFromWorkspaceId(currentWorkspaceId);
+  return projectId ? (discoveryErrors.get(projectId) ?? null) : null;
 }

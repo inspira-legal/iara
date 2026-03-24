@@ -1,6 +1,7 @@
 import type {
   AddRepoInput,
   AppInfo,
+  CreationProgress,
   CreateProjectInput,
   CreateWorkspaceInput,
   EssencialKey,
@@ -52,6 +53,10 @@ export type WsMethods = {
     params: { projectId: string; description: string };
     result: { requestId: string };
   };
+  "projects.createFromPrompt": {
+    params: { repoSources: string[]; prompt: string };
+    result: { requestId: string };
+  };
 
   // Repos
   "repos.getInfo": { params: { projectId: string; workspaceId?: string }; result: RepoInfo[] };
@@ -59,12 +64,17 @@ export type WsMethods = {
   "repos.add": { params: { projectId: string } & AddRepoInput; result: void };
   "repos.fetch": { params: { projectId: string; workspaceId?: string }; result: void };
   "repos.sync": { params: { projectId: string; workspaceId?: string }; result: SyncResult[] };
+  "repos.listBranches": {
+    params: { projectId: string; workspaceId?: string; repoName: string };
+    result: string[];
+  };
 
   // Workspaces
   "workspaces.create": {
     params: { projectId: string } & CreateWorkspaceInput;
     result: Workspace;
   };
+  "workspaces.update": { params: { workspaceId: string }; result: void };
   "workspaces.delete": { params: { workspaceId: string }; result: void };
   "workspaces.suggest": {
     params: { projectId: string; userGoal: string };
@@ -74,9 +84,17 @@ export type WsMethods = {
     params: { workspaceId: string };
     result: { requestId: string };
   };
+  "workspaces.createFromPrompt": {
+    params: { projectId: string; prompt: string };
+    result: { requestId: string };
+  };
   "workspaces.renameBranch": {
     params: { workspaceId: string; repoName: string; newBranch: string };
-    result: void;
+    result: RepoInfo[];
+  };
+  "workspaces.checkoutBranch": {
+    params: { workspaceId: string; repoName: string; branch: string };
+    result: RepoInfo[];
   };
 
   // Sessions
@@ -179,6 +197,8 @@ export type WsPushEvents = {
   "project:changed": { project: Project };
   "workspace:changed": { workspace: Workspace };
   "state:resync": { state: { projects: Project[]; settings: Record<string, string> } };
+  "repos:changed": { projectId: string; workspaceId?: string; repoInfo: RepoInfo[] };
+  "creation:progress": CreationProgress;
 };
 
 // ---------------------------------------------------------------------------
