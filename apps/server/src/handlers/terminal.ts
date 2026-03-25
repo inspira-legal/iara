@@ -38,12 +38,18 @@ export function registerTerminalHandlers(appState: AppState, manager: TerminalMa
     const workspaceDir = appState.getWorkspaceDir(params.workspaceId);
 
     // Shell mode — just spawn a shell in the workspace dir
+    const sizeParams = {
+      ...(params.cols != null ? { cols: params.cols } : {}),
+      ...(params.rows != null ? { rows: params.rows } : {}),
+    };
+
     if (mode === "shell") {
       return manager.create({
         workspaceId: params.workspaceId,
         workspaceDir,
         mode: "shell",
         repoDirs: [workspaceDir],
+        ...sizeParams,
       });
     }
 
@@ -108,6 +114,7 @@ export function registerTerminalHandlers(appState: AppState, manager: TerminalMa
       workspaceDir: effectiveCwd,
       mode: "claude",
       repoDirs,
+      ...sizeParams,
       ...(workspaceContext ? { workspaceContext } : {}),
       appendSystemPrompt: systemPrompt,
       ...(params.resumeSessionId != null ? { resumeSessionId: params.resumeSessionId } : {}),

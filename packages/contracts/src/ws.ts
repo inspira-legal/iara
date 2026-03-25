@@ -172,6 +172,8 @@ export type WsMethods = {
       mode?: "claude" | "shell";
       resumeSessionId?: string;
       sessionCwd?: string;
+      cols?: number;
+      rows?: number;
     };
     result: { terminalId: string; sessionId: string };
   };

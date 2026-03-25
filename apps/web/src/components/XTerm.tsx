@@ -42,6 +42,8 @@ export interface XTermInstance {
   linkDisposable: IDisposable;
   /** Write data to the terminal with scroll-preserving RAF batching. */
   writeData: (data: string) => void;
+  /** Callback set by the consumer to send user input to the PTY. Keybindings use this. */
+  onInput: ((data: string) => void) | null;
   dispose: () => void;
 }
 
@@ -237,17 +239,15 @@ function createXTermInstance(opts?: {
     }
   }
 
-  // Keybindings (noop write for read-only)
-  const write = opts?.readOnly ? () => {} : (data: string) => writeData(data);
-  const keybindingHandlers = setupTerminalKeybindings(term, write);
-  keybindingHandlers.onModChange = setModHeld;
-
-  return {
+  // Keybindings: send user input to PTY via onInput callback (set by consumer).
+  // The PTY echoes back the data which xterm displays — no local write needed.
+  const instance: XTermInstance = {
     term,
     fitAddon,
-    keybindingHandlers,
+    keybindingHandlers: null!,
     linkDisposable,
     writeData,
+    onInput: null,
     dispose: () => {
       if (rafId !== null) {
         cancelAnimationFrame(rafId);
@@ -258,6 +258,17 @@ function createXTermInstance(opts?: {
       term.dispose();
     },
   };
+
+  const write = opts?.readOnly
+    ? () => {}
+    : (data: string) => {
+        instance.onInput?.(data);
+      };
+  const keybindingHandlers = setupTerminalKeybindings(term, write);
+  keybindingHandlers.onModChange = setModHeld;
+  instance.keybindingHandlers = keybindingHandlers;
+
+  return instance;
 }
 
 // ---------------------------------------------------------------------------
@@ -326,6 +337,8 @@ export function XTerm({
     const { term, fitAddon, keybindingHandlers } = instance;
 
     keybindingHandlers.onCopy = () => onCopyRef.current?.();
+    // Wire keybinding input (e.g. Shift+Enter) to the PTY via onData callback
+    instance.onInput = readOnly ? null : (data) => onDataRef.current?.(data);
 
     if (!term.element) {
       term.open(container);
@@ -340,8 +353,12 @@ export function XTerm({
       container.appendChild(term.element);
     }
 
-    // Defer initial fit to next frame so the flex container has its final dimensions
-    requestAnimationFrame(() => fitAddon.fit());
+    // Defer initial fit to next frame so the flex container has its final dimensions.
+    // Always fire onResize after the initial fit so the PTY gets the correct size.
+    requestAnimationFrame(() => {
+      fitAddon.fit();
+      onResizeRef.current?.(term.cols, term.rows);
+    });
 
     // User input
     let onDataDisposable: IDisposable | null = null;
@@ -377,6 +394,7 @@ export function XTerm({
 
     return () => {
       keybindingHandlers.onCopy = null;
+      instance.onInput = null;
       onDataDisposable?.dispose();
       if (resizeTimer) clearTimeout(resizeTimer);
       resizeObserver.disconnect();
