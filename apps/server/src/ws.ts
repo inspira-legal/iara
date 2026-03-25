@@ -67,9 +67,16 @@ export function createServer(opts: ServerOptions): { httpServer: http.Server; st
     });
 
     ws.on("message", async (data) => {
-      const response = await dispatch(String(data));
-      if (ws.readyState === ws.OPEN) {
-        ws.send(response);
+      try {
+        const response = await dispatch(String(data));
+        if (ws.readyState === ws.OPEN) {
+          ws.send(response);
+        }
+      } catch (err) {
+        console.error("[ws] dispatch error:", err);
+        if (ws.readyState === ws.OPEN) {
+          ws.send(JSON.stringify({ error: "Internal server error" }));
+        }
       }
     });
 

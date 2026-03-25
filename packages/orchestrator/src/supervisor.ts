@@ -1,5 +1,9 @@
-import { execSync, spawn } from "node:child_process";
+import { exec, spawn } from "node:child_process";
+import { existsSync } from "node:fs";
 import { createConnection } from "node:net";
+import { promisify } from "node:util";
+
+const execAsync = promisify(exec);
 import type {
   EssencialKey,
   ResolvedServiceDef,
@@ -24,7 +28,7 @@ interface RunningScript {
   exitCode: number | null;
   output: ScriptOutputLevel;
   logs: string[];
-  kill: () => void;
+  kill: () => void | Promise<void>;
   /** Cancels the pending SIGKILL escalation timer. */
   cancelKill: (() => void) | null;
   healthCheckTimer?: ReturnType<typeof setInterval>;
@@ -55,7 +59,7 @@ export class ScriptSupervisor {
   }
 
   /** Start a script process. */
-  start(opts: {
+  async start(opts: {
     projectId: string;
     workspace: string;
     service: string;
@@ -68,7 +72,7 @@ export class ScriptSupervisor {
     isLongRunning: boolean;
     isPinnedPort?: boolean;
     timeout?: number;
-  }): void {
+  }): Promise<void> {
     const key = this.key(opts.port, opts.service, opts.script);
 
     // For pinned-port services: reuse if already running on this port
@@ -82,7 +86,7 @@ export class ScriptSupervisor {
 
     // Stop existing if running under same key
     if (this.running.has(key)) {
-      this.stopByKey(key);
+      await this.stopByKey(key);
     }
 
     // Track pinned-port services as shared
@@ -99,6 +103,34 @@ export class ScriptSupervisor {
       script: opts.script,
       line: `> ${fullCommand}`,
     });
+
+    // Validate cwd exists — spawn throws misleading ENOENT otherwise
+    if (!existsSync(opts.cwd)) {
+      const errorLine = `[iara] Directory not found: ${opts.cwd}`;
+      this.pushFn("scripts:log", {
+        scriptId: key,
+        service: opts.service,
+        script: opts.script,
+        line: errorLine,
+      });
+      const entry: RunningScript = {
+        scriptId: key,
+        projectId: opts.projectId,
+        workspace: opts.workspace,
+        service: opts.service,
+        script: opts.script,
+        pid: null,
+        health: opts.isLongRunning ? "unhealthy" : "failed",
+        exitCode: 1,
+        output: opts.output,
+        logs: [`> ${fullCommand}`, errorLine],
+        cancelKill: null,
+        kill: () => {},
+      };
+      this.running.set(key, entry);
+      this.pushStatus(entry);
+      return;
+    }
 
     const child = spawn(fullCommand, {
       cwd: opts.cwd,
@@ -165,6 +197,16 @@ export class ScriptSupervisor {
         console.error(`[supervisor] stderr error for ${key}:`, err.message);
       });
     }
+
+    child.on("error", (err) => {
+      console.error(`[supervisor] spawn error for ${key} (cwd: ${opts.cwd}):`, err.message);
+      if (entry.healthCheckTimer) clearInterval(entry.healthCheckTimer);
+      entry.pid = null;
+      entry.exitCode = 1;
+      entry.health = opts.isLongRunning ? "unhealthy" : "failed";
+      appendLog(`[iara] Failed to start: ${err.message}`);
+      this.pushStatus(entry);
+    });
 
     child.on("exit", (code) => {
       // Cancel any pending SIGKILL timer from a prior kill() call
@@ -278,19 +320,19 @@ export class ScriptSupervisor {
         return;
       }
     }
-    this.start(opts);
+    await this.start(opts);
   }
 
   /** Stop a running script by its id. */
-  stop(id: string): void {
-    this.stopByKey(id);
+  async stop(id: string): Promise<void> {
+    await this.stopByKey(id);
   }
 
-  private stopByKey(key: string): void {
+  private async stopByKey(key: string): Promise<void> {
     const entry = this.running.get(key);
     if (!entry) return;
 
-    entry.kill();
+    await entry.kill();
     if (entry.healthCheckTimer) clearInterval(entry.healthCheckTimer);
     entry.health = "stopped";
     this.pushStatus(entry);
@@ -305,10 +347,12 @@ export class ScriptSupervisor {
   }
 
   /** Stop all running scripts for a specific workspace. */
-  stopAll(projectId: string, workspace: string): void {
+  async stopAll(projectId: string, workspace: string): Promise<void> {
+    const kills: Promise<void>[] = [];
     for (const [key, entry] of this.running) {
       if (entry.projectId !== projectId || entry.workspace !== workspace) continue;
-      entry.kill();
+      const killPromise = Promise.resolve(entry.kill());
+      kills.push(killPromise);
       if (entry.healthCheckTimer) clearInterval(entry.healthCheckTimer);
       entry.health = "stopped";
       this.pushStatus(entry);
@@ -321,16 +365,19 @@ export class ScriptSupervisor {
         }
       }
     }
+    await Promise.all(kills);
   }
 
   /** Stop every running script (used for process cleanup on shutdown). */
-  shutdown(): void {
+  async shutdown(): Promise<void> {
+    const kills: Promise<void>[] = [];
     for (const entry of this.running.values()) {
-      entry.kill();
+      kills.push(Promise.resolve(entry.kill()));
       if (entry.healthCheckTimer) clearInterval(entry.healthCheckTimer);
     }
     this.running.clear();
     this.sharedByPort.clear();
+    await Promise.all(kills);
   }
 
   /** Get status of scripts, optionally filtered by project/workspace. */
@@ -586,11 +633,11 @@ export class ScriptSupervisor {
   }
 }
 
-/** Kill process(es) listening on a port via lsof. */
-function killByPort(port: number): void {
+/** Kill process(es) listening on a port via lsof (async to avoid blocking event loop). */
+async function killByPort(port: number): Promise<void> {
   try {
-    const result = execSync(`lsof -ti:${port}`, { encoding: "utf-8" }).trim();
-    for (const pid of result.split("\n").filter(Boolean)) {
+    const { stdout } = await execAsync(`lsof -ti:${port}`, { encoding: "utf-8" });
+    for (const pid of stdout.trim().split("\n").filter(Boolean)) {
       try {
         process.kill(Number(pid), "SIGTERM");
       } catch {

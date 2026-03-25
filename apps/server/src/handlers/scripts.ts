@@ -215,7 +215,7 @@ export function registerScriptHandlers(
   });
 
   registerMethod("scripts.stop", async (params) => {
-    supervisor.stop(params.scriptId);
+    await supervisor.stop(params.scriptId);
   });
 
   registerMethod("scripts.runAll", async (params) => {
@@ -245,7 +245,7 @@ export function registerScriptHandlers(
   registerMethod("scripts.stopAll", async (params) => {
     const workspace = appState.getWorkspace(params.workspaceId);
     if (!workspace) throw new Error(`Workspace not found: ${params.workspaceId}`);
-    supervisor.stopAll(workspace.projectId, workspace.slug);
+    await supervisor.stopAll(workspace.projectId, workspace.slug);
   });
 
   registerMethod("scripts.status", async (params) => {

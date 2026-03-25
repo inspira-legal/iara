@@ -106,7 +106,7 @@ function shutdown() {
     terminalManager.destroyAll();
   } catch {}
   try {
-    scriptSupervisor.shutdown();
+    void scriptSupervisor.shutdown();
   } catch {}
   try {
     void socketServer.stop();
@@ -121,5 +121,11 @@ function shutdown() {
 
 process.on("SIGTERM", shutdown);
 process.on("SIGINT", shutdown);
-
 process.on("disconnect", shutdown);
+
+process.on("unhandledRejection", (err) => {
+  console.error("[server] Unhandled rejection:", err);
+});
+process.on("uncaughtException", (err) => {
+  console.error("[server] Uncaught exception:", err);
+});
