@@ -1,6 +1,7 @@
 import { type ReactNode } from "react";
 import { Group, Panel, Separator, useDefaultLayout, usePanelRef } from "react-resizable-panels";
 import { BottomPanel } from "./BottomPanel";
+import { RightPanel } from "./RightPanel";
 import { useScriptsStore } from "~/stores/scripts";
 import { useWorkspace } from "~/lib/workspace";
 import { useAppStore } from "~/stores/app";
@@ -31,7 +32,10 @@ export function MainPanel({ children }: { children: ReactNode }) {
         onLayoutChanged={contentLayout.onLayoutChanged}
       >
         <Panel id="content" defaultSize="70%" minSize="30%">
-          <div className="h-full overflow-hidden">{children}</div>
+          <div className="flex h-full overflow-hidden">
+            <div className="min-w-0 flex-1 overflow-hidden">{children}</div>
+            <RightPanel />
+          </div>
         </Panel>
         {(workspace || hasProject) && (
           <>

@@ -1,9 +1,19 @@
 import { useState } from "react";
-import { ChevronRight, FolderOpen, FolderPlus, Plus, Pencil, Trash2 } from "lucide-react";
+import {
+  ChevronRight,
+  FolderOpen,
+  FolderPlus,
+  Plus,
+  Pencil,
+  Trash2,
+  Settings,
+  MoreHorizontal,
+} from "lucide-react";
 import type { Project, Workspace } from "@iara/contracts";
 import { WorkspaceNode } from "./WorkspaceNode";
 import { SidebarContextMenu, type ContextMenuItem } from "./SidebarContextMenu";
 import { useAppStore } from "~/stores/app";
+import { usePanelsStore } from "~/stores/panels";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { useInlineEdit } from "~/hooks/useInlineEdit";
 import { useContextMenu } from "~/hooks/useContextMenu";
@@ -36,6 +46,7 @@ export function ProjectNode({
   onAddRepo,
 }: ProjectNodeProps) {
   const { getWorkspacesForProject, updateWorkspace, deleteWorkspace } = useAppStore();
+  const setEditingProjectId = usePanelsStore((s) => s.setEditingProjectId);
 
   const workspaces = getWorkspacesForProject(project.id);
   const [showAll, setShowAll] = useState(false);
@@ -47,8 +58,12 @@ export function ProjectNode({
   const visibleWorkspaces = showAll ? workspaces : workspaces.slice(0, MAX_VISIBLE_WORKSPACES);
   const hiddenCount = workspaces.length - MAX_VISIBLE_WORKSPACES;
 
+  const handleEditProject = () => {
+    setEditingProjectId(project.id);
+  };
+
   const contextMenuItems: ContextMenuItem[] = [
-    { label: "New Workspace", icon: Plus, onClick: onCreateWorkspace },
+    { label: "Edit Project", icon: Settings, onClick: handleEditProject },
     ...(onAddRepo ? [{ label: "Add Repo", icon: FolderPlus, onClick: onAddRepo }] : []),
     {
       label: "Rename",
@@ -87,18 +102,45 @@ export function ProjectNode({
           {editing ? (
             <input type="text" {...inputProps} />
           ) : (
-            <button
-              type="button"
-              onClick={() => {
-                onSelectWorkspace(null);
-                if (!isExpanded) onToggle();
-              }}
-              onDoubleClick={startEditing}
-              title={project.name}
-              className="min-w-0 flex-1 truncate text-left text-sm font-semibold text-zinc-200 hover:text-zinc-50"
-            >
-              {project.name}
-            </button>
+            <>
+              <button
+                type="button"
+                onClick={() => {
+                  onSelectWorkspace(null);
+                  if (!isExpanded) onToggle();
+                }}
+                onDoubleClick={startEditing}
+                title={project.name}
+                className="min-w-0 flex-1 truncate text-left text-sm font-semibold text-zinc-200 hover:text-zinc-50"
+              >
+                {project.name}
+              </button>
+
+              <div className="flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onCreateWorkspace();
+                  }}
+                  className="rounded p-1 text-zinc-500 hover:bg-zinc-700 hover:text-zinc-300 focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:outline-none"
+                  title="New workspace"
+                >
+                  <Plus size={14} />
+                </button>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleContextMenu(e);
+                  }}
+                  className="rounded p-1 text-zinc-500 hover:bg-zinc-700 hover:text-zinc-300 focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:outline-none"
+                  title="Project actions"
+                >
+                  <MoreHorizontal size={14} />
+                </button>
+              </div>
+            </>
           )}
         </div>
 
@@ -127,15 +169,6 @@ export function ProjectNode({
                 {showAll ? "Show less" : `Show ${hiddenCount} more...`}
               </button>
             )}
-
-            <button
-              type="button"
-              onClick={onCreateWorkspace}
-              className="flex w-full items-center gap-1.5 rounded-md px-2 py-1 text-left text-xs text-zinc-600 transition-colors hover:bg-zinc-800/50 hover:text-zinc-400"
-            >
-              <Plus size={12} className="shrink-0" />
-              <span>New workspace</span>
-            </button>
           </div>
         )}
       </div>

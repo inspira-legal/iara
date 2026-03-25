@@ -10,6 +10,7 @@ const buttonVariants = cva(
         primary: "bg-blue-600 text-white hover:bg-blue-500",
         secondary: "border border-zinc-700 bg-zinc-800 text-zinc-300 hover:bg-zinc-700",
         ghost: "text-zinc-500 hover:bg-zinc-800 hover:text-zinc-300",
+        "ghost-active": "bg-zinc-800 text-zinc-200 hover:bg-zinc-700",
         danger: "bg-red-600 text-white hover:bg-red-500",
         dashed:
           "border border-dashed border-zinc-700 text-zinc-500 hover:border-zinc-500 hover:text-zinc-300",

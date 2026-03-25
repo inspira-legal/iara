@@ -12,6 +12,7 @@ import type {
 import { transport } from "~/lib/ws-transport";
 import { LocalCache } from "~/lib/local-cache";
 import { AppCacheSchema } from "~/lib/cache-schemas";
+import { usePanelsStore } from "./panels";
 
 const ROOT_WORKSPACE_SLUG = "main";
 
@@ -163,6 +164,7 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
   selectWorkspace: (id) => {
     set({ selectedWorkspaceId: id });
     savePrefs(get().settings, id);
+    usePanelsStore.getState().setEditingProjectId(null);
   },
 
   // ---------------------------------------------------------------------------
