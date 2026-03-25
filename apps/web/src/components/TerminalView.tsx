@@ -1,4 +1,4 @@
-import { useRef, useEffect, useCallback, type RefCallback } from "react";
+import { useState, useRef, useEffect, useCallback, type RefCallback } from "react";
 import { WebglAddon } from "@xterm/addon-webgl";
 import "@xterm/xterm/css/xterm.css";
 import { transport } from "~/lib/ws-transport.js";
@@ -17,9 +17,17 @@ export function TerminalView({ workspaceId, resumeSessionId }: TerminalViewProps
   const entry = useTerminalStore((s) => s.getEntry(workspaceId));
   const createTerminal = useTerminalStore((s) => s.create);
   const restartTerminal = useTerminalStore((s) => s.restart);
-  const { terminalId, status, exitCode } = entry;
+  const { terminalId, status, exitCode, hasData } = entry;
   const terminalIdRef = useRef<string | null>(null);
+  const [timedOut, setTimedOut] = useState(false);
   const { toast } = useToast();
+
+  useEffect(() => {
+    setTimedOut(false);
+    if (hasData) return;
+    const timer = setTimeout(() => setTimedOut(true), 10_000);
+    return () => clearTimeout(timer);
+  }, [workspaceId, status, hasData]);
 
   terminalIdRef.current = terminalId;
 
@@ -130,6 +138,9 @@ export function TerminalView({ workspaceId, resumeSessionId }: TerminalViewProps
     node?.focus();
   }, []);
 
+  const showLoading = !timedOut && (status === "connecting" || (status === "active" && !hasData));
+  const showStartupError = timedOut && !hasData && status !== "exited";
+
   return (
     <div className="relative flex flex-1 flex-col overflow-hidden">
       <div ref={containerRef} className="flex-1 overflow-hidden p-3" />
@@ -149,7 +160,22 @@ export function TerminalView({ workspaceId, resumeSessionId }: TerminalViewProps
           </div>
         </div>
       )}
-      {status === "connecting" && (
+      {showStartupError && (
+        <div className="absolute inset-0 flex items-center justify-center bg-zinc-950/80">
+          <div className="flex flex-col items-center gap-3 text-zinc-400" role="alert">
+            <p className="text-sm">Claude failed to start</p>
+            <button
+              type="button"
+              onClick={handleRestart}
+              className="flex items-center gap-1.5 rounded-md bg-blue-600 px-3 py-1.5 text-sm font-medium text-white transition-colors hover:bg-blue-500 focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:outline-none"
+            >
+              <RotateCw size={14} />
+              Retry
+            </button>
+          </div>
+        </div>
+      )}
+      {showLoading && (
         <div
           className="absolute inset-0 flex items-center justify-center bg-zinc-950"
           role="status"

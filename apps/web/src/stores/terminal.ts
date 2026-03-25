@@ -9,6 +9,7 @@ interface TerminalEntry {
   sessionId: string | null;
   status: TerminalStatus;
   exitCode: number | null;
+  hasData: boolean;
 }
 
 interface TerminalState {
@@ -29,6 +30,7 @@ const DEFAULT_ENTRY: TerminalEntry = {
   sessionId: null,
   status: "idle",
   exitCode: null,
+  hasData: false,
 };
 
 function invalidateSessions(workspaceId: string): void {
@@ -64,6 +66,7 @@ export const useTerminalStore = create<TerminalState & TerminalActions>((set, ge
           sessionId: result.sessionId,
           status: "active",
           exitCode: null,
+          hasData: false,
         });
         return { entries: next };
       });
@@ -147,3 +150,19 @@ transport.subscribe(
     useTerminalStore.getState().handleExit(terminalId, exitCode);
   },
 );
+
+transport.subscribe("terminal:data", ({ terminalId }: { terminalId: string }) => {
+  useTerminalStore.setState((s) => {
+    for (const [wsId, entry] of s.entries) {
+      if (entry.terminalId === terminalId) {
+        if (!entry.hasData) {
+          const next = new Map(s.entries);
+          next.set(wsId, { ...entry, hasData: true });
+          return { entries: next };
+        }
+        break;
+      }
+    }
+    return s;
+  });
+});

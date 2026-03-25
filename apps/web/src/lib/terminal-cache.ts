@@ -64,7 +64,7 @@ export function getOrCreateTerminal(terminalId: string): CachedTerminal {
   if (existing) return existing;
 
   const term = new Terminal({
-    fontFamily: "'JetBrains Mono NF', monospace",
+    fontFamily: "'JetBrainsMono NF', monospace",
     fontSize: 14,
     lineHeight: 1.0,
     letterSpacing: 0,
@@ -181,7 +181,7 @@ export function getOrCreateTerminal(terminalId: string): CachedTerminal {
   // Web fonts: ensure JetBrains Mono loads before rendering
   const webFontsAddon = new WebFontsAddon();
   term.loadAddon(webFontsAddon);
-  void webFontsAddon.loadFonts(["JetBrains Mono NF"]).then(() => fitAddon.fit());
+  void webFontsAddon.loadFonts(["JetBrainsMono NF"]).then(() => fitAddon.fit());
 
   // Track whether user has scrolled up so we can preserve their position
   // when new data arrives from the PTY.

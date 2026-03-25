@@ -29,6 +29,16 @@ import { useTerminalStore } from "./terminal";
 import type { TerminalStatus } from "./terminal";
 
 // ---------------------------------------------------------------------------
+// Capture module-level subscription handlers (registered at import time)
+// ---------------------------------------------------------------------------
+
+const subscriptionHandlers = new Map<string, (...args: unknown[]) => void>();
+for (const call of mockSubscribe.mock.calls) {
+  const [event, handler] = call as unknown as [string, (...args: unknown[]) => void];
+  subscriptionHandlers.set(event, handler);
+}
+
+// ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
@@ -37,6 +47,7 @@ interface TerminalEntry {
   sessionId: string | null;
   status: TerminalStatus;
   exitCode: number | null;
+  hasData: boolean;
 }
 
 const DEFAULT_ENTRY: TerminalEntry = {
@@ -44,6 +55,7 @@ const DEFAULT_ENTRY: TerminalEntry = {
   sessionId: null,
   status: "idle",
   exitCode: null,
+  hasData: false,
 };
 
 const INITIAL_STATE = {
@@ -76,6 +88,7 @@ describe("useTerminalStore", () => {
         sessionId: "sess-1",
         status: "active",
         exitCode: null,
+        hasData: false,
       };
       const entries = new Map<string, TerminalEntry>();
       entries.set("proj1/ws1", entry);
@@ -161,6 +174,7 @@ describe("useTerminalStore", () => {
         sessionId: "old-sess",
         status: "active",
         exitCode: null,
+        hasData: false,
       });
       useTerminalStore.setState({ entries });
 
@@ -184,6 +198,7 @@ describe("useTerminalStore", () => {
         sessionId: "old-sess",
         status: "exited",
         exitCode: 1,
+        hasData: false,
       });
       useTerminalStore.setState({ entries });
 
@@ -208,6 +223,7 @@ describe("useTerminalStore", () => {
         sessionId: "old-sess",
         status: "active",
         exitCode: null,
+        hasData: false,
       });
       useTerminalStore.setState({ entries });
 
@@ -235,6 +251,7 @@ describe("useTerminalStore", () => {
         sessionId: "sess-1",
         status: "active",
         exitCode: null,
+        hasData: false,
       });
       useTerminalStore.setState({ entries });
 
@@ -253,6 +270,7 @@ describe("useTerminalStore", () => {
         sessionId: "sess-1",
         status: "active",
         exitCode: null,
+        hasData: false,
       });
       useTerminalStore.setState({ entries });
 
@@ -287,6 +305,7 @@ describe("useTerminalStore", () => {
         sessionId: "sess-1",
         status: "active",
         exitCode: null,
+        hasData: false,
       });
       useTerminalStore.setState({ entries });
 
@@ -323,6 +342,7 @@ describe("useTerminalStore", () => {
         sessionId: "sess-1",
         status: "active",
         exitCode: null,
+        hasData: false,
       });
       useTerminalStore.setState({ entries });
 
@@ -339,6 +359,7 @@ describe("useTerminalStore", () => {
         sessionId: "sess-1",
         status: "active",
         exitCode: null,
+        hasData: false,
       });
       useTerminalStore.setState({ entries });
 
@@ -357,6 +378,7 @@ describe("useTerminalStore", () => {
         sessionId: "sess-1",
         status: "active",
         exitCode: null,
+        hasData: false,
       });
       useTerminalStore.setState({ entries });
 
@@ -373,6 +395,7 @@ describe("useTerminalStore", () => {
         sessionId: "sess-1",
         status: "active",
         exitCode: null,
+        hasData: false,
       });
       useTerminalStore.setState({ entries });
 
@@ -381,6 +404,118 @@ describe("useTerminalStore", () => {
       const entry = useTerminalStore.getState().getEntry("proj1/ws1");
       expect(entry.sessionId).toBe("sess-1");
       expect(entry.exitCode).toBe(137);
+    });
+  });
+
+  // -----------------------------------------------------------------------
+  // terminal:data subscription
+  // -----------------------------------------------------------------------
+
+  describe("terminal:data subscription", () => {
+    function getDataHandler(): (payload: { terminalId: string }) => void {
+      const handler = subscriptionHandlers.get("terminal:data");
+      if (!handler) throw new Error("terminal:data subscriber not registered");
+      return handler as (payload: { terminalId: string }) => void;
+    }
+
+    it("sets hasData to true on first data event", () => {
+      const entries = new Map<string, TerminalEntry>();
+      entries.set("proj1/ws1", {
+        terminalId: "term-1",
+        sessionId: "sess-1",
+        status: "active",
+        exitCode: null,
+        hasData: false,
+      });
+      useTerminalStore.setState({ entries });
+
+      getDataHandler()({ terminalId: "term-1" });
+
+      expect(useTerminalStore.getState().getEntry("proj1/ws1").hasData).toBe(true);
+    });
+
+    it("is a no-op when hasData is already true", () => {
+      const entries = new Map<string, TerminalEntry>();
+      const entry: TerminalEntry = {
+        terminalId: "term-1",
+        sessionId: "sess-1",
+        status: "active",
+        exitCode: null,
+        hasData: true,
+      };
+      entries.set("proj1/ws1", entry);
+      useTerminalStore.setState({ entries });
+
+      getDataHandler()({ terminalId: "term-1" });
+
+      // State reference should be unchanged (no unnecessary update)
+      expect(useTerminalStore.getState().entries.get("proj1/ws1")).toBe(entry);
+    });
+
+    it("is a no-op for unknown terminalId", () => {
+      const entries = new Map<string, TerminalEntry>();
+      entries.set("proj1/ws1", {
+        terminalId: "term-1",
+        sessionId: "sess-1",
+        status: "active",
+        exitCode: null,
+        hasData: false,
+      });
+      useTerminalStore.setState({ entries });
+      const before = useTerminalStore.getState().entries;
+
+      getDataHandler()({ terminalId: "unknown" });
+
+      // State reference unchanged
+      expect(useTerminalStore.getState().entries).toBe(before);
+    });
+
+    it("does not affect other entries", () => {
+      const entries = new Map<string, TerminalEntry>();
+      entries.set("proj1/ws1", {
+        terminalId: "term-1",
+        sessionId: "sess-1",
+        status: "active",
+        exitCode: null,
+        hasData: false,
+      });
+      entries.set("proj1/ws2", {
+        terminalId: "term-2",
+        sessionId: "sess-2",
+        status: "active",
+        exitCode: null,
+        hasData: false,
+      });
+      useTerminalStore.setState({ entries });
+
+      getDataHandler()({ terminalId: "term-1" });
+
+      expect(useTerminalStore.getState().getEntry("proj1/ws1").hasData).toBe(true);
+      expect(useTerminalStore.getState().getEntry("proj1/ws2").hasData).toBe(false);
+    });
+  });
+
+  // -----------------------------------------------------------------------
+  // create resets hasData
+  // -----------------------------------------------------------------------
+
+  describe("create() hasData lifecycle", () => {
+    it("sets hasData to false on create", async () => {
+      // Pre-set an entry with hasData: true (from a previous session)
+      const entries = new Map<string, TerminalEntry>();
+      entries.set("proj1/ws1", {
+        terminalId: "old-term",
+        sessionId: "old-sess",
+        status: "active",
+        exitCode: null,
+        hasData: true,
+      });
+      useTerminalStore.setState({ entries });
+
+      mockRequest.mockResolvedValueOnce({ terminalId: "new-term", sessionId: "new-sess" });
+      await useTerminalStore.getState().create("proj1/ws1");
+
+      expect(useTerminalStore.getState().getEntry("proj1/ws1").hasData).toBe(false);
     });
   });
 });
