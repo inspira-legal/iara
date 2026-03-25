@@ -25,6 +25,8 @@ import { isScriptActive, isScriptUnhealthy } from "~/lib/script-status";
 import { statusTextColor, statusBgTint } from "~/lib/status-colors";
 import { StatusButton } from "~/components/ui/StatusButton";
 import { useScriptsStore, useIsDiscovering, useDiscoveryError } from "~/stores/scripts";
+import { useShellStore, type ShellEntry } from "~/stores/shell";
+import { useAppStore } from "~/stores/app";
 import { useWorkspace } from "~/lib/workspace";
 import { transport } from "~/lib/ws-transport";
 import { XTerm, getOrCreateXTermInstance } from "~/components/XTerm";
@@ -785,126 +787,96 @@ function OutputGroup({
 }
 
 // ---------------------------------------------------------------------------
-// Shell Tab — multi-instance terminal with vertical sidebar
+// Shell Tab — global terminal list with sidebar
 // ---------------------------------------------------------------------------
-
-interface ShellInstance {
-  id: string;
-  terminalId: string | null;
-  status: "idle" | "connecting" | "active" | "exited";
-  exitCode: number | null;
-}
 
 function ShellTab() {
   const workspace = useWorkspace();
-  const [shells, setShells] = useState<ShellInstance[]>([]);
-  const [activeId, setActiveId] = useState<string | null>(null);
-  const prevWorkspaceRef = useRef<string | null>(null);
+  const shells = useShellStore((s) => s.shells);
+  const activeId = useShellStore((s) => s.activeId);
+  const addShell = useShellStore((s) => s.addShell);
+  const removeShell = useShellStore((s) => s.removeShell);
+  const setActiveId = useShellStore((s) => s.setActiveId);
+  const getWorkspace = useAppStore((s) => s.getWorkspace);
+  const [confirmingClose, setConfirmingClose] = useState<string | null>(null);
 
-  // Reset shells when workspace changes — terminals are scoped per workspace
-  useEffect(() => {
-    if (workspace === prevWorkspaceRef.current) return;
-    const prevShells = shells;
-    prevWorkspaceRef.current = workspace ?? null;
+  function handleAddShell() {
+    if (!workspace) return;
+    addShell(workspace);
+  }
 
-    // Destroy all shells from the previous workspace
-    for (const shell of prevShells) {
-      if (shell.terminalId) {
-        transport.request("terminal.destroy", { terminalId: shell.terminalId }).catch(() => {});
-        destroyXTermInstance(`shell:${shell.terminalId}`);
-      }
+  function handleRemoveShell(shellId: string) {
+    const shell = shells.find((s) => s.id === shellId);
+    if (!shell) return;
+
+    // Confirm if process is still running
+    if (shell.status === "active" || shell.status === "connecting") {
+      setConfirmingClose(shellId);
+      return;
     }
 
-    // Reset and auto-create first shell for new workspace
-    if (workspace) {
-      const id = crypto.randomUUID();
-      setShells([{ id, terminalId: null, status: "idle", exitCode: null }]);
-      setActiveId(id);
-    } else {
-      setShells([]);
-      setActiveId(null);
+    doRemoveShell(shellId);
+  }
+
+  function doRemoveShell(shellId: string) {
+    const shell = shells.find((s) => s.id === shellId);
+    if (shell?.terminalId) {
+      destroyXTermInstance(`shell:${shell.terminalId}`);
     }
-  }, [workspace]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  function addShell() {
-    const id = crypto.randomUUID();
-    setShells((prev) => [...prev, { id, terminalId: null, status: "idle", exitCode: null }]);
-    setActiveId(id);
+    removeShell(shellId);
+    setConfirmingClose(null);
   }
 
-  function removeShell(shellId: string) {
-    if (shells.length <= 1) return;
-    setShells((prev) => {
-      const idx = prev.findIndex((s) => s.id === shellId);
-      const shell = prev[idx];
-      if (shell?.terminalId) {
-        transport.request("terminal.destroy", { terminalId: shell.terminalId }).catch(() => {});
-        destroyXTermInstance(`shell:${shell.terminalId}`);
-      }
-      const next = prev.filter((s) => s.id !== shellId);
-      if (activeId === shellId) {
-        // Switch to adjacent shell or null
-        const newActive = next[Math.min(idx, next.length - 1)] ?? null;
-        setActiveId(newActive?.id ?? null);
-      }
-      return next;
-    });
-  }
-
-  function updateShell(shellId: string, updates: Partial<ShellInstance>) {
-    setShells((prev) => prev.map((s) => (s.id === shellId ? { ...s, ...updates } : s)));
-  }
-
-  if (!workspace) {
-    return <div className="p-4 text-sm text-zinc-600">Select a workspace to open a terminal</div>;
+  function shellDisplayName(shell: ShellEntry): string {
+    if (shell.title) return shell.title;
+    const ws = getWorkspace(shell.workspaceId);
+    return ws?.name ?? shell.workspaceId;
   }
 
   return (
     <div className="flex h-full">
-      {/* Vertical sidebar — shell instance list */}
-      <div className="flex w-9 shrink-0 flex-col items-center border-r border-zinc-800 py-1">
-        {shells.map((shell, idx) => (
-          <button
-            key={shell.id}
-            type="button"
-            onClick={() => setActiveId(shell.id)}
-            onAuxClick={(e) => {
-              if (e.button === 1) removeShell(shell.id);
-            }}
-            title={`Terminal ${idx + 1}${shell.status === "exited" ? " (exited)" : ""}`}
-            className={`group relative mb-0.5 flex h-7 w-7 items-center justify-center rounded text-xs ${
-              activeId === shell.id
-                ? "bg-zinc-700 text-zinc-200"
-                : "text-zinc-500 hover:bg-zinc-800 hover:text-zinc-400"
-            }`}
-          >
-            {activeId === shell.id && shells.length > 1 ? (
-              <>
-                <span className="group-hover:hidden">{idx + 1}</span>
-                <X
-                  size={12}
-                  className="hidden group-hover:block"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    removeShell(shell.id);
-                  }}
-                />
-              </>
-            ) : (
-              <>{idx + 1}</>
-            )}
-            {shell.status === "exited" && (
-              <span className="absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full bg-red-500" />
-            )}
-          </button>
-        ))}
+      {/* Sidebar — terminal list */}
+      <div className="flex w-44 shrink-0 flex-col border-r border-zinc-800">
+        <div className="flex-1 overflow-y-auto py-1">
+          {shells.map((shell) => (
+            <button
+              key={shell.id}
+              type="button"
+              onClick={() => setActiveId(shell.id)}
+              onAuxClick={(e) => {
+                if (e.button === 1) handleRemoveShell(shell.id);
+              }}
+              title={shellDisplayName(shell)}
+              className={`group flex w-full items-center gap-1.5 px-2 py-1 text-left text-xs ${
+                activeId === shell.id
+                  ? "bg-zinc-700/50 text-zinc-200"
+                  : "text-zinc-500 hover:bg-zinc-800 hover:text-zinc-400"
+              }`}
+            >
+              <TerminalSquare size={12} className="shrink-0" />
+              <span className="min-w-0 flex-1 truncate">{shellDisplayName(shell)}</span>
+              {shell.status === "exited" && (
+                <span className="h-2 w-2 shrink-0 rounded-full bg-red-500" />
+              )}
+              <X
+                size={12}
+                className="shrink-0 opacity-0 group-hover:opacity-100"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleRemoveShell(shell.id);
+                }}
+              />
+            </button>
+          ))}
+        </div>
         <button
           type="button"
-          onClick={addShell}
+          onClick={handleAddShell}
+          disabled={!workspace}
           title="New terminal"
-          className="mt-1 flex h-7 w-7 items-center justify-center rounded text-zinc-600 hover:bg-zinc-800 hover:text-zinc-400"
+          className="flex items-center gap-1.5 border-t border-zinc-800 px-2 py-1.5 text-xs text-zinc-500 hover:bg-zinc-800 hover:text-zinc-400 disabled:opacity-40 disabled:hover:bg-transparent"
         >
-          +
+          <span className="text-sm">+</span> New Terminal
         </button>
       </div>
 
@@ -915,57 +887,88 @@ function ShellTab() {
             key={shell.id}
             className={`absolute inset-0 ${shell.id === activeId ? "z-10 visible" : "z-0 invisible"}`}
           >
-            <ShellTerminal
-              shell={shell}
-              workspace={workspace}
-              isActive={shell.id === activeId}
-              onUpdate={(updates) => updateShell(shell.id, updates)}
-            />
+            <ShellTerminal shell={shell} isActive={shell.id === activeId} />
           </div>
         ))}
         {shells.length === 0 && (
-          <div className="flex h-full items-center justify-center text-sm text-zinc-600">
-            No terminals open
+          <div className="flex h-full flex-col items-center justify-center gap-2 text-sm text-zinc-600">
+            <TerminalSquare size={24} className="text-zinc-700" />
+            <p>No terminals open</p>
+            {workspace && (
+              <button
+                type="button"
+                onClick={handleAddShell}
+                className="mt-1 rounded-md bg-zinc-800 px-3 py-1.5 text-xs text-zinc-400 hover:bg-zinc-700 hover:text-zinc-300"
+              >
+                New Terminal
+              </button>
+            )}
           </div>
         )}
       </div>
+
+      {/* Close confirmation dialog */}
+      {confirmingClose && (
+        <div className="absolute inset-0 z-50 flex items-center justify-center bg-zinc-950/70">
+          <div className="flex flex-col gap-3 rounded-lg bg-zinc-800 p-4 shadow-xl">
+            <p className="text-sm text-zinc-300">
+              Terminal process is still running. Close anyway?
+            </p>
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setConfirmingClose(null)}
+                className="rounded px-3 py-1.5 text-xs text-zinc-400 hover:bg-zinc-700"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => doRemoveShell(confirmingClose)}
+                className="rounded bg-red-600 px-3 py-1.5 text-xs text-white hover:bg-red-500"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
-function ShellTerminal({
-  shell,
-  workspace,
-  isActive,
-  onUpdate,
-}: {
-  shell: ShellInstance;
-  workspace: string;
-  isActive: boolean;
-  onUpdate: (updates: Partial<ShellInstance>) => void;
-}) {
-  const onUpdateRef = useRef(onUpdate);
-  onUpdateRef.current = onUpdate;
+function ShellTerminal({ shell, isActive }: { shell: ShellEntry; isActive: boolean }) {
+  const updateShell = useShellStore((s) => s.updateShell);
 
   // Create shell terminal when idle
   useEffect(() => {
-    if (!workspace || shell.status !== "idle") return;
+    if (shell.status !== "idle") return;
 
-    onUpdateRef.current({ status: "connecting" });
+    updateShell(shell.id, { status: "connecting" });
     transport
-      .request("terminal.create", { workspaceId: workspace, mode: "shell" })
+      .request("terminal.create", { workspaceId: shell.workspaceId, mode: "shell" })
       .then(({ terminalId: id }) => {
-        onUpdateRef.current({ terminalId: id, status: "active" });
+        updateShell(shell.id, { terminalId: id, status: "active" });
       })
       .catch((err) => {
         console.error("Failed to create shell:", err);
-        onUpdateRef.current({ status: "exited", exitCode: -1 });
+        updateShell(shell.id, { status: "exited", exitCode: -1 });
       });
-  }, [workspace, shell.status]);
+  }, [shell.id, shell.status, shell.workspaceId, updateShell]);
 
-  const handleExit = useCallback((exitCode: number) => {
-    onUpdateRef.current({ status: "exited", exitCode });
-  }, []);
+  const handleExit = useCallback(
+    (exitCode: number) => {
+      updateShell(shell.id, { status: "exited", exitCode });
+    },
+    [shell.id, updateShell],
+  );
+
+  const handleTitleChange = useCallback(
+    (title: string) => {
+      updateShell(shell.id, { title });
+    },
+    [shell.id, updateShell],
+  );
 
   const handleRestart = useCallback(() => {
     const tid = shell.terminalId;
@@ -973,8 +976,8 @@ function ShellTerminal({
       transport.request("terminal.destroy", { terminalId: tid }).catch(() => {});
       destroyXTermInstance(`shell:${tid}`);
     }
-    onUpdateRef.current({ terminalId: null, status: "idle", exitCode: null });
-  }, [shell.terminalId]);
+    updateShell(shell.id, { terminalId: null, status: "idle", exitCode: null, title: null });
+  }, [shell.id, shell.terminalId, updateShell]);
 
   // Focus and refit terminal when switching to this tab
   useEffect(() => {
@@ -993,6 +996,7 @@ function ShellTerminal({
         terminalId={shell.terminalId}
         instancePrefix="shell"
         onExit={handleExit}
+        onTitleChange={handleTitleChange}
         className="p-1"
       />
       {shell.status === "connecting" && (

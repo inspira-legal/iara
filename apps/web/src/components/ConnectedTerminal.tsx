@@ -10,6 +10,8 @@ interface ConnectedTerminalProps {
   instancePrefix?: string | undefined;
   /** Called when the terminal process exits. */
   onExit?: ((exitCode: number) => void) | undefined;
+  /** Called when the terminal title changes (OSC 0/2). */
+  onTitleChange?: ((title: string) => void) | undefined;
   className?: string | undefined;
   children?: ReactNode | undefined;
 }
@@ -27,6 +29,7 @@ export function ConnectedTerminal({
   terminalId,
   instancePrefix = "term",
   onExit,
+  onTitleChange,
   className,
   children,
 }: ConnectedTerminalProps) {
@@ -35,18 +38,22 @@ export function ConnectedTerminal({
   terminalIdRef.current = terminalId;
   const onExitRef = useRef(onExit);
   onExitRef.current = onExit;
+  const onTitleChangeRef = useRef(onTitleChange);
+  onTitleChangeRef.current = onTitleChange;
 
   const instanceId = terminalId ? `${instancePrefix}:${terminalId}` : null;
 
-  // Subscribe to terminal data → xterm
+  // Subscribe to terminal data → xterm, exit events, and title changes (OSC 0/2)
   useEffect(() => {
     if (!terminalId || !instanceId) return;
     const tid = terminalId;
     const iid = instanceId;
 
+    const instance = getOrCreateXTermInstance(iid, { terminalId: tid });
+
     const unsubData = transport.subscribe("terminal:data", ({ terminalId: evtTid, data }) => {
       if (evtTid === tid) {
-        getOrCreateXTermInstance(iid, { terminalId: tid }).writeData(data);
+        instance.writeData(data);
       }
     });
 
@@ -56,9 +63,14 @@ export function ConnectedTerminal({
       }
     });
 
+    const titleDisposable = instance.term.onTitleChange((title) => {
+      onTitleChangeRef.current?.(title);
+    });
+
     return () => {
       unsubData();
       unsubExit();
+      titleDisposable.dispose();
     };
   }, [terminalId, instanceId]);
 

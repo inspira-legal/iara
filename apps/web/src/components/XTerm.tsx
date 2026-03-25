@@ -340,7 +340,8 @@ export function XTerm({
       container.appendChild(term.element);
     }
 
-    fitAddon.fit();
+    // Defer initial fit to next frame so the flex container has its final dimensions
+    requestAnimationFrame(() => fitAddon.fit());
 
     // User input
     let onDataDisposable: IDisposable | null = null;
