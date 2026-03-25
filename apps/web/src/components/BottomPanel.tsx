@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type RefObject } from "react";
+import { useEffect, useMemo, useRef, useState, useCallback, type RefObject } from "react";
 import type { PanelImperativeHandle } from "react-resizable-panels";
 import {
   Play,
@@ -17,6 +17,8 @@ import {
   FlaskConical,
   Workflow,
   AlertCircle,
+  TerminalSquare,
+  X,
 } from "lucide-react";
 import type { EssencialKey, ResolvedServiceDef, ScriptStatus } from "@iara/contracts";
 import { isScriptActive, isScriptUnhealthy } from "~/lib/script-status";
@@ -25,6 +27,9 @@ import { StatusButton } from "~/components/ui/StatusButton";
 import { useScriptsStore, useIsDiscovering, useDiscoveryError } from "~/stores/scripts";
 import { useWorkspace } from "~/lib/workspace";
 import { transport } from "~/lib/ws-transport";
+import { XTerm, getOrCreateXTermInstance } from "~/components/XTerm";
+import { ConnectedTerminal, destroyXTermInstance } from "~/components/ConnectedTerminal";
+import { useToast } from "~/components/Toast";
 
 /** Essencial key order — codegen runs before dev */
 const ESSENCIAL_ORDER: EssencialKey[] = ["setup", "codegen", "dev", "build", "check", "test"];
@@ -40,7 +45,6 @@ const ESSENCIAL_ICONS: Record<EssencialKey, typeof Play> = {
 
 export function BottomPanel({ panelRef }: { panelRef: RefObject<PanelImperativeHandle | null> }) {
   const config = useScriptsStore((s) => s.config);
-  const loading = useScriptsStore((s) => s.loading);
   const activeTab = useScriptsStore((s) => s.activeTab);
   const collapsed = activeTab === null;
   const subscribePush = useScriptsStore((s) => s.subscribePush);
@@ -129,7 +133,7 @@ export function BottomPanel({ panelRef }: { panelRef: RefObject<PanelImperativeH
     }
   };
 
-  const handleTabClick = (tab: "scripts" | "output") => {
+  const handleTabClick = (tab: "scripts" | "output" | "terminal") => {
     if (!workspace) return;
     if (activeTab === tab) {
       setActiveTab(null);
@@ -159,25 +163,31 @@ export function BottomPanel({ panelRef }: { panelRef: RefObject<PanelImperativeH
             label="Scripts"
             active={activeTab === "scripts"}
             onClick={() => handleTabClick("scripts")}
-            badge={runningCount || undefined}
           />
           {hasOutputs && (
             <TabButton
               label="Output"
               active={activeTab === "output"}
               onClick={() => handleTabClick("output")}
+              badge={runningCount || undefined}
             />
           )}
-          {(loading || discovering) && (
-            <Loader2 size={10} className="ml-1 animate-spin text-zinc-500" />
-          )}
+          <TabButton
+            label="Terminal"
+            icon={<TerminalSquare size={12} />}
+            active={activeTab === "terminal"}
+            onClick={() => handleTabClick("terminal")}
+          />
         </div>
       </div>
 
       {/* Panel content */}
-      <div className="min-h-0 flex-1 overflow-y-auto bg-zinc-950">
+      <div className="relative min-h-0 flex-1 overflow-hidden bg-zinc-950">
         {activeTab === "scripts" && <ScriptsTab />}
         {activeTab === "output" && <OutputTab />}
+        <div className={activeTab === "terminal" ? "flex h-full flex-col" : "hidden"}>
+          <ShellTab />
+        </div>
       </div>
     </div>
   );
@@ -185,11 +195,13 @@ export function BottomPanel({ panelRef }: { panelRef: RefObject<PanelImperativeH
 
 function TabButton({
   label,
+  icon,
   active,
   onClick,
   badge,
 }: {
   label: string;
+  icon?: React.ReactNode;
   active: boolean;
   onClick: () => void;
   badge?: number | undefined;
@@ -204,6 +216,7 @@ function TabButton({
           : "text-zinc-500 hover:bg-zinc-800/50 hover:text-zinc-400"
       }`}
     >
+      {icon}
       {label}
       {badge !== undefined && badge > 0 && (
         <span
@@ -277,7 +290,7 @@ function ScriptsTab() {
   }
 
   return (
-    <div className="p-3">
+    <div className="overflow-y-auto p-3">
       <CommandBar />
       <div className="mt-3 grid gap-2">
         {config.services.map((svc) => (
@@ -303,7 +316,6 @@ function getCategoryState(
   ).length;
 
   if (activeCount > 0) {
-    // How many services have this script defined?
     const totalWithScript = services.filter((svc) => svc.essencial[category]).length;
     return activeCount >= totalWithScript ? "running" : "partial";
   }
@@ -393,18 +405,8 @@ function CategoryButton({
 
   return (
     <StatusButton state={state} onClick={isActive ? onStop : onRun} title={titleMap[state]}>
-      {state === "starting" ? (
-        <Loader2 size={10} className="animate-spin" />
-      ) : state === "running" ? (
-        <Square size={8} />
-      ) : (
-        <Icon size={12} />
-      )}
-      {state === "starting"
-        ? `Starting ${category}`
-        : state === "running"
-          ? `Stop ${category}`
-          : category}
+      <Icon size={12} />
+      {category}
     </StatusButton>
   );
 }
@@ -511,7 +513,6 @@ function ScriptButton({
   onRun: () => void;
   onStop: (scriptId: string) => void;
 }) {
-  const isStarting = status?.health === "starting";
   const isRunning = status && isScriptActive(status);
   const ButtonIcon = Icon ?? Play;
 
@@ -519,24 +520,18 @@ function ScriptButton({
     if (status?.scriptId) onStop(status.scriptId);
   };
 
-  const state = isStarting ? "starting" : isRunning ? "running" : getHealthState(status);
+  const state = isRunning ? "running" : getHealthState(status);
 
   return (
     <StatusButton
       state={state}
       size="sm"
-      onClick={isStarting || isRunning ? handleStop : onRun}
-      title={isStarting || isRunning ? `Stop ${script}` : `Run ${script}`}
-      className={!isStarting && !isRunning && variant === "advanced" ? "text-zinc-600" : undefined}
+      onClick={isRunning ? handleStop : onRun}
+      title={isRunning ? `Stop ${script}` : `Run ${script}`}
+      className={!isRunning && variant === "advanced" ? "text-zinc-600" : undefined}
     >
-      {isStarting ? (
-        <Loader2 size={8} className="animate-spin" />
-      ) : isRunning ? (
-        <Square size={8} />
-      ) : (
-        <ButtonIcon size={8} />
-      )}
-      {isStarting ? `Starting ${script}` : isRunning ? `Stop ${script}` : script}
+      {isRunning ? <Square size={8} /> : <ButtonIcon size={8} />}
+      {script}
     </StatusButton>
   );
 }
@@ -575,16 +570,15 @@ function getWorstHealth(statuses: ScriptStatus[]): string | null {
 }
 
 // ---------------------------------------------------------------------------
-// Output Tab
+// Output Tab — xterm.js rendered script output
 // ---------------------------------------------------------------------------
 
 function OutputTab() {
-  const nextLineIdRef = useRef(0);
   const config = useScriptsStore((s) => s.config);
   const logs = useScriptsStore((s) => s.logs);
   const selectedLog = useScriptsStore((s) => s.selectedLog);
   const selectLog = useScriptsStore((s) => s.selectLog);
-  const logsEndRef = useRef<HTMLDivElement>(null);
+  const { toast } = useToast();
 
   // Group by script name
   const groups = useMemo(() => {
@@ -607,7 +601,6 @@ function OutputTab() {
     }
   }, [config?.statuses, selectedLog, selectLog]);
 
-  // Current log lines — find the status id to look up logs
   const selectedStatus = useMemo(
     () =>
       selectedLog
@@ -617,30 +610,57 @@ function OutputTab() {
         : null,
     [config?.statuses, selectedLog],
   );
-  const keyedLinesRef = useRef<{ id: number; text: string }[]>([]);
-  const currentLines = useMemo(() => {
-    const raw = selectedStatus ? (logs.get(selectedStatus.scriptId) ?? []) : [];
-    const prev = keyedLinesRef.current;
-    // Reuse existing keyed entries, append new ones with fresh IDs
-    const result: { id: number; text: string }[] = raw.map((text, idx) => {
-      const existing = prev[idx];
-      return existing && existing.text === text ? existing : { id: nextLineIdRef.current++, text };
-    });
-    keyedLinesRef.current = result;
-    return result;
-  }, [selectedStatus, logs]);
 
-  const logContainerRef = useRef<HTMLDivElement>(null);
+  const scriptId = selectedStatus?.scriptId ?? null;
+  const instanceId = scriptId ? `script-output:${scriptId}` : null;
 
-  // Auto-scroll only when user is already at the bottom
+  // Write log lines to the xterm instance
+  const prevLinesRef = useRef<number>(0);
   useEffect(() => {
-    const container = logContainerRef.current;
-    if (!container) return;
-    const isAtBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 40;
-    if (isAtBottom) {
-      logsEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    if (!instanceId || !scriptId) {
+      prevLinesRef.current = 0;
+      return;
     }
-  }, [currentLines]);
+
+    const lines = logs.get(scriptId) ?? [];
+    const instance = getOrCreateXTermInstance(instanceId, { readOnly: true });
+
+    // On first mount or script switch, write all buffered lines
+    if (prevLinesRef.current === 0 && lines.length > 0) {
+      instance.term.clear();
+      for (const line of lines) {
+        instance.writeData(`${line}\r\n`);
+      }
+      prevLinesRef.current = lines.length;
+    } else if (lines.length > prevLinesRef.current) {
+      // Write only new lines
+      for (let i = prevLinesRef.current; i < lines.length; i++) {
+        instance.writeData(`${lines[i]}\r\n`);
+      }
+      prevLinesRef.current = lines.length;
+    }
+  }, [instanceId, scriptId, logs]);
+
+  // Reset line counter when switching scripts
+  useEffect(() => {
+    prevLinesRef.current = 0;
+  }, [scriptId]);
+
+  // Cleanup old XTerm instances when switching scripts or unmounting
+  const prevInstanceIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    const prev = prevInstanceIdRef.current;
+    if (prev && prev !== instanceId) {
+      destroyXTermInstance(prev);
+    }
+    prevInstanceIdRef.current = instanceId;
+    return () => {
+      if (prevInstanceIdRef.current) {
+        destroyXTermInstance(prevInstanceIdRef.current);
+        prevInstanceIdRef.current = null;
+      }
+    };
+  }, [instanceId]);
 
   if ((config?.statuses ?? []).length === 0 && !selectedLog) {
     return <div className="p-4 text-sm text-zinc-600">No scripts have been run</div>;
@@ -660,22 +680,21 @@ function OutputTab() {
         ))}
       </div>
 
-      {/* Log output */}
-      <div
-        ref={logContainerRef}
-        className="flex-1 overflow-y-auto p-2 font-mono text-xs text-zinc-400"
-      >
-        {currentLines.map(({ id, text }) => (
-          <div
-            key={id}
-            className={`whitespace-pre-wrap leading-5 ${
-              text.startsWith("> ") ? "text-zinc-300 font-semibold" : ""
-            } ${text.startsWith("[iara]") ? "text-blue-400/70 italic" : ""}`}
-          >
-            {text}
+      {/* Terminal output */}
+      <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+        {instanceId ? (
+          <XTerm
+            key={instanceId}
+            instanceId={instanceId}
+            readOnly
+            onCopy={() => toast("Copied to clipboard", "success")}
+            className="p-1"
+          />
+        ) : (
+          <div className="flex flex-1 items-center justify-center text-sm text-zinc-600">
+            Select a script to view output
           </div>
-        ))}
-        <div ref={logsEndRef} />
+        )}
       </div>
     </div>
   );
@@ -761,6 +780,245 @@ function OutputGroup({
             onSelect={() => onSelect({ service: s.service, script: s.script })}
           />
         ))}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Shell Tab — multi-instance terminal with vertical sidebar
+// ---------------------------------------------------------------------------
+
+interface ShellInstance {
+  id: string;
+  terminalId: string | null;
+  status: "idle" | "connecting" | "active" | "exited";
+  exitCode: number | null;
+}
+
+function ShellTab() {
+  const workspace = useWorkspace();
+  const [shells, setShells] = useState<ShellInstance[]>([]);
+  const [activeId, setActiveId] = useState<string | null>(null);
+  const prevWorkspaceRef = useRef<string | null>(null);
+
+  // Reset shells when workspace changes — terminals are scoped per workspace
+  useEffect(() => {
+    if (workspace === prevWorkspaceRef.current) return;
+    const prevShells = shells;
+    prevWorkspaceRef.current = workspace ?? null;
+
+    // Destroy all shells from the previous workspace
+    for (const shell of prevShells) {
+      if (shell.terminalId) {
+        transport.request("terminal.destroy", { terminalId: shell.terminalId }).catch(() => {});
+        destroyXTermInstance(`shell:${shell.terminalId}`);
+      }
+    }
+
+    // Reset and auto-create first shell for new workspace
+    if (workspace) {
+      const id = crypto.randomUUID();
+      setShells([{ id, terminalId: null, status: "idle", exitCode: null }]);
+      setActiveId(id);
+    } else {
+      setShells([]);
+      setActiveId(null);
+    }
+  }, [workspace]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  function addShell() {
+    const id = crypto.randomUUID();
+    setShells((prev) => [...prev, { id, terminalId: null, status: "idle", exitCode: null }]);
+    setActiveId(id);
+  }
+
+  function removeShell(shellId: string) {
+    if (shells.length <= 1) return;
+    setShells((prev) => {
+      const idx = prev.findIndex((s) => s.id === shellId);
+      const shell = prev[idx];
+      if (shell?.terminalId) {
+        transport.request("terminal.destroy", { terminalId: shell.terminalId }).catch(() => {});
+        destroyXTermInstance(`shell:${shell.terminalId}`);
+      }
+      const next = prev.filter((s) => s.id !== shellId);
+      if (activeId === shellId) {
+        // Switch to adjacent shell or null
+        const newActive = next[Math.min(idx, next.length - 1)] ?? null;
+        setActiveId(newActive?.id ?? null);
+      }
+      return next;
+    });
+  }
+
+  function updateShell(shellId: string, updates: Partial<ShellInstance>) {
+    setShells((prev) => prev.map((s) => (s.id === shellId ? { ...s, ...updates } : s)));
+  }
+
+  if (!workspace) {
+    return <div className="p-4 text-sm text-zinc-600">Select a workspace to open a terminal</div>;
+  }
+
+  return (
+    <div className="flex h-full">
+      {/* Vertical sidebar — shell instance list */}
+      <div className="flex w-9 shrink-0 flex-col items-center border-r border-zinc-800 py-1">
+        {shells.map((shell, idx) => (
+          <button
+            key={shell.id}
+            type="button"
+            onClick={() => setActiveId(shell.id)}
+            onAuxClick={(e) => {
+              if (e.button === 1) removeShell(shell.id);
+            }}
+            title={`Terminal ${idx + 1}${shell.status === "exited" ? " (exited)" : ""}`}
+            className={`group relative mb-0.5 flex h-7 w-7 items-center justify-center rounded text-xs ${
+              activeId === shell.id
+                ? "bg-zinc-700 text-zinc-200"
+                : "text-zinc-500 hover:bg-zinc-800 hover:text-zinc-400"
+            }`}
+          >
+            {activeId === shell.id && shells.length > 1 ? (
+              <>
+                <span className="group-hover:hidden">{idx + 1}</span>
+                <X
+                  size={12}
+                  className="hidden group-hover:block"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    removeShell(shell.id);
+                  }}
+                />
+              </>
+            ) : (
+              <>{idx + 1}</>
+            )}
+            {shell.status === "exited" && (
+              <span className="absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full bg-red-500" />
+            )}
+          </button>
+        ))}
+        <button
+          type="button"
+          onClick={addShell}
+          title="New terminal"
+          className="mt-1 flex h-7 w-7 items-center justify-center rounded text-zinc-600 hover:bg-zinc-800 hover:text-zinc-400"
+        >
+          +
+        </button>
+      </div>
+
+      {/* All terminals — stack with visibility to preserve xterm canvas */}
+      <div className="relative min-w-0 flex-1 overflow-hidden">
+        {shells.map((shell) => (
+          <div
+            key={shell.id}
+            className={`absolute inset-0 ${shell.id === activeId ? "z-10 visible" : "z-0 invisible"}`}
+          >
+            <ShellTerminal
+              shell={shell}
+              workspace={workspace}
+              isActive={shell.id === activeId}
+              onUpdate={(updates) => updateShell(shell.id, updates)}
+            />
+          </div>
+        ))}
+        {shells.length === 0 && (
+          <div className="flex h-full items-center justify-center text-sm text-zinc-600">
+            No terminals open
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function ShellTerminal({
+  shell,
+  workspace,
+  isActive,
+  onUpdate,
+}: {
+  shell: ShellInstance;
+  workspace: string;
+  isActive: boolean;
+  onUpdate: (updates: Partial<ShellInstance>) => void;
+}) {
+  const onUpdateRef = useRef(onUpdate);
+  onUpdateRef.current = onUpdate;
+
+  // Create shell terminal when idle
+  useEffect(() => {
+    if (!workspace || shell.status !== "idle") return;
+
+    onUpdateRef.current({ status: "connecting" });
+    transport
+      .request("terminal.create", { workspaceId: workspace, mode: "shell" })
+      .then(({ terminalId: id }) => {
+        onUpdateRef.current({ terminalId: id, status: "active" });
+      })
+      .catch((err) => {
+        console.error("Failed to create shell:", err);
+        onUpdateRef.current({ status: "exited", exitCode: -1 });
+      });
+  }, [workspace, shell.status]);
+
+  const handleExit = useCallback((exitCode: number) => {
+    onUpdateRef.current({ status: "exited", exitCode });
+  }, []);
+
+  const handleRestart = useCallback(() => {
+    const tid = shell.terminalId;
+    if (tid) {
+      transport.request("terminal.destroy", { terminalId: tid }).catch(() => {});
+      destroyXTermInstance(`shell:${tid}`);
+    }
+    onUpdateRef.current({ terminalId: null, status: "idle", exitCode: null });
+  }, [shell.terminalId]);
+
+  // Focus and refit terminal when switching to this tab
+  useEffect(() => {
+    if (isActive && shell.terminalId) {
+      const instance = getOrCreateXTermInstance(`shell:${shell.terminalId}`);
+      requestAnimationFrame(() => {
+        instance.fitAddon.fit();
+        instance.term.focus();
+      });
+    }
+  }, [isActive, shell.terminalId]);
+
+  return (
+    <div className="relative flex h-full flex-col overflow-hidden">
+      <ConnectedTerminal
+        terminalId={shell.terminalId}
+        instancePrefix="shell"
+        onExit={handleExit}
+        className="p-1"
+      />
+      {shell.status === "connecting" && (
+        <div
+          className="absolute inset-0 flex items-center justify-center bg-zinc-950"
+          role="status"
+        >
+          <p className="text-sm text-zinc-500">Starting terminal...</p>
+        </div>
+      )}
+      {shell.status === "exited" && (
+        <div className="absolute inset-0 flex items-center justify-center bg-zinc-950/80">
+          <div className="flex flex-col items-center gap-3 text-zinc-400" role="alert">
+            <p className="text-sm">
+              Terminal exited{shell.exitCode != null ? ` (code ${shell.exitCode})` : ""}
+            </p>
+            <button
+              type="button"
+              onClick={handleRestart}
+              className="flex items-center gap-1.5 rounded-md bg-blue-600 px-3 py-1.5 text-sm font-medium text-white transition-colors hover:bg-blue-500 focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:outline-none"
+            >
+              Restart
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

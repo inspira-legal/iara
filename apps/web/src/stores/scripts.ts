@@ -4,7 +4,7 @@ import { transport } from "../lib/ws-transport.js";
 
 const MAX_LOG_LINES = 1000;
 
-type PanelTab = "scripts" | "output" | null;
+type PanelTab = "scripts" | "output" | "terminal" | null;
 
 interface ScriptsState {
   config: ScriptsConfig | null;
@@ -54,10 +54,11 @@ export const useScriptsStore = create<ScriptsState & ScriptsActions>((set, get) 
   activeTab: null as PanelTab,
 
   loadConfig: async (workspaceId) => {
+    const currentTab = get().activeTab;
     set({
       loading: true,
       selectedLog: null,
-      activeTab: "scripts",
+      activeTab: currentTab ?? "scripts",
       currentWorkspaceId: workspaceId,
       config: null,
     });
@@ -159,12 +160,23 @@ export const useScriptsStore = create<ScriptsState & ScriptsActions>((set, get) 
           }
         }
         const next = [...config.statuses];
+        let staleScriptId: string | null = null;
         if (existing >= 0) {
+          const prev = config.statuses[existing]!;
+          if (prev.scriptId !== status.scriptId) {
+            staleScriptId = prev.scriptId;
+          }
           next[existing] = status;
         } else {
           next.push(status);
         }
-        set({ config: { ...config, statuses: next } });
+        if (staleScriptId) {
+          const logs = new Map(get().logs);
+          logs.delete(staleScriptId);
+          set({ config: { ...config, statuses: next }, logs });
+        } else {
+          set({ config: { ...config, statuses: next } });
+        }
       },
     );
 

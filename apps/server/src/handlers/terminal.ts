@@ -26,6 +26,7 @@ function getGuardrailsEnv(appState: AppState): Record<string, string> {
 
 export function registerTerminalHandlers(appState: AppState, manager: TerminalManager): void {
   registerMethod("terminal.create", async (params) => {
+    const mode = params.mode ?? "claude";
     const workspace = appState.getWorkspace(params.workspaceId);
     if (!workspace) throw new Error(`Workspace not found: ${params.workspaceId}`);
 
@@ -36,11 +37,20 @@ export function registerTerminalHandlers(appState: AppState, manager: TerminalMa
     const projectDir = appState.getProjectDir(projectSlug);
     const workspaceDir = appState.getWorkspaceDir(params.workspaceId);
 
-    // Workspace mode: repos are worktrees under workspaces/<slug>/<repoName>
+    // Shell mode — just spawn a shell in the workspace dir
+    if (mode === "shell") {
+      return manager.create({
+        workspaceId: params.workspaceId,
+        workspaceDir,
+        mode: "shell",
+        repoDirs: [workspaceDir],
+      });
+    }
+
+    // Claude mode — full repo discovery, system prompt, env setup
     const repoDirs: string[] = [];
     const repos: RepoContext[] = [];
 
-    // Discover repos from project root and find matching worktrees in the workspace
     const repoNames = appState.discoverRepos(projectSlug);
     for (const name of repoNames) {
       const wtDir = path.join(workspaceDir, name);
@@ -67,15 +77,12 @@ export function registerTerminalHandlers(appState: AppState, manager: TerminalMa
       repoDirs.push(workspaceDir);
     }
 
-    // Merge env files (global + local) for all repos
     const envRepoNames = repos.map((r) => r.name);
     const envVars = mergeEnvForWorkspace(projectSlug, workspace.slug, envRepoNames);
 
-    // When resuming a session, honour sessionCwd so the hash matches the original
     const effectiveCwd =
       params.resumeSessionId && params.sessionCwd ? params.sessionCwd : workspaceDir;
 
-    // Build system prompt
     const systemPrompt =
       repos.length > 0
         ? buildSystemPrompt({
@@ -99,6 +106,7 @@ export function registerTerminalHandlers(appState: AppState, manager: TerminalMa
     return manager.create({
       workspaceId: params.workspaceId,
       workspaceDir: effectiveCwd,
+      mode: "claude",
       repoDirs,
       ...(workspaceContext ? { workspaceContext } : {}),
       appendSystemPrompt: systemPrompt,

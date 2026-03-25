@@ -16,6 +16,7 @@ import {
 interface TerminalCreateConfig {
   workspaceId: string;
   workspaceDir: string;
+  mode?: "claude" | "shell";
   repoDirs: string[];
   workspaceContext?: WorkspaceContext;
   appendSystemPrompt?: string;
@@ -29,6 +30,7 @@ interface TerminalCreateConfig {
 interface ManagedTerminal {
   id: string;
   workspaceId: string;
+  mode: "claude" | "shell";
   sessionId: string;
   initialCwd: string;
   pty: pty.IPty;
@@ -50,31 +52,19 @@ export class TerminalManager {
   }
 
   create(config: TerminalCreateConfig): { terminalId: string; sessionId: string } {
-    // If terminal already exists for this workspace, return it
-    const existing = this.getByWorkspaceId(config.workspaceId);
-    if (existing) {
-      return { terminalId: existing.id, sessionId: existing.sessionId };
+    const mode = config.mode ?? "claude";
+
+    // Reuse existing terminal for claude mode (one per workspace).
+    // Shell mode always creates a new instance (multiple shells per workspace).
+    if (mode === "claude") {
+      const existing = this.getByWorkspaceId(config.workspaceId, "claude");
+      if (existing) {
+        return { terminalId: existing.id, sessionId: existing.sessionId };
+      }
     }
 
     const terminalId = crypto.randomUUID();
     const sessionId = config.resumeSessionId ?? crypto.randomUUID();
-    const systemPrompt =
-      config.appendSystemPrompt ??
-      (config.workspaceContext
-        ? buildSystemPrompt(config.workspaceContext)
-        : buildSystemPromptFromDir(config.workspaceDir));
-
-    const launchConfig: LaunchConfig = {
-      workspaceDir: config.workspaceDir,
-      repoDirs: config.repoDirs,
-      resumeSessionId: config.resumeSessionId,
-      sessionId,
-      appendSystemPrompt: systemPrompt,
-      pluginDir: config.pluginDir ?? process.env.IARA_PLUGIN_DIR,
-      env: config.env,
-    };
-
-    const args = buildClaudeArgs(launchConfig);
 
     const env: Record<string, string> = {
       HOME: process.env.HOME ?? "",
@@ -83,16 +73,43 @@ export class TerminalManager {
       PATH: process.env.PATH ?? "/usr/local/bin:/usr/bin:/bin",
       ...cleanEnv(process.env),
       ...config.env,
-      IARA_SESSION_ID: sessionId,
       LANG: process.env.LANG ?? "en_US.UTF-8",
       LC_ALL: process.env.LC_ALL ?? "en_US.UTF-8",
       TERM: "xterm-256color",
       COLORTERM: "truecolor",
     } as Record<string, string>;
 
-    console.log("[terminal] spawn claude", { cwd: config.workspaceDir, args });
+    let command: string;
+    let args: string[];
 
-    const ptyProcess = pty.spawn("claude", args, {
+    if (mode === "shell") {
+      command = process.env.SHELL ?? "/bin/bash";
+      args = [];
+      console.log("[terminal] spawn shell", { cwd: config.workspaceDir, command });
+    } else {
+      const systemPrompt =
+        config.appendSystemPrompt ??
+        (config.workspaceContext
+          ? buildSystemPrompt(config.workspaceContext)
+          : buildSystemPromptFromDir(config.workspaceDir));
+
+      const launchConfig: LaunchConfig = {
+        workspaceDir: config.workspaceDir,
+        repoDirs: config.repoDirs,
+        resumeSessionId: config.resumeSessionId,
+        sessionId,
+        appendSystemPrompt: systemPrompt,
+        pluginDir: config.pluginDir ?? process.env.IARA_PLUGIN_DIR,
+        env: config.env,
+      };
+
+      command = "claude";
+      args = buildClaudeArgs(launchConfig);
+      env.IARA_SESSION_ID = sessionId;
+      console.log("[terminal] spawn claude", { cwd: config.workspaceDir, args });
+    }
+
+    const ptyProcess = pty.spawn(command, args, {
       name: "xterm-256color",
       cols: config.cols ?? 80,
       rows: config.rows ?? 24,
@@ -103,6 +120,7 @@ export class TerminalManager {
     const managed: ManagedTerminal = {
       id: terminalId,
       workspaceId: config.workspaceId,
+      mode,
       sessionId,
       initialCwd: config.workspaceDir,
       pty: ptyProcess,
@@ -112,7 +130,6 @@ export class TerminalManager {
     this.terminals.set(terminalId, managed);
 
     // Buffer initial output for debugging exit errors.
-    // The flag tracks whether we're still inside the debug window.
     let outputBuffer = "";
     let bufferActive = true;
     setTimeout(() => {
@@ -126,14 +143,13 @@ export class TerminalManager {
     });
 
     ptyProcess.onExit(({ exitCode }: { exitCode: number }) => {
-      // If this terminal was explicitly destroyed, suppress the stale event.
       if (this.destroyed.has(terminalId)) {
         this.destroyed.delete(terminalId);
         return;
       }
 
       if (exitCode !== 0) {
-        console.error(`[terminal] claude exited with code ${exitCode}`, {
+        console.error(`[terminal] ${mode} exited with code ${exitCode}`, {
           workspaceId: config.workspaceId,
           cwd: config.workspaceDir,
           output: outputBuffer.slice(0, 2000),
@@ -175,10 +191,17 @@ export class TerminalManager {
     terminal.cancelKill = cancelKill;
   }
 
-  destroyByWorkspaceId(workspaceId: string): void {
-    const terminal = this.getByWorkspaceId(workspaceId);
-    if (terminal) {
-      this.destroy(terminal.id);
+  destroyByWorkspaceId(workspaceId: string, mode?: "claude" | "shell"): void {
+    if (mode) {
+      const terminal = this.getByWorkspaceId(workspaceId, mode);
+      if (terminal) this.destroy(terminal.id);
+    } else {
+      // Destroy all terminals for this workspace
+      for (const terminal of this.terminals.values()) {
+        if (terminal.workspaceId === workspaceId) {
+          this.destroy(terminal.id);
+        }
+      }
     }
   }
 
@@ -217,9 +240,9 @@ export class TerminalManager {
     return terminal.initialCwd;
   }
 
-  getByWorkspaceId(workspaceId: string): ManagedTerminal | undefined {
+  getByWorkspaceId(workspaceId: string, mode?: "claude" | "shell"): ManagedTerminal | undefined {
     for (const terminal of this.terminals.values()) {
-      if (terminal.workspaceId === workspaceId) {
+      if (terminal.workspaceId === workspaceId && (!mode || terminal.mode === mode)) {
         return terminal;
       }
     }

@@ -167,7 +167,12 @@ export type WsMethods = {
 
   // Terminal
   "terminal.create": {
-    params: { workspaceId: string; resumeSessionId?: string; sessionCwd?: string };
+    params: {
+      workspaceId: string;
+      mode?: "claude" | "shell";
+      resumeSessionId?: string;
+      sessionCwd?: string;
+    };
     result: { terminalId: string; sessionId: string };
   };
   "terminal.write": { params: { terminalId: string; data: string }; result: void };
