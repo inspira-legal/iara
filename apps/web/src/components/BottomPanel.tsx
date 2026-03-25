@@ -966,11 +966,18 @@ function ShellTerminal({
       });
   }, [shell.id, shell.status, shell.workspaceId, updateShell]);
 
+  const removeShell = useShellStore((s) => s.removeShell);
+
   const handleExit = useCallback(
     (exitCode: number) => {
-      updateShell(shell.id, { status: "exited", exitCode });
+      if (exitCode === 0) {
+        destroyXTermInstance(`shell:${shell.terminalId}`);
+        removeShell(shell.id);
+      } else {
+        updateShell(shell.id, { status: "exited", exitCode });
+      }
     },
-    [shell.id, updateShell],
+    [shell.id, shell.terminalId, updateShell, removeShell],
   );
 
   const handleTitleChange = useCallback(
@@ -1013,14 +1020,14 @@ function ShellTerminal({
       />
       {shell.status === "connecting" && (
         <div
-          className="absolute inset-0 flex items-center justify-center bg-zinc-950"
+          className="absolute inset-0 z-10 flex items-center justify-center bg-zinc-950"
           role="status"
         >
           <p className="text-sm text-zinc-500">Starting terminal...</p>
         </div>
       )}
       {shell.status === "exited" && (
-        <div className="absolute inset-0 flex items-center justify-center bg-zinc-950/80">
+        <div className="absolute inset-0 z-10 flex items-center justify-center bg-zinc-950/80">
           <div className="flex flex-col items-center gap-3 text-zinc-400" role="alert">
             <p className="text-sm">
               Terminal exited{shell.exitCode != null ? ` (code ${shell.exitCode})` : ""}
