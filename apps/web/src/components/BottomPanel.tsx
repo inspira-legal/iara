@@ -798,6 +798,7 @@ function ShellTab() {
   const removeShell = useShellStore((s) => s.removeShell);
   const setActiveId = useShellStore((s) => s.setActiveId);
   const getWorkspace = useAppStore((s) => s.getWorkspace);
+  const tabVisible = useScriptsStore((s) => s.activeTab) === "terminal";
   const [confirmingClose, setConfirmingClose] = useState<string | null>(null);
 
   function handleAddShell() {
@@ -887,7 +888,7 @@ function ShellTab() {
             key={shell.id}
             className={`absolute inset-0 ${shell.id === activeId ? "z-10 visible" : "z-0 invisible"}`}
           >
-            <ShellTerminal shell={shell} isActive={shell.id === activeId} />
+            <ShellTerminal shell={shell} isActive={shell.id === activeId} tabVisible={tabVisible} />
           </div>
         ))}
         {shells.length === 0 && (
@@ -937,7 +938,16 @@ function ShellTab() {
   );
 }
 
-function ShellTerminal({ shell, isActive }: { shell: ShellEntry; isActive: boolean }) {
+function ShellTerminal({
+  shell,
+  isActive,
+  tabVisible,
+}: {
+  shell: ShellEntry;
+  isActive: boolean;
+  /** Whether the Terminal tab in the bottom panel is currently visible. */
+  tabVisible: boolean;
+}) {
   const updateShell = useShellStore((s) => s.updateShell);
 
   // Create shell terminal when idle
@@ -979,16 +989,18 @@ function ShellTerminal({ shell, isActive }: { shell: ShellEntry; isActive: boole
     updateShell(shell.id, { terminalId: null, status: "idle", exitCode: null, title: null });
   }, [shell.id, shell.terminalId, updateShell]);
 
-  // Focus and refit terminal when switching to this tab
+  // Refit, refresh, and focus terminal when it becomes visible
+  // (switching between shells OR when the Terminal tab becomes visible again)
   useEffect(() => {
-    if (isActive && shell.terminalId) {
+    if (isActive && tabVisible && shell.terminalId) {
       const instance = getOrCreateXTermInstance(`shell:${shell.terminalId}`);
       requestAnimationFrame(() => {
         instance.fitAddon.fit();
+        instance.term.refresh(0, instance.term.rows - 1);
         instance.term.focus();
       });
     }
-  }, [isActive, shell.terminalId]);
+  }, [isActive, tabVisible, shell.terminalId]);
 
   return (
     <div className="relative flex h-full flex-col overflow-hidden">
