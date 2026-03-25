@@ -98,7 +98,7 @@ describe("useScriptsStore", () => {
       expect(useScriptsStore.getState().loading).toBe(false);
     });
 
-    it("resets selectedLog and activeTab when loading new workspace", async () => {
+    it("resets selectedLog but preserves activeTab when loading new workspace", async () => {
       useScriptsStore.setState({
         selectedLog: { service: "api", script: "dev" },
         activeTab: "output",
@@ -108,7 +108,7 @@ describe("useScriptsStore", () => {
       await useScriptsStore.getState().loadConfig("proj1/ws2");
 
       expect(useScriptsStore.getState().selectedLog).toBeNull();
-      expect(useScriptsStore.getState().activeTab).toBe("scripts");
+      expect(useScriptsStore.getState().activeTab).toBe("output");
     });
   });
 
