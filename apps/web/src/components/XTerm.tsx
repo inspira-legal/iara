@@ -289,8 +289,15 @@ interface XTermProps {
 
 /** Instance registry — survives React re-renders and navigation. */
 const instances = new Map<string, XTermInstance>();
+/** Persistent data subscriptions — keyed by instance ID, lives as long as the instance. */
+const dataSubscriptions = new Map<string, () => void>();
 
 export function destroyXTermInstance(id: string): void {
+  const unsub = dataSubscriptions.get(id);
+  if (unsub) {
+    unsub();
+    dataSubscriptions.delete(id);
+  }
   const instance = instances.get(id);
   if (instance) {
     instance.dispose();
@@ -306,6 +313,19 @@ export function getOrCreateXTermInstance(
   if (existing) return existing;
   const instance = createXTermInstance(opts);
   instances.set(id, instance);
+
+  // Start a persistent data subscription so the xterm buffer stays up-to-date
+  // even when the React component (ConnectedTerminal) is unmounted.
+  if (opts?.terminalId && !dataSubscriptions.has(id)) {
+    const tid = opts.terminalId;
+    const unsub = transport.subscribe("terminal:data", ({ terminalId: evtTid, data }) => {
+      if (evtTid === tid) {
+        instance.writeData(data);
+      }
+    });
+    dataSubscriptions.set(id, unsub);
+  }
+
   return instance;
 }
 

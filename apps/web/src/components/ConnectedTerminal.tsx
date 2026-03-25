@@ -43,19 +43,16 @@ export function ConnectedTerminal({
 
   const instanceId = terminalId ? `${instancePrefix}:${terminalId}` : null;
 
-  // Subscribe to terminal data → xterm, exit events, and title changes (OSC 0/2)
+  // Subscribe to exit events and title changes (OSC 0/2).
+  // Note: terminal:data subscription is persistent at the XTerm instance level
+  // (see getOrCreateXTermInstance) so data keeps flowing even when this component unmounts.
   useEffect(() => {
     if (!terminalId || !instanceId) return;
     const tid = terminalId;
     const iid = instanceId;
 
-    const instance = getOrCreateXTermInstance(iid, { terminalId: tid });
-
-    const unsubData = transport.subscribe("terminal:data", ({ terminalId: evtTid, data }) => {
-      if (evtTid === tid) {
-        instance.writeData(data);
-      }
-    });
+    // Ensure the xterm instance exists (starts the persistent data subscription)
+    getOrCreateXTermInstance(iid, { terminalId: tid });
 
     const unsubExit = transport.subscribe("terminal:exit", ({ terminalId: evtTid, exitCode }) => {
       if (evtTid === tid) {
@@ -63,12 +60,11 @@ export function ConnectedTerminal({
       }
     });
 
-    const titleDisposable = instance.term.onTitleChange((title) => {
+    const titleDisposable = getOrCreateXTermInstance(iid).term.onTitleChange((title) => {
       onTitleChangeRef.current?.(title);
     });
 
     return () => {
-      unsubData();
       unsubExit();
       titleDisposable.dispose();
     };
