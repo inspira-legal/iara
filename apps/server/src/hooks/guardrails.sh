@@ -4,7 +4,6 @@
 # Reads hook input from stdin (JSON) and blocks:
 #   - Edit/Write to file paths outside the workspace directory (all workspaces)
 #   - Bash commands with absolute paths outside the workspace directory (all workspaces)
-#   - Bash commands containing `git checkout` (task workspaces only)
 #
 # Disabled when IARA_GUARDRAILS=off.
 #
@@ -54,14 +53,6 @@ fi
 if [ "$TOOL_NAME" = "Bash" ]; then
   # Extract command value — may contain escaped quotes, grab between first ": " and end
   COMMAND=$(echo "$INPUT" | grep -o '"command"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed 's/.*"command"[[:space:]]*:[[:space:]]*"//;s/"$//')
-
-  # Block git checkout in task workspaces (worktrees are locked to their branch)
-  if [ "$IARA_WORKSPACE_TYPE" = "task" ]; then
-    if echo "$COMMAND" | grep -qE '\bgit\b.*\bcheckout\b'; then
-      echo "Bash blocked: \"git checkout\" is not allowed in task workspaces. Each worktree is locked to its feature branch." >&2
-      exit 2
-    fi
-  fi
 
   # Check absolute paths and ~/paths in the command
   ABS_PATHS=$(echo "$COMMAND" | grep -oE '(^|[[:space:]="])(~?/[^[:space:]"'\''|;&><()]+)' | grep -oE '~?/[^[:space:]"'\''|;&><()]+')

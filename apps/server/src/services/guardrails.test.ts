@@ -14,7 +14,6 @@ interface RunOpts {
 function run(opts: RunOpts): { exitCode: number; stderr: string } {
   const env: Record<string, string> = {
     PATH: process.env.PATH ?? "",
-    IARA_WORKSPACE_TYPE: "task",
     IARA_WORKSPACE_DIR: WORKSPACE_DIR,
     ...opts.env,
   };
@@ -59,7 +58,7 @@ describe("skip conditions", () => {
   });
 });
 
-// -- Edit / Write (applies to all workspace types) --
+// -- Edit / Write --
 
 describe("Edit/Write guardrails", () => {
   it("allows Write inside workspace", () => {
@@ -126,29 +125,6 @@ describe("Edit/Write guardrails", () => {
     expect(result.exitCode).toBe(2);
     expect(result.stderr).toContain("blocked");
   });
-
-  it("blocks Write outside workspace in default workspace type", () => {
-    const result = run({
-      env: { IARA_WORKSPACE_TYPE: "default" },
-      input: {
-        tool_name: "Write",
-        tool_input: { file_path: "/etc/passwd" },
-      },
-    });
-    expect(result.exitCode).toBe(2);
-    expect(result.stderr).toContain("blocked");
-  });
-
-  it("allows Write inside workspace in default workspace type", () => {
-    const result = run({
-      env: { IARA_WORKSPACE_TYPE: "default" },
-      input: {
-        tool_name: "Write",
-        tool_input: { file_path: `${WORKSPACE_DIR}/src/file.ts` },
-      },
-    });
-    expect(result.exitCode).toBe(0);
-  });
 });
 
 // -- Bash --
@@ -164,40 +140,7 @@ describe("Bash guardrails", () => {
     expect(result.exitCode).toBe(0);
   });
 
-  it("blocks git checkout in task workspace", () => {
-    const result = run({
-      input: {
-        tool_name: "Bash",
-        tool_input: { command: "git checkout main" },
-      },
-    });
-    expect(result.exitCode).toBe(2);
-    expect(result.stderr).toContain("git checkout");
-    expect(result.stderr).toContain("not allowed");
-  });
-
-  it("blocks git checkout with flags in task workspace", () => {
-    const result = run({
-      input: {
-        tool_name: "Bash",
-        tool_input: { command: "git checkout -b new-branch" },
-      },
-    });
-    expect(result.exitCode).toBe(2);
-  });
-
-  it("allows git checkout in default workspace", () => {
-    const result = run({
-      env: { IARA_WORKSPACE_TYPE: "default" },
-      input: {
-        tool_name: "Bash",
-        tool_input: { command: "git checkout main" },
-      },
-    });
-    expect(result.exitCode).toBe(0);
-  });
-
-  it("allows git commands that are not checkout", () => {
+  it("allows git commands", () => {
     const result = run({
       input: {
         tool_name: "Bash",
@@ -237,17 +180,6 @@ describe("Bash guardrails", () => {
     });
     expect(result.exitCode).toBe(2);
     expect(result.stderr).toContain("outside the workspace");
-  });
-
-  it("blocks commands with paths outside workspace in default workspace type", () => {
-    const result = run({
-      env: { IARA_WORKSPACE_TYPE: "default" },
-      input: {
-        tool_name: "Bash",
-        tool_input: { command: "rm -rf /etc/something" },
-      },
-    });
-    expect(result.exitCode).toBe(2);
   });
 });
 
