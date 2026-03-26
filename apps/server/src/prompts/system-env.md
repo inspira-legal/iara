@@ -1,5 +1,5 @@
 <env-files>
-{{env_list}}
+{{env_file}}  ← single source of truth for all env vars (TOML format, one section per service)
 
-Environment variables are already injected into this session. To add or change env vars, edit the files above (NOT .env inside the repo). Changes take effect on next session restart.
+Each service section in env.toml generates a flat .env file in its repo worktree. To add or change env vars, edit env.toml (NOT .env inside repos — those are auto-generated). Changes take effect on next session restart.
 </env-files>

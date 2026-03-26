@@ -1,7 +1,6 @@
 import { execFileSync } from "node:child_process";
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { mergeEnvForWorkspace } from "../services/env.js";
 import type { RepoContext } from "../services/launcher.js";
 import { buildSystemPrompt, buildSystemPromptFromDir } from "../services/launcher.js";
 import { registerMethod } from "../router.js";
@@ -83,9 +82,6 @@ export function registerTerminalHandlers(appState: AppState, manager: TerminalMa
       repoDirs.push(workspaceDir);
     }
 
-    const envRepoNames = repos.map((r) => r.name);
-    const envVars = mergeEnvForWorkspace(projectSlug, workspace.slug, envRepoNames);
-
     const effectiveCwd =
       params.resumeSessionId && params.sessionCwd ? params.sessionCwd : workspaceDir;
 
@@ -119,7 +115,6 @@ export function registerTerminalHandlers(appState: AppState, manager: TerminalMa
       appendSystemPrompt: systemPrompt,
       ...(params.resumeSessionId != null ? { resumeSessionId: params.resumeSessionId } : {}),
       env: {
-        ...envVars,
         ...getAutocompactEnv(appState),
         ...getGuardrailsEnv(appState),
         IARA_WORKSPACE_ID: params.workspaceId,

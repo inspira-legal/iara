@@ -32,10 +32,13 @@ export interface EnvEntry {
   value: string;
 }
 
-export interface EnvRepoEntries {
-  repo: string;
-  global: EnvEntry[];
-  local: EnvEntry[];
+export interface EnvServiceEntries {
+  name: string;
+  entries: EnvEntry[];
+}
+
+export interface EnvData {
+  services: EnvServiceEntries[];
 }
 
 export interface CloneProgress {

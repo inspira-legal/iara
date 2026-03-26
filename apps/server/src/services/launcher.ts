@@ -79,7 +79,7 @@ export function buildSystemPrompt(ctx: WorkspaceContext): string {
 
   // # ENV FILES
   if (ctx.repos.length > 0) {
-    sections.push(buildEnvSection(ctx.repos.map((r) => r.name)));
+    sections.push(buildEnvSection());
   }
 
   // Only CLAUDE.md — wrapped in tags, only if non-empty
@@ -108,12 +108,8 @@ export function buildSystemPromptFromDir(workspaceDir: string): string {
   return parts.join("\n\n---\n\n");
 }
 
-function buildEnvSection(repoNames: string[]): string {
-  const envList = repoNames
-    .flatMap((r) => [
-      `.env.${r}.global  ← shared env vars (symlink to global — edit here or via iara UI)`,
-      `.env.${r}.local   ← local env vars for this context only`,
-    ])
-    .join("\n");
-  return loadPrompt("system-env", { env_list: envList });
+function buildEnvSection(): string {
+  return loadPrompt("system-env", {
+    env_file: "env.toml",
+  });
 }

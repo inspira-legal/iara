@@ -13,7 +13,6 @@ import type {
 } from "@iara/contracts";
 import { cleanEnv } from "@iara/shared/env";
 import { killProcessGroup } from "@iara/shared/process";
-import { interpolate } from "./interpolation.js";
 
 type PushFn = <E extends keyof WsPushEvents>(event: E, params: WsPushEvents[E]) => void;
 
@@ -41,21 +40,11 @@ const HEALTH_RECHECK_INTERVAL = 30_000;
 
 export class ScriptSupervisor {
   private running = new Map<string, RunningScript>();
-  /**
-   * Shared services keyed by pinned port.
-   * Pinned-port services are shared across workspaces — only one instance runs.
-   */
-  private sharedByPort = new Map<number, string>();
 
   constructor(private readonly pushFn: PushFn) {}
 
   private key(port: number, service: string, script: string): string {
     return `${port}:${service}:${script}`;
-  }
-
-  /** Check if a service is already running (by us) on this port. */
-  isPortOwnedByUs(port: number): boolean {
-    return this.sharedByPort.has(port);
   }
 
   /** Start a script process. */
@@ -70,28 +59,13 @@ export class ScriptSupervisor {
     port: number;
     output: ScriptOutputLevel;
     isLongRunning: boolean;
-    isPinnedPort?: boolean;
     timeout?: number;
   }): Promise<void> {
     const key = this.key(opts.port, opts.service, opts.script);
 
-    // For pinned-port services: reuse if already running on this port
-    if (opts.isPinnedPort && opts.port > 0) {
-      const existingKey = this.sharedByPort.get(opts.port);
-      if (existingKey && this.running.has(existingKey)) {
-        // Already running — just report status as-is
-        return;
-      }
-    }
-
     // Stop existing if running under same key
     if (this.running.has(key)) {
       await this.stopByKey(key);
-    }
-
-    // Track pinned-port services as shared
-    if (opts.isPinnedPort && opts.port > 0) {
-      this.sharedByPort.set(opts.port, key);
     }
 
     const fullCommand = opts.commands.join(" && ");
@@ -296,10 +270,6 @@ export class ScriptSupervisor {
       const inUse = await checkPort(opts.port);
       if (inUse) {
         const key = this.key(opts.port, opts.service, opts.script);
-        // Track as shared if pinned
-        if (opts.isPinnedPort) {
-          this.sharedByPort.set(opts.port, key);
-        }
         const attachedPort = opts.port;
         const entry: RunningScript = {
           scriptId: key,
@@ -337,13 +307,6 @@ export class ScriptSupervisor {
     entry.health = "stopped";
     this.pushStatus(entry);
     this.running.delete(key);
-    // Clean up shared port mapping
-    for (const [port, k] of this.sharedByPort) {
-      if (k === key) {
-        this.sharedByPort.delete(port);
-        break;
-      }
-    }
   }
 
   /** Stop all running scripts for a specific workspace. */
@@ -357,13 +320,6 @@ export class ScriptSupervisor {
       entry.health = "stopped";
       this.pushStatus(entry);
       this.running.delete(key);
-      // Clean up shared port mapping
-      for (const [port, k] of this.sharedByPort) {
-        if (k === key) {
-          this.sharedByPort.delete(port);
-          break;
-        }
-      }
     }
     await Promise.all(kills);
   }
@@ -376,7 +332,6 @@ export class ScriptSupervisor {
       if (entry.healthCheckTimer) clearInterval(entry.healthCheckTimer);
     }
     this.running.clear();
-    this.sharedByPort.clear();
     await Promise.all(kills);
   }
 
@@ -408,7 +363,7 @@ export class ScriptSupervisor {
   async autoDetect(
     projectId: string,
     workspace: string,
-    services: { name: string; resolvedPort: number; port: number | null }[],
+    services: { name: string; resolvedPort: number }[],
   ): Promise<void> {
     for (const svc of services) {
       if (svc.resolvedPort <= 0) continue;
@@ -433,9 +388,6 @@ export class ScriptSupervisor {
           kill: () => killByPort(attachedPort),
         };
         this.running.set(key, entry);
-        if (svc.port !== null) {
-          this.sharedByPort.set(attachedPort, key);
-        }
         this.pushStatus(entry);
       }
     }
@@ -461,7 +413,6 @@ export class ScriptSupervisor {
     workspace: string;
     category: EssencialKey;
     services: ResolvedServiceDef[];
-    ports: Map<string, number>;
     cwd: (service: string) => string;
   }): Promise<void> {
     const sorted = topologicalSort(opts.services);
@@ -479,20 +430,17 @@ export class ScriptSupervisor {
       const script = svc.essencial[opts.category];
       if (!script) continue;
 
-      const resolvedCommands = script.run.map((cmd) => interpolate(cmd, opts.ports));
-
       await this.startChecked({
         projectId: opts.projectId,
         workspace: opts.workspace,
         service: svc.name,
         script: opts.category,
-        commands: resolvedCommands,
+        commands: script.run,
         cwd: opts.cwd(svc.name),
         env: svc.resolvedEnv,
         port: svc.resolvedPort,
         output: script.output,
         isLongRunning,
-        isPinnedPort: svc.port !== null,
         timeout: svc.timeout,
       });
 

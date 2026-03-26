@@ -7,84 +7,129 @@ import { stringify } from "yaml";
 
 const ScriptValueSchema = z.union([z.string(), z.array(z.string())]);
 
-const ServiceDiscoverySchema = z.object({
+const ServiceScriptsSchema = z.object({
   dependsOn: z.array(z.string()).optional(),
-  port: z.number().optional(),
   timeout: z.number().optional(),
-  env: z.record(z.string(), z.string()).optional(),
   essencial: z.record(z.string(), ScriptValueSchema).optional(),
   advanced: z.record(z.string(), ScriptValueSchema).optional(),
 });
 
-export const DiscoveryResultSchema = z.record(z.string(), ServiceDiscoverySchema);
+const EnvSectionSchema = z.record(z.string(), z.string());
+
+export const DiscoveryResultSchema = z.object({
+  scripts: z.record(z.string(), ServiceScriptsSchema),
+  env: z.record(z.string(), EnvSectionSchema),
+});
+
 export type DiscoveryResult = z.infer<typeof DiscoveryResultSchema>;
 
-/** Convert the parsed discovery result to YAML string. */
+/** Convert scripts portion of discovery result to YAML string. */
 export function discoveryResultToYaml(result: DiscoveryResult): string {
-  return stringify(result, { lineWidth: 120 });
+  return stringify(result.scripts, { lineWidth: 120 });
+}
+
+/** Convert env portion of discovery result to TOML string. */
+export function discoveryResultToToml(result: DiscoveryResult): string {
+  const sections: string[] = [];
+  for (const [name, vars] of Object.entries(result.env)) {
+    const lines = [`[${name}]`];
+    for (const [key, value] of Object.entries(vars)) {
+      lines.push(`${key} = "${value}"`);
+    }
+    sections.push(lines.join("\n"));
+  }
+  return sections.join("\n\n") + "\n";
 }
 
 /**
- * Build a prompt for Claude to discover scripts from a project's repos.
+ * Build a prompt for Claude to discover scripts and env from a project's repos.
  */
 export function buildDiscoveryPrompt(
   repos: { name: string; files: string[] }[],
   existingYaml?: string,
+  existingToml?: string,
+  userPrompt?: string,
+  basePort?: number,
 ): string {
   const repoDescriptions = repos
     .map((r) => `### ${r.name}\nDetected files:\n${r.files.map((f) => `- ${f}`).join("\n")}`)
     .join("\n\n");
 
-  const mergeInstruction = existingYaml
-    ? `\n\nThe project already has a scripts.yaml. Merge your discoveries with the existing content, preserving user customizations:\n\`\`\`yaml\n${existingYaml}\n\`\`\``
+  const mergeInstructions: string[] = [];
+  if (existingYaml) {
+    mergeInstructions.push(
+      `The project already has a scripts.yaml. Preserve user customizations:\n\`\`\`yaml\n${existingYaml}\n\`\`\``,
+    );
+  }
+  if (existingToml) {
+    mergeInstructions.push(
+      `The project already has an env.toml. Existing values take precedence — do NOT overwrite them:\n\`\`\`toml\n${existingToml}\n\`\`\``,
+    );
+  }
+  const mergeSection =
+    mergeInstructions.length > 0 ? `\n\n## Existing Config\n${mergeInstructions.join("\n\n")}` : "";
+
+  const userSection = userPrompt ? `\n\n## User Request\n${userPrompt}` : "";
+
+  const portHint = basePort
+    ? `\nBase port for this project is ${basePort}. Assign PORT values starting at ${basePort}, incrementing by 1 for each repo service. Non-repo services (databases, caches) use their well-known ports (e.g., 5432 for postgres, 6379 for redis).`
     : "";
 
-  return `You are analyzing a project's repositories to generate a scripts configuration.
+  return `You are analyzing a project's repositories to generate scripts and environment configuration.
 
 ## Repositories
 ${repoDescriptions}
-${mergeInstruction}
+${mergeSection}${userSection}
 
 ## Task
-Analyze each repository's build system and generate a JSON object following this schema:
+Analyze each repository's build system and generate a JSON object with two top-level keys: \`scripts\` and \`env\`.
 
 \`\`\`json
 {
-  "<service-name>": {
-    "dependsOn": ["<other-service>"],
-    "port": 5432,
-    "timeout": 30,
-    "env": {
-      "KEY": "value"
-    },
-    "essencial": {
-      "setup": "<string or string[]>",
-      "dev": "<string or string[]>",
-      "build": "<string or string[]>",
-      "check": "<string or string[]>",
-      "test": "<string or string[]>",
-      "codegen": "<string or string[]>"
-    },
-    "advanced": {
-      "<name>": "<string or string[]>"
+  "scripts": {
+    "<service-name>": {
+      "dependsOn": ["<other-service>"],
+      "timeout": 30,
+      "essencial": {
+        "setup": "<string or string[]>",
+        "dev": "<string or string[]>",
+        "build": "<string or string[]>",
+        "check": "<string or string[]>",
+        "test": "<string or string[]>",
+        "codegen": "<string or string[]>"
+      },
+      "advanced": {
+        "<name>": "<string or string[]>"
+      }
+    }
+  },
+  "env": {
+    "<service-name>": {
+      "PORT": "3000",
+      "DATABASE_URL": "postgres://localhost:5432/mydb"
     }
   }
 }
 \`\`\`
 
-All fields except the service name key are optional. Only include what actually exists in the repo.
-
-## Rules
+## Scripts Rules
 1. Service names MUST match repo names for repositories.
 2. Add non-repo services (databases, caches) only if docker-compose.yml or similar config is detected.
 3. Use \`dependsOn\` when one service needs another running first.
-4. For port references, ALWAYS use \`{service.PORT}\` syntax with the explicit service name prefix. NEVER use bare \`{PORT}\`.
-   - Example: \`"pnpm dev --port={frontend.PORT}"\`, NOT \`"pnpm dev --port={PORT}"\`
-   - Cross-references: \`"http://localhost:{backend.PORT}"\`
-5. Use \`env\` block for cross-service URLs.
-6. Only include scripts that actually exist in the repo's config.
-7. Be language-agnostic — inspect package.json, Makefile, Cargo.toml, pyproject.toml, go.mod, build.gradle, Dockerfile, docker-compose.yml, etc.
-8. For Docker services, NEVER use \`-d\` (detached mode). Run in foreground so iara can capture logs and manage the process lifecycle. Example: \`"docker compose up db"\` NOT \`"docker compose up -d db"\`.`;
+4. Commands use \`$PORT\` and other \`$ENV_VAR\` shell variable references — NOT \`{service.PORT}\` syntax.
+   - Example: \`"pnpm dev --port $PORT"\`, \`"uvicorn app.main:app --port $PORT --reload"\`
+5. Only include scripts that actually exist in the repo's config.
+6. Be language-agnostic — inspect package.json, Makefile, Cargo.toml, pyproject.toml, go.mod, build.gradle, Dockerfile, docker-compose.yml, etc.
+7. For Docker services, NEVER use \`-d\` (detached mode). Run in foreground. Example: \`"docker compose up db"\`.
+
+## Env Rules
+1. Each service gets a \`[service]\` section in env with key-value string pairs.
+2. Assign \`PORT\` values for services that listen on ports.${portHint}
+3. Wire cross-service references with concrete port values:
+   - If api depends on db (port 5432): \`"DATABASE_URL": "postgres://localhost:5432/mydb"\`
+   - If app depends on api (port 3001): \`"NEXT_PUBLIC_API": "http://localhost:3001"\`
+4. Non-repo services use well-known ports (postgres=5432, redis=6379, mysql=3306, etc.).
+5. All env values MUST be strings (e.g., \`"PORT": "3000"\`, not \`"PORT": 3000\`).`;
 }
 
 /** Known build config files to look for during discovery. */

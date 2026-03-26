@@ -1,9 +1,9 @@
 import type { ScriptSupervisor } from "@iara/orchestrator/supervisor";
-import type { PortAllocator } from "@iara/orchestrator/ports";
 import type { NotificationService } from "../services/notifications.js";
 import type { SessionWatcher } from "../services/session-watcher.js";
 import type { TerminalManager } from "../services/terminal.js";
 import type { AppState } from "../services/state.js";
+import type { EnvWatcher } from "../services/env-watcher.js";
 import type { ProjectsWatcher } from "../services/watcher.js";
 import { registerAppHandlers } from "./app.js";
 import { registerScriptHandlers } from "./scripts.js";
@@ -28,10 +28,10 @@ export interface HandlerDeps {
   appState: AppState;
   watcher: ProjectsWatcher;
   scriptSupervisor: ScriptSupervisor;
-  portAllocator: PortAllocator;
   notificationService: NotificationService;
   terminalManager: TerminalManager;
   sessionWatcher: SessionWatcher;
+  envWatcher: EnvWatcher;
   pushFn: PushFn;
 }
 
@@ -47,17 +47,11 @@ export function registerAllHandlers(deps: HandlerDeps): void {
 
   registerAppHandlers(deps.appState);
   registerProjectHandlers(deps.appState, deps.watcher, deps.pushFn);
-  registerWorkspaceHandlers(
-    deps.appState,
-    deps.watcher,
-    deps.sessionWatcher,
-    deps.pushFn,
-    deps.portAllocator,
-  );
+  registerWorkspaceHandlers(deps.appState, deps.watcher, deps.sessionWatcher, deps.pushFn);
   registerSessionHandlers(deps.appState);
   registerPromptHandlers();
-  registerScriptHandlers(deps.appState, deps.scriptSupervisor, deps.portAllocator, deps.pushFn);
-  registerEnvHandlers(deps.appState);
+  registerScriptHandlers(deps.appState, deps.scriptSupervisor, deps.pushFn);
+  registerEnvHandlers(deps.appState, deps.envWatcher);
   registerGitHandlers();
   registerNotificationHandlers(deps.notificationService);
   registerFileHandlers(deps.appState);

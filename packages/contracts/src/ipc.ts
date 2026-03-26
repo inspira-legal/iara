@@ -93,9 +93,7 @@ export interface ScriptEntry {
 export interface ServiceDef {
   name: string;
   dependsOn: string[];
-  port: number | null;
   timeout: number;
-  env: Record<string, string>;
   essencial: Partial<Record<EssencialKey, ScriptEntry>>;
   advanced: Record<string, ScriptEntry>;
   isRepo: boolean;

@@ -78,14 +78,12 @@ frontend:
     expect(backend.isRepo).toBe(true);
     expect(backend.dependsOn).toEqual(["db"]);
     expect(backend.timeout).toBe(60);
-    expect(backend.env.DATABASE_URL).toBe("postgresql://localhost:{db.PORT}/mydb");
     expect(backend.essencial.setup?.run).toEqual(["go mod download"]);
     expect(backend.essencial.dev?.output).toBe("always");
     expect(backend.advanced.migrate?.run).toEqual(["go run ./cmd/migrate up"]);
 
     const frontend = services[2]!;
     expect(frontend.name).toBe("frontend");
-    expect(frontend.port).toBe(8080);
     expect(frontend.dependsOn).toEqual(["backend"]);
   });
 

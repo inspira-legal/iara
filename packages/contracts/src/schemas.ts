@@ -78,9 +78,7 @@ export const ScriptStatusSchema = z.object({
 export const ServiceDefSchema = z.object({
   name: z.string(),
   dependsOn: z.array(z.string()),
-  port: z.number().nullable(),
   timeout: z.number(),
-  env: z.record(z.string(), z.string()),
   essencial: z.record(z.string(), ScriptEntrySchema),
   advanced: z.record(z.string(), ScriptEntrySchema),
   isRepo: z.boolean(),

@@ -3,7 +3,6 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { execFileSync } from "node:child_process";
 import type { CreateWorkspaceInput, CreationStage, Workspace } from "@iara/contracts";
-import type { PortAllocator } from "@iara/orchestrator/ports";
 import { gitWorktreeAdd, gitWorktreeRemove } from "@iara/shared/git";
 import { projectPaths, workspacePaths } from "@iara/shared/paths";
 import { z } from "zod";
@@ -11,7 +10,7 @@ import { registerMethod } from "../router.js";
 import type { SessionWatcher } from "../services/session-watcher.js";
 import { AppState } from "../services/state.js";
 import type { ProjectsWatcher } from "../services/watcher.js";
-import { ensureGlobalSymlinks } from "../services/env.js";
+import { copyEnvTomlWithPortOffset } from "../services/env.js";
 import { runClaude, activeRuns, streamClaudeRun } from "../services/claude-runner.js";
 import { loadPrompt } from "../prompts/index.js";
 import { getRepoInfo } from "../services/repos.js";
@@ -55,7 +54,6 @@ export function registerWorkspaceHandlers(
   watcher: ProjectsWatcher,
   sessionWatcher: SessionWatcher,
   pushFn: PushFn,
-  portAllocator: PortAllocator,
 ): void {
   registerMethod("workspaces.create", async (params) => {
     const { projectId, branch, ...input } = params;
@@ -94,9 +92,6 @@ export function registerWorkspaceHandlers(
 
     // Remove git worktrees first (from source repos at project root)
     await cleanupWorktrees(projectDir, wsDir);
-
-    // Release port allocation for the deleted workspace
-    portAllocator.release(`${workspace.projectId}:${workspace.slug}`);
 
     // Rescan project state and push update
     appState.rescanProject(project.slug);
@@ -322,8 +317,12 @@ async function createWorkspace(
       }),
     );
 
-    // Create global env symlinks in workspace dir
-    ensureGlobalSymlinks(project.slug, wp.root, repoNames);
+    // Copy env.toml from main workspace with port offset (R4.11)
+    const existingNonMainWorkspaces = project.workspaces.filter(
+      (w) => w.slug !== AppState.ROOT_WORKSPACE_SLUG,
+    );
+    const workspaceIndex = existingNonMainWorkspaces.length + 1;
+    copyEnvTomlWithPortOffset(pp.root, wp.root, repoNames, workspaceIndex);
 
     // Generate .code-workspace file
     generateCodeWorkspace(wp.root, input.slug, repoNames);

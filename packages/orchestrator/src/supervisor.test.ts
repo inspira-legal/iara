@@ -58,10 +58,22 @@ function createMockChild(pid = 12345) {
 
 let mockChild: ReturnType<typeof createMockChild>;
 
-vi.mock("node:child_process", () => ({
-  spawn: vi.fn(() => mockChild),
-  execSync: vi.fn(),
-}));
+vi.mock("node:child_process", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("node:child_process")>();
+  return {
+    ...actual,
+    spawn: vi.fn(() => mockChild),
+    execSync: vi.fn(),
+  };
+});
+
+vi.mock("node:fs", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("node:fs")>();
+  return {
+    ...actual,
+    existsSync: vi.fn(() => true),
+  };
+});
 
 // ---------------------------------------------------------------------------
 // Import module under test AFTER mocks
@@ -80,9 +92,7 @@ function makeResolved(
   return {
     name,
     dependsOn,
-    port: null,
     timeout: 30,
-    env: {},
     essencial: {},
     advanced: {},
     isRepo: false,
@@ -216,29 +226,6 @@ describe("ScriptSupervisor", () => {
   });
 
   // -----------------------------------------------------------------------
-  // isPortOwnedByUs
-  // -----------------------------------------------------------------------
-
-  describe("isPortOwnedByUs()", () => {
-    it("returns false when no ports tracked", () => {
-      const supervisor = new ScriptSupervisor(vi.fn());
-      expect(supervisor.isPortOwnedByUs(3000)).toBe(false);
-    });
-
-    it("returns true after starting a pinned-port service", () => {
-      const supervisor = new ScriptSupervisor(vi.fn());
-      supervisor.start(defaultStartOpts({ isPinnedPort: true, port: 3000 }));
-      expect(supervisor.isPortOwnedByUs(3000)).toBe(true);
-    });
-
-    it("does not track pinned-port with port 0", () => {
-      const supervisor = new ScriptSupervisor(vi.fn());
-      supervisor.start(defaultStartOpts({ isPinnedPort: true, port: 0 }));
-      expect(supervisor.isPortOwnedByUs(0)).toBe(false);
-    });
-  });
-
-  // -----------------------------------------------------------------------
   // start
   // -----------------------------------------------------------------------
 
@@ -338,10 +325,10 @@ describe("ScriptSupervisor", () => {
       const push = vi.fn();
       const supervisor = new ScriptSupervisor(push);
 
-      supervisor.start(defaultStartOpts({ isPinnedPort: true, port: 3000 }));
+      supervisor.start(defaultStartOpts({ port: 3000 }));
       const callCount = push.mock.calls.length;
 
-      supervisor.start(defaultStartOpts({ isPinnedPort: true, port: 3000 }));
+      supervisor.start(defaultStartOpts({ port: 3000 }));
 
       expect(push.mock.calls.length).toBe(callCount);
     });
@@ -634,12 +621,12 @@ describe("ScriptSupervisor", () => {
   // -----------------------------------------------------------------------
 
   describe("stop()", () => {
-    it("stops a running script", () => {
+    it("stops a running script", async () => {
       const push = vi.fn();
       const supervisor = new ScriptSupervisor(push);
 
-      supervisor.start(defaultStartOpts());
-      supervisor.stop("3000:api:dev");
+      await supervisor.start(defaultStartOpts());
+      await supervisor.stop("3000:api:dev");
 
       const statusCalls = push.mock.calls.filter((c) => c[0] === "scripts:status");
       const lastStatus = statusCalls[statusCalls.length - 1]![1];
@@ -652,25 +639,14 @@ describe("ScriptSupervisor", () => {
       supervisor.stop("nonexistent");
     });
 
-    it("cleans up shared port mapping", () => {
+    it("removes entry from running map", async () => {
       const push = vi.fn();
       const supervisor = new ScriptSupervisor(push);
 
-      supervisor.start(defaultStartOpts({ isPinnedPort: true, port: 3000 }));
-      expect(supervisor.isPortOwnedByUs(3000)).toBe(true);
-
-      supervisor.stop("3000:api:dev");
-      expect(supervisor.isPortOwnedByUs(3000)).toBe(false);
-    });
-
-    it("removes entry from running map", () => {
-      const push = vi.fn();
-      const supervisor = new ScriptSupervisor(push);
-
-      supervisor.start(defaultStartOpts());
+      await supervisor.start(defaultStartOpts());
       expect(supervisor.status()).toHaveLength(1);
 
-      supervisor.stop("3000:api:dev");
+      await supervisor.stop("3000:api:dev");
       expect(supervisor.status()).toHaveLength(0);
     });
 
@@ -722,15 +698,6 @@ describe("ScriptSupervisor", () => {
 
       // Cleanup
       supervisor.stopAll("proj1", "ws2");
-    });
-
-    it("clears shared port mappings", () => {
-      const push = vi.fn();
-      const supervisor = new ScriptSupervisor(push);
-
-      supervisor.start(defaultStartOpts({ isPinnedPort: true, port: 3000 }));
-      supervisor.stopAll("proj1", "default");
-      expect(supervisor.isPortOwnedByUs(3000)).toBe(false);
     });
   });
 
@@ -865,18 +832,6 @@ describe("ScriptSupervisor", () => {
       expect(statuses[0]!.pid).toBeNull();
     });
 
-    it("tracks shared port when attaching to pinned-port service", async () => {
-      const push = vi.fn();
-      const supervisor = new ScriptSupervisor(push);
-
-      mockPortInUse();
-      await supervisor.startChecked(
-        defaultStartOpts({ isLongRunning: true, port: 5000, isPinnedPort: true }),
-      );
-
-      expect(supervisor.isPortOwnedByUs(5000)).toBe(true);
-    });
-
     it("does not check port for non-long-running scripts", async () => {
       const push = vi.fn();
       const supervisor = new ScriptSupervisor(push);
@@ -917,9 +872,7 @@ describe("ScriptSupervisor", () => {
     it("skips services with port <= 0", async () => {
       const supervisor = new ScriptSupervisor(vi.fn());
 
-      await supervisor.autoDetect("proj1", "default", [
-        { name: "svc", resolvedPort: 0, port: null },
-      ]);
+      await supervisor.autoDetect("proj1", "default", [{ name: "svc", resolvedPort: 0 }]);
 
       expect(supervisor.status()).toHaveLength(0);
     });
@@ -928,9 +881,7 @@ describe("ScriptSupervisor", () => {
       const supervisor = new ScriptSupervisor(vi.fn());
       supervisor.start(defaultStartOpts({ service: "api", port: 3000, script: "dev" }));
 
-      await supervisor.autoDetect("proj1", "default", [
-        { name: "api", resolvedPort: 3000, port: null },
-      ]);
+      await supervisor.autoDetect("proj1", "default", [{ name: "api", resolvedPort: 3000 }]);
 
       expect(supervisor.status()).toHaveLength(1);
     });
@@ -940,9 +891,7 @@ describe("ScriptSupervisor", () => {
       const supervisor = new ScriptSupervisor(push);
 
       mockPortInUse();
-      await supervisor.autoDetect("proj1", "default", [
-        { name: "api", resolvedPort: 5000, port: 5000 },
-      ]);
+      await supervisor.autoDetect("proj1", "default", [{ name: "api", resolvedPort: 5000 }]);
 
       const statuses = supervisor.status();
       expect(statuses).toHaveLength(1);
@@ -951,35 +900,11 @@ describe("ScriptSupervisor", () => {
       expect(statuses[0]!.script).toBe("dev");
     });
 
-    it("tracks shared port when port is not null", async () => {
-      const supervisor = new ScriptSupervisor(vi.fn());
-
-      mockPortInUse();
-      await supervisor.autoDetect("proj1", "default", [
-        { name: "api", resolvedPort: 5000, port: 5000 },
-      ]);
-
-      expect(supervisor.isPortOwnedByUs(5000)).toBe(true);
-    });
-
-    it("does not track shared port when port is null", async () => {
-      const supervisor = new ScriptSupervisor(vi.fn());
-
-      mockPortInUse();
-      await supervisor.autoDetect("proj1", "default", [
-        { name: "api", resolvedPort: 5000, port: null },
-      ]);
-
-      expect(supervisor.isPortOwnedByUs(5000)).toBe(false);
-    });
-
     it("skips services where port check fails", async () => {
       const supervisor = new ScriptSupervisor(vi.fn());
 
       mockPortFree();
-      await supervisor.autoDetect("proj1", "default", [
-        { name: "api", resolvedPort: 5000, port: 5000 },
-      ]);
+      await supervisor.autoDetect("proj1", "default", [{ name: "api", resolvedPort: 5000 }]);
 
       expect(supervisor.status()).toHaveLength(0);
     });
@@ -990,8 +915,8 @@ describe("ScriptSupervisor", () => {
       mockPortInUse();
       mockPortInUse();
       await supervisor.autoDetect("proj1", "default", [
-        { name: "api", resolvedPort: 5000, port: 5000 },
-        { name: "web", resolvedPort: 5001, port: 5001 },
+        { name: "api", resolvedPort: 5000 },
+        { name: "web", resolvedPort: 5001 },
       ]);
 
       expect(supervisor.status()).toHaveLength(2);
@@ -1002,9 +927,7 @@ describe("ScriptSupervisor", () => {
       const supervisor = new ScriptSupervisor(push);
 
       mockPortInUse();
-      await supervisor.autoDetect("proj1", "default", [
-        { name: "api", resolvedPort: 5000, port: null },
-      ]);
+      await supervisor.autoDetect("proj1", "default", [{ name: "api", resolvedPort: 5000 }]);
 
       const logs = supervisor.logs("5000:api:dev");
       expect(logs[0]).toContain("Detected service running on port 5000");
@@ -1034,7 +957,6 @@ describe("ScriptSupervisor", () => {
         workspace: "default",
         category: "dev",
         services,
-        ports: new Map([["api", 3000]]),
         cwd: () => "/tmp",
       });
 
@@ -1055,7 +977,6 @@ describe("ScriptSupervisor", () => {
         workspace: "default",
         category: "dev",
         services,
-        ports: new Map(),
         cwd: () => "/tmp",
       });
 
@@ -1078,7 +999,6 @@ describe("ScriptSupervisor", () => {
         workspace: "default",
         category: "build",
         services,
-        ports: new Map([["api", 0]]),
         cwd: () => "/tmp",
       });
 
@@ -1109,10 +1029,6 @@ describe("ScriptSupervisor", () => {
         workspace: "default",
         category: "dev",
         services,
-        ports: new Map([
-          ["db", 5432],
-          ["api", 3000],
-        ]),
         cwd: () => "/tmp",
       });
 
@@ -1161,10 +1077,6 @@ describe("ScriptSupervisor", () => {
         workspace: "default",
         category: "dev",
         services,
-        ports: new Map([
-          ["db", 5432],
-          ["api", 3000],
-        ]),
         cwd: () => "/tmp",
       });
 
@@ -1209,10 +1121,6 @@ describe("ScriptSupervisor", () => {
         workspace: "default",
         category: "dev",
         services,
-        ports: new Map([
-          ["watcher", 0],
-          ["api", 3000],
-        ]),
         cwd: () => "/tmp",
       });
 
@@ -1260,10 +1168,6 @@ describe("ScriptSupervisor", () => {
         workspace: "default",
         category: "build",
         services,
-        ports: new Map([
-          ["setup", 0],
-          ["api", 0],
-        ]),
         cwd: () => "/tmp",
       });
 
@@ -1303,10 +1207,6 @@ describe("ScriptSupervisor", () => {
         workspace: "default",
         category: "build",
         services,
-        ports: new Map([
-          ["setup", 0],
-          ["api", 0],
-        ]),
         cwd: () => "/tmp",
       });
 
@@ -1349,10 +1249,6 @@ describe("ScriptSupervisor", () => {
         workspace: "default",
         category: "build",
         services,
-        ports: new Map([
-          ["setup", 0],
-          ["api", 0],
-        ]),
         cwd: () => "/tmp",
       });
 
@@ -1387,22 +1283,21 @@ describe("ScriptSupervisor", () => {
         workspace: "default",
         category: "build",
         services,
-        ports: new Map(),
         cwd: () => "/tmp",
       });
 
       expect(supervisor.status()).toHaveLength(2);
     });
 
-    it("interpolates port references in commands", async () => {
+    it("passes commands through without interpolation", async () => {
       const push = vi.fn();
       const supervisor = new ScriptSupervisor(push);
 
       const services: ResolvedServiceDef[] = [
         makeResolved("api", [], {
-          resolvedPort: 0,
+          resolvedPort: 3000,
           essencial: {
-            dev: { run: ["start --port {api.PORT}"], output: "always" },
+            dev: { run: ["start --port $PORT"], output: "always" },
           },
         }),
       ];
@@ -1412,38 +1307,12 @@ describe("ScriptSupervisor", () => {
         workspace: "default",
         category: "dev",
         services,
-        ports: new Map([["api", 3000]]),
         cwd: () => "/tmp",
       });
 
       const logCalls = push.mock.calls.filter((c) => c[0] === "scripts:log");
       const commandLog = logCalls.find((c) => c[1].line.includes("start --port"));
-      expect(commandLog?.[1].line).toContain("3000");
-    });
-
-    it("uses isPinnedPort from service port config", async () => {
-      const push = vi.fn();
-      const supervisor = new ScriptSupervisor(push);
-
-      const services: ResolvedServiceDef[] = [
-        makeResolved("db", [], {
-          resolvedPort: 5432,
-          port: 5432,
-          essencial: { dev: { run: ["pg_start"], output: "always" } },
-        }),
-      ];
-
-      mockPortFree();
-      await supervisor.runAll({
-        projectId: "proj1",
-        workspace: "default",
-        category: "dev",
-        services,
-        ports: new Map([["db", 5432]]),
-        cwd: () => "/tmp",
-      });
-
-      expect(supervisor.isPortOwnedByUs(5432)).toBe(true);
+      expect(commandLog?.[1].line).toContain("$PORT");
     });
   });
 
@@ -1473,10 +1342,6 @@ describe("ScriptSupervisor", () => {
         workspace: "default",
         category: "dev",
         services,
-        ports: new Map([
-          ["watcher", 0],
-          ["api", 0],
-        ]),
         cwd: () => "/tmp",
       });
 
@@ -1520,10 +1385,6 @@ describe("ScriptSupervisor", () => {
         workspace: "default",
         category: "dev",
         services,
-        ports: new Map([
-          ["db", 5432],
-          ["api", 3000],
-        ]),
         cwd: () => "/tmp",
       });
 
@@ -1569,10 +1430,6 @@ describe("ScriptSupervisor", () => {
         workspace: "default",
         category: "build",
         services,
-        ports: new Map([
-          ["setup", 0],
-          ["api", 0],
-        ]),
         cwd: () => "/tmp",
       });
 

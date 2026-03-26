@@ -3,14 +3,13 @@ import * as path from "node:path";
 import { createServer, pushAll } from "./ws.js";
 import { registerAllHandlers } from "./handlers/index.js";
 import { ScriptSupervisor } from "@iara/orchestrator/supervisor";
-import { PortAllocator } from "@iara/orchestrator/ports";
 import { NotificationService } from "./services/notifications.js";
 import { TerminalManager, TERMINAL_KILL_GRACE_MS } from "./services/terminal.js";
 import { SocketServer, registerSocketHandlers } from "./socket.js";
 import { syncShellEnvironment } from "./services/shell-env.js";
 import { generatePluginDir } from "./services/plugins.js";
 import { SessionWatcher } from "./services/session-watcher.js";
-import { syncEnvSymlinks } from "./services/env.js";
+import { EnvWatcher } from "./services/env-watcher.js";
 import { AppState } from "./services/state.js";
 import { ProjectsWatcher } from "./services/watcher.js";
 import { GitWatcher } from "./services/git-watcher.js";
@@ -19,7 +18,6 @@ import { stateDir } from "./env.js";
 
 // Shell env must complete before anything that depends on PATH (git, etc.)
 await syncShellEnvironment();
-syncEnvSymlinks();
 
 const port = Number(
   process.env.IARA_PORT ?? process.argv.find((_, i, a) => a[i - 1] === "--port") ?? 3773,
@@ -36,7 +34,6 @@ const appState = new AppState(getProjectsDir(), stateDir);
 
 // Services
 const scriptSupervisor = new ScriptSupervisor(pushAll);
-const portAllocator = new PortAllocator();
 const notificationService = new NotificationService(pushAll);
 const terminalManager = new TerminalManager(pushAll);
 const socketServer = new SocketServer();
@@ -48,16 +45,18 @@ const watcher = new ProjectsWatcher(getProjectsDir(), appState, pushAll);
 await watcher.start();
 const gitWatcher = new GitWatcher(appState, pushAll);
 gitWatcher.start();
+const envWatcher = new EnvWatcher(getProjectsDir(), appState);
+await envWatcher.start();
 
 // Register all WS handlers
 registerAllHandlers({
   appState,
   watcher,
   scriptSupervisor,
-  portAllocator,
   notificationService,
   terminalManager,
   sessionWatcher,
+  envWatcher,
   pushFn: pushAll,
 });
 
@@ -101,6 +100,9 @@ function shutdown() {
   } catch {}
   try {
     gitWatcher.stop();
+  } catch {}
+  try {
+    envWatcher.stop();
   } catch {}
   try {
     terminalManager.destroyAll();

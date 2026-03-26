@@ -22,8 +22,9 @@ export type {
 export type {
   ClaudeProgress,
   CloneProgress,
+  EnvData,
   EnvEntry,
-  EnvRepoEntries,
+  EnvServiceEntries,
   Project,
   RepoInfo,
   SyncResult,

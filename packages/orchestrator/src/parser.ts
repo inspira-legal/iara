@@ -59,16 +59,7 @@ export function parseScriptsYaml(content: string, repoNames: string[]): ServiceD
 
     const dependsOn = Array.isArray(d.dependsOn) ? (d.dependsOn as string[]) : [];
 
-    const port = typeof d.port === "number" ? d.port : null;
-
     const timeout = typeof d.timeout === "number" ? d.timeout : DEFAULT_TIMEOUT;
-
-    const env: Record<string, string> = {};
-    if (typeof d.env === "object" && d.env !== null) {
-      for (const [k, v] of Object.entries(d.env as Record<string, unknown>)) {
-        env[k] = String(v);
-      }
-    }
 
     const essencial: Partial<Record<EssencialKey, ScriptEntry>> = {};
     if (typeof d.essencial === "object" && d.essencial !== null) {
@@ -96,9 +87,7 @@ export function parseScriptsYaml(content: string, repoNames: string[]): ServiceD
     services.push({
       name,
       dependsOn,
-      port,
       timeout,
-      env,
       essencial,
       advanced,
       isRepo: repoSet.has(name),

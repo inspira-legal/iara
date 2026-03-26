@@ -6,6 +6,7 @@ export function projectPaths(projectsDir: string, slug: string) {
     root,
     claudeMd: path.join(root, "CLAUDE.md"),
     scriptsYaml: path.join(root, "iara-scripts.yaml"),
+    envToml: path.join(root, "env.toml"),
     workspacesDir: path.join(root, "workspaces"),
     repo: (name: string) => path.join(root, name),
   };

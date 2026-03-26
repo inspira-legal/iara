@@ -14,8 +14,8 @@ import type {
 import type {
   ClaudeProgress,
   CloneProgress,
-  EnvEntry,
-  EnvRepoEntries,
+  EnvData,
+  EnvServiceEntries,
   Project,
   RepoInfo,
   SyncResult,
@@ -129,21 +129,17 @@ export type WsMethods = {
   "scripts.discover": { params: { projectId: string }; result: { requestId: string } };
 
   // Env
-  "env.list": { params: { workspaceId: string }; result: EnvRepoEntries[] };
+  "env.list": { params: { workspaceId: string }; result: EnvData };
   "env.write": {
     params: {
-      repo: string;
-      level: "global" | "local";
-      workspaceId?: string;
-      entries: EnvEntry[];
+      workspaceId: string;
+      services: EnvServiceEntries[];
     };
     result: void;
   };
   "env.delete": {
     params: {
-      repo: string;
-      level: "global" | "local";
-      workspaceId?: string;
+      workspaceId: string;
     };
     result: void;
   };
@@ -196,7 +192,7 @@ export type WsPushEvents = {
   notification: { title: string; body: string; type?: string };
   "clone:progress": CloneProgress;
   "session:changed": { workspaceId: string };
-  "env:changed": { repo: string; level: "global" | "local" };
+  "env:changed": { workspaceId: string };
   "settings:changed": { key: string; value: string };
   "claude:progress": { requestId: string; progress: ClaudeProgress };
   "claude:result": { requestId: string; result: unknown };

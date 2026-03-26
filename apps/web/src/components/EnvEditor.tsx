@@ -1,20 +1,23 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Plus, Trash2, Eye, EyeOff, ArrowUpDown, AlertTriangle, X } from "lucide-react";
-import type { EnvEntry, EnvRepoEntries } from "@iara/contracts";
+import { Plus, Trash2, AlertTriangle, X } from "lucide-react";
+import type { EnvData, EnvEntry, EnvServiceEntries } from "@iara/contracts";
 import { transport } from "~/lib/ws-transport.js";
-import { cn } from "~/lib/utils";
 
 interface EnvEditorProps {
   workspaceId: string;
-  repos: string[];
+  /** All known service names (repos + non-repo services from scripts.yaml). */
+  serviceNames: string[];
   hasActiveTerminal?: boolean;
 }
 
-export function EnvEditor({ workspaceId, repos, hasActiveTerminal }: EnvEditorProps) {
-  const [data, setData] = useState<EnvRepoEntries[]>([]);
+export function EnvEditor({
+  workspaceId,
+  serviceNames: propServiceNames,
+  hasActiveTerminal,
+}: EnvEditorProps) {
+  const [data, setData] = useState<EnvData>({ services: [] });
   const [loading, setLoading] = useState(true);
-  const [activeRepo, setActiveRepo] = useState<string>(repos[0] ?? "");
-  const [showMerged, setShowMerged] = useState(true);
+  const [activeService, setActiveService] = useState<string>(propServiceNames[0] ?? "");
   const [envDirty, setEnvDirty] = useState(false);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -41,67 +44,68 @@ export function EnvEditor({ workspaceId, repos, hasActiveTerminal }: EnvEditorPr
     load();
   }, [load]);
 
-  // Set active repo when repos change
+  // Set active service when service names change
   useEffect(() => {
-    if (repos.length > 0 && !repos.includes(activeRepo)) {
-      setActiveRepo(repos[0] ?? "");
+    if (propServiceNames.length > 0 && !propServiceNames.includes(activeService)) {
+      setActiveService(propServiceNames[0] ?? "");
     }
-  }, [repos, activeRepo]);
+  }, [propServiceNames, activeService]);
 
-  const repoData = data.find((d) => d.repo === activeRepo);
+  // Merge prop names with any extra services from env.toml data
+  const serviceNames = (() => {
+    const names = new Set(propServiceNames);
+    for (const svc of data.services) names.add(svc.name);
+    return [...names];
+  })();
+  const serviceData = data.services.find((s) => s.name === activeService);
+  const entries = serviceData?.entries ?? [];
 
   const save = useCallback(
-    (repo: string, level: "global" | "local", entries: EnvEntry[]) => {
+    (services: EnvServiceEntries[]) => {
       if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
       saveTimerRef.current = setTimeout(() => {
-        const params =
-          level === "global" ? { repo, level, entries } : { repo, level, workspaceId, entries };
-        void transport.request("env.write", params);
+        void transport.request("env.write", { workspaceId, services });
       }, 500);
     },
     [workspaceId],
   );
 
-  const updateEntry = (
-    level: "global" | "local",
-    index: number,
-    field: "key" | "value",
-    newValue: string,
-  ) => {
-    setData((prev) =>
-      prev.map((d) => {
-        if (d.repo !== activeRepo) return d;
-        const entries = [...d[level]];
-        const prev = entries[index] ?? { key: "", value: "" };
-        entries[index] = { ...prev, [field]: newValue };
-        save(activeRepo, level, entries);
-        return { ...d, [level]: entries };
-      }),
-    );
+  const updateData = (serviceName: string, newEntries: EnvEntry[]): EnvData => {
+    const existing = data.services.find((s) => s.name === serviceName);
+    let services: EnvServiceEntries[];
+    if (existing) {
+      services = data.services.map((s) =>
+        s.name === serviceName ? { ...s, entries: newEntries } : s,
+      );
+    } else {
+      services = [...data.services, { name: serviceName, entries: newEntries }];
+    }
+    return { services };
   };
 
-  const addEntry = (level: "global" | "local") => {
-    setData((prev) =>
-      prev.map((d) => {
-        if (d.repo !== activeRepo) return d;
-        const entries = [...d[level], { key: "", value: "" }];
-        return { ...d, [level]: entries };
-      }),
-    );
+  const updateEntry = (index: number, field: "key" | "value", newValue: string) => {
+    const updated = [...entries];
+    const prev = updated[index] ?? { key: "", value: "" };
+    updated[index] = { ...prev, [field]: newValue };
+    const newData = updateData(activeService, updated);
+    setData(newData);
+    save(newData.services);
   };
 
-  const removeEntry = (level: "global" | "local", index: number) => {
-    setData((prev) =>
-      prev.map((d) => {
-        if (d.repo !== activeRepo) return d;
-        const entries = d[level].filter((_, i) => i !== index);
-        save(activeRepo, level, entries);
-        return { ...d, [level]: entries };
-      }),
-    );
+  const addEntry = () => {
+    const updated = [...entries, { key: "", value: "" }];
+    const newData = updateData(activeService, updated);
+    setData(newData);
   };
 
-  if (repos.length === 0) return null;
+  const removeEntry = (index: number) => {
+    const updated = entries.filter((_, i) => i !== index);
+    const newData = updateData(activeService, updated);
+    setData(newData);
+    save(newData.services);
+  };
+
+  if (serviceNames.length === 0) return null;
 
   if (loading) {
     return (
@@ -114,50 +118,26 @@ export function EnvEditor({ workspaceId, repos, hasActiveTerminal }: EnvEditorPr
     );
   }
 
-  // Compute merged view
-  const globalKeys = new Set((repoData?.global ?? []).map((e) => e.key));
-  const merged = (() => {
-    const map = new Map<string, { value: string; source: "global" | "local" }>();
-    for (const e of repoData?.global ?? []) {
-      if (e.key) map.set(e.key, { value: e.value, source: "global" });
-    }
-    for (const e of repoData?.local ?? []) {
-      if (e.key) map.set(e.key, { value: e.value, source: "local" });
-    }
-    return Array.from(map, ([key, v]) => ({ key, ...v }));
-  })();
-
   return (
     <div className="space-y-3">
-      <div className="flex items-center justify-between">
-        <h3 className="text-sm font-medium text-zinc-300">Environment</h3>
-        <button
-          type="button"
-          onClick={() => setShowMerged((v) => !v)}
-          className="flex items-center gap-1 rounded px-2 py-1 text-xs text-zinc-500 hover:bg-zinc-800 hover:text-zinc-300"
-          title={showMerged ? "Edit variables" : "Show merged preview"}
-        >
-          {showMerged ? <EyeOff size={12} /> : <Eye size={12} />}
-          {showMerged ? "Edit" : "Merged"}
-        </button>
-      </div>
+      <h3 className="text-sm font-medium text-zinc-300">Environment</h3>
 
-      {/* Repo tabs */}
-      {repos.length > 1 && (
+      {/* Service tabs */}
+      {serviceNames.length > 1 && (
         <div className="flex gap-1 rounded-md bg-zinc-800 p-1">
-          {repos.map((repo) => (
+          {serviceNames.map((name) => (
             <button
-              key={repo}
+              key={name}
               type="button"
-              onClick={() => setActiveRepo(repo)}
-              className={cn(
-                "flex-1 rounded-md px-3 py-1 text-xs font-medium transition-colors",
-                activeRepo === repo
+              onClick={() => setActiveService(name)}
+              className={
+                "flex-1 rounded-md px-3 py-1 text-xs font-medium transition-colors " +
+                (activeService === name
                   ? "bg-zinc-700 text-zinc-100"
-                  : "text-zinc-500 hover:text-zinc-300",
-              )}
+                  : "text-zinc-500 hover:text-zinc-300")
+              }
             >
-              {repo}
+              {name}
             </button>
           ))}
         </div>
@@ -178,30 +158,13 @@ export function EnvEditor({ workspaceId, repos, hasActiveTerminal }: EnvEditorPr
         </div>
       )}
 
-      {showMerged ? (
-        <MergedView entries={merged} />
-      ) : (
-        <div className="space-y-4">
-          <EnvSection
-            label="Global"
-            sublabel="shared across all projects and workspaces"
-            entries={repoData?.global ?? []}
-            overriddenKeys={new Set()}
-            onUpdate={(i, f, v) => updateEntry("global", i, f, v)}
-            onAdd={() => addEntry("global")}
-            onRemove={(i) => removeEntry("global", i)}
-          />
-          <EnvSection
-            label="Local"
-            sublabel="this workspace only"
-            entries={repoData?.local ?? []}
-            overriddenKeys={globalKeys}
-            onUpdate={(i, f, v) => updateEntry("local", i, f, v)}
-            onAdd={() => addEntry("local")}
-            onRemove={(i) => removeEntry("local", i)}
-          />
-        </div>
-      )}
+      {/* Entries */}
+      <EnvSection
+        entries={entries}
+        onUpdate={updateEntry}
+        onAdd={addEntry}
+        onRemove={removeEntry}
+      />
     </div>
   );
 }
@@ -213,18 +176,12 @@ export function EnvEditor({ workspaceId, repos, hasActiveTerminal }: EnvEditorPr
 let nextEntryId = 0;
 
 function EnvSection({
-  label,
-  sublabel,
   entries,
-  overriddenKeys,
   onUpdate,
   onAdd,
   onRemove,
 }: {
-  label: string;
-  sublabel: string;
   entries: EnvEntry[];
-  overriddenKeys: Set<string>;
   onUpdate: (index: number, field: "key" | "value", value: string) => void;
   onAdd: () => void;
   onRemove: (index: number) => void;
@@ -238,18 +195,12 @@ function EnvSection({
   idsRef.current.length = entries.length;
   return (
     <div className="rounded-lg border border-zinc-700 bg-zinc-800/30 p-3">
-      <div className="mb-2 flex items-center gap-2">
-        <span className="text-xs font-medium text-zinc-300">{label}</span>
-        <span className="text-xs text-zinc-600">{sublabel}</span>
-      </div>
-
       {entries.length === 0 ? (
         <p className="mb-2 text-xs text-zinc-500">No variables defined.</p>
       ) : (
         <div className="mb-2 space-y-1">
           {entries.map((entry, idx) => {
             const entryId = idsRef.current[idx];
-            const isOverriding = label === "Local" && overriddenKeys.has(entry.key);
             return (
               <div key={entryId} className="flex items-center gap-1.5">
                 <input
@@ -257,10 +208,7 @@ function EnvSection({
                   value={entry.key}
                   onChange={(e) => onUpdate(idx, "key", e.target.value)}
                   placeholder="KEY"
-                  className={cn(
-                    "w-[40%] rounded border bg-zinc-900 px-2 py-1 font-mono text-xs text-zinc-100 placeholder-zinc-600 outline-none focus:border-blue-500",
-                    isOverriding ? "border-amber-600/50" : "border-zinc-700",
-                  )}
+                  className="w-[40%] rounded border border-zinc-700 bg-zinc-900 px-2 py-1 font-mono text-xs text-zinc-100 placeholder-zinc-600 outline-none focus:border-blue-500"
                 />
                 <span className="text-xs text-zinc-600">=</span>
                 <input
@@ -270,13 +218,6 @@ function EnvSection({
                   placeholder="value"
                   className="min-w-0 flex-1 rounded border border-zinc-700 bg-zinc-900 px-2 py-1 font-mono text-xs text-zinc-100 placeholder-zinc-600 outline-none focus:border-blue-500"
                 />
-                {isOverriding && (
-                  <ArrowUpDown
-                    size={11}
-                    className="shrink-0 text-amber-500"
-                    aria-label="Overrides global"
-                  />
-                )}
                 <button
                   type="button"
                   onClick={() => onRemove(idx)}
@@ -298,49 +239,6 @@ function EnvSection({
         <Plus size={12} />
         Add Variable
       </button>
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Merged View
-// ---------------------------------------------------------------------------
-
-function MergedView({
-  entries,
-}: {
-  entries: Array<{ key: string; value: string; source: "global" | "local" }>;
-}) {
-  if (entries.length === 0) {
-    return (
-      <div className="rounded-lg border border-zinc-700 bg-zinc-800/30 p-3">
-        <p className="text-xs text-zinc-600">No environment variables.</p>
-      </div>
-    );
-  }
-
-  return (
-    <div className="rounded-lg border border-zinc-700 bg-zinc-800/30 p-3">
-      <div className="mb-2 text-xs font-medium text-zinc-300">Merged Preview</div>
-      <div className="space-y-0.5">
-        {entries.map((e) => (
-          <div key={e.key} className="flex items-center gap-1.5 font-mono text-xs">
-            <span className="text-zinc-100">{e.key}</span>
-            <span className="text-zinc-600">=</span>
-            <span className="min-w-0 flex-1 truncate text-zinc-400">{e.value}</span>
-            <span
-              className={cn(
-                "shrink-0 rounded px-1.5 py-0.5 text-[10px]",
-                e.source === "global"
-                  ? "bg-zinc-700 text-zinc-400"
-                  : "bg-amber-900/30 text-amber-400",
-              )}
-            >
-              {e.source}
-            </span>
-          </div>
-        ))}
-      </div>
     </div>
   );
 }
