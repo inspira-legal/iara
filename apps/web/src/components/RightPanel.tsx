@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import { X, Settings2 } from "lucide-react";
 import type { RepoInfo } from "@iara/contracts";
 import { usePanelsStore } from "~/stores/panels";
 import { useAppStore } from "~/stores/app";
+import { useScriptsStore } from "~/stores/scripts";
 import { EnvEditor } from "./EnvEditor";
 import { Button } from "./ui/Button";
 
@@ -20,6 +21,18 @@ export function RightPanel() {
     const wsId = s.selectedWorkspaceId;
     return wsId ? s.getRepoInfo(wsId) : EMPTY_REPO_INFO;
   });
+
+  const scriptsConfig = useScriptsStore((s) => s.config);
+  const repos = repoInfo.map((r) => r.name);
+
+  // Combine repo names + service names from scripts.yaml
+  const serviceNames = useMemo(() => {
+    const names = new Set(repos);
+    if (scriptsConfig?.services) {
+      for (const svc of scriptsConfig.services) names.add(svc.name);
+    }
+    return [...names];
+  }, [repos, scriptsConfig?.services]);
 
   const dragRef = useRef<{ startX: number; startWidth: number } | null>(null);
 
@@ -64,8 +77,7 @@ export function RightPanel() {
   // Don't render when editing project or panel is closed
   if (!open || editingProjectId || !selectedWorkspaceId) return null;
 
-  const repos = repoInfo.map((r) => r.name);
-  if (repos.length === 0) return null;
+  if (serviceNames.length === 0) return null;
 
   return (
     <div className="flex h-full shrink-0" style={{ width }}>
@@ -89,7 +101,7 @@ export function RightPanel() {
           </Button>
         </div>
         <div className="flex-1 overflow-y-auto p-3">
-          <EnvEditor workspaceId={selectedWorkspaceId} repos={repos} />
+          <EnvEditor workspaceId={selectedWorkspaceId} serviceNames={serviceNames} />
         </div>
       </div>
     </div>
