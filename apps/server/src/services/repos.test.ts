@@ -5,6 +5,13 @@ import * as os from "node:os";
 
 // Mock child_process and git helpers before importing repos
 vi.mock("node:child_process", () => ({
+  exec: vi.fn((_cmd: string, _opts: unknown, cb?: Function) => {
+    if (typeof _opts === "function") {
+      _opts(null, { stdout: "", stderr: "" });
+    } else if (cb) {
+      cb(null, { stdout: "", stderr: "" });
+    }
+  }),
   execSync: vi.fn().mockReturnValue(Buffer.from("")),
 }));
 
@@ -30,7 +37,7 @@ vi.mock("@iara/shared/git", () => ({
   gitWorktreeAdd: vi.fn().mockResolvedValue(undefined),
 }));
 
-import { execSync } from "node:child_process";
+import { exec, execSync } from "node:child_process";
 import {
   gitCloneWithProgress,
   gitFetch,
@@ -40,6 +47,16 @@ import {
   gitWorktreeAdd,
 } from "@iara/shared/git";
 import { validateGitUrl, getRepoInfo, addRepo, syncRepos, fetchRepos } from "./repos.js";
+
+/** Helper to set up the exec mock (used by promisify → execAsync). */
+function mockExec(handler: (cmd: string) => { stdout: string; stderr: string }) {
+  vi.mocked(exec).mockImplementation((_cmd: unknown, _opts: unknown, cb?: unknown) => {
+    const result = handler(String(_cmd));
+    if (typeof _opts === "function") (_opts as Function)(null, result);
+    else if (typeof cb === "function") (cb as Function)(null, result);
+    return undefined as any;
+  });
+}
 
 let tmpDir: string;
 
@@ -63,6 +80,7 @@ beforeEach(() => {
   tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "repos-test-"));
   vi.restoreAllMocks();
   // Restore default mock implementations after restoreAllMocks clears them
+  mockExec(() => ({ stdout: "", stderr: "" }));
   vi.mocked(execSync).mockReturnValue(Buffer.from(""));
   vi.mocked(gitCloneWithProgress).mockResolvedValue(undefined);
   vi.mocked(gitLsRemote).mockResolvedValue(undefined);
@@ -82,13 +100,11 @@ describe("getRepoInfo()", () => {
     const reposDir = path.join(tmpDir, projectSlug, "default");
     fs.mkdirSync(path.join(reposDir, "my-repo"), { recursive: true });
 
-    const execSyncMock = vi.mocked(execSync);
-    execSyncMock.mockImplementation((cmd: unknown) => {
-      const command = String(cmd);
-      if (command.includes("branch --show-current")) return Buffer.from("main\n");
-      if (command.includes("status --porcelain")) return Buffer.from("");
-      if (command.includes("rev-list")) return Buffer.from("2\t1");
-      return Buffer.from("");
+    mockExec((cmd) => {
+      if (cmd.includes("branch --show-current")) return { stdout: "main\n", stderr: "" };
+      if (cmd.includes("status --porcelain")) return { stdout: "", stderr: "" };
+      if (cmd.includes("rev-list")) return { stdout: "2\t1", stderr: "" };
+      return { stdout: "", stderr: "" };
     });
 
     const appState = createMockAppState(projectSlug, ["my-repo"]);
@@ -116,9 +132,11 @@ describe("getRepoInfo()", () => {
     const reposDir = path.join(tmpDir, projectSlug, "default");
     fs.mkdirSync(path.join(reposDir, "repo1"), { recursive: true });
 
-    const execSyncMock = vi.mocked(execSync);
-    execSyncMock.mockImplementation(() => {
-      throw new Error("git error");
+    vi.mocked(exec).mockImplementation((_cmd: unknown, _opts: unknown, cb?: unknown) => {
+      const err = new Error("git error");
+      if (typeof _opts === "function") (_opts as Function)(err, { stdout: "", stderr: "" });
+      else if (typeof cb === "function") (cb as Function)(err, { stdout: "", stderr: "" });
+      return undefined as any;
     });
 
     const appState = createMockAppState(projectSlug, ["repo1"]);
@@ -163,9 +181,10 @@ describe("addRepo()", () => {
 
       const dest = path.join(projectDir, "new-repo");
       expect(fs.existsSync(dest)).toBe(true);
-      expect(vi.mocked(execSync)).toHaveBeenCalledWith(
+      expect(vi.mocked(exec)).toHaveBeenCalledWith(
         "git init",
         expect.objectContaining({ cwd: dest }),
+        expect.any(Function),
       );
     });
   });
@@ -401,11 +420,12 @@ describe("addRepo()", () => {
     expect(onProgress).toHaveBeenCalledWith(
       expect.objectContaining({ message: "Initializing git..." }),
     );
-    expect(vi.mocked(execSync)).toHaveBeenCalledWith(
+    expect(vi.mocked(exec)).toHaveBeenCalledWith(
       "git init",
       expect.objectContaining({
         cwd: path.join(projectDir, "local-no-git"),
       }),
+      expect.any(Function),
     );
   });
 
@@ -674,8 +694,6 @@ describe("getRepoInfo() with workspaceSlug", () => {
     const projectSlug = "proj";
     const appState = createMockAppState(projectSlug, ["repo1"]);
 
-    vi.mocked(execSync).mockImplementation(() => Buffer.from(""));
-
     await getRepoInfo(appState, projectSlug, "my-task");
 
     // getWorkspaceDir should be called with the full workspace id
@@ -686,11 +704,11 @@ describe("getRepoInfo() with workspaceSlug", () => {
     const projectSlug = "proj";
     const appState = createMockAppState(projectSlug, ["repo1"]);
 
-    vi.mocked(execSync).mockImplementation((cmd: unknown) => {
-      const command = String(cmd);
-      if (command.includes("branch --show-current")) return Buffer.from("");
-      if (command.includes("status --porcelain")) return Buffer.from("M file.txt\nA new.txt");
-      return Buffer.from("");
+    mockExec((cmd) => {
+      if (cmd.includes("branch --show-current")) return { stdout: "", stderr: "" };
+      if (cmd.includes("status --porcelain"))
+        return { stdout: "M file.txt\nA new.txt", stderr: "" };
+      return { stdout: "", stderr: "" };
     });
 
     const result = await getRepoInfo(appState, projectSlug);
