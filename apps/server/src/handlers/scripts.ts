@@ -69,16 +69,40 @@ function loadResolvedConfig(
       ? projectDir
       : path.join(projectDir, "workspaces", workspaceSlug);
 
+  const basePort = computeBasePort(appState, projectSlug);
+  const wsOffset = computeWorkspaceOffset(appState, projectSlug, workspaceSlug);
+  const repoSet = new Set(repoNames);
+
   const resolved: ResolvedServiceDef[] = [];
+  let repoServiceIndex = 0;
   for (const svc of services) {
-    // Read env from env.toml for this service
     const envFromToml = getEnvForService(wsDir, svc.name);
-    const resolvedPort = Number.parseInt(envFromToml.PORT ?? "0", 10) || 0;
+    const isRepo = repoSet.has(svc.name);
+
+    let resolvedPort: number;
+    if (envFromToml.IARA_PORT) {
+      // Pinned port — user explicitly set IARA_PORT in env.toml
+      resolvedPort = Number.parseInt(envFromToml.IARA_PORT, 10) || 0;
+    } else if (isRepo) {
+      // Auto-assign port for repo services
+      resolvedPort = basePort + wsOffset + repoServiceIndex;
+    } else {
+      // Non-repo services without IARA_PORT get no health check
+      resolvedPort = 0;
+    }
+
+    if (isRepo) repoServiceIndex++;
+
+    // Ensure IARA_PORT is in resolvedEnv for command interpolation ({IARA_PORT})
+    const resolvedEnv =
+      resolvedPort > 0 && !envFromToml.IARA_PORT
+        ? { ...envFromToml, IARA_PORT: String(resolvedPort) }
+        : envFromToml;
 
     resolved.push({
       ...svc,
       resolvedPort,
-      resolvedEnv: envFromToml,
+      resolvedEnv,
     });
   }
 
@@ -93,6 +117,23 @@ function computeBasePort(appState: AppState, projectSlug: string): number {
   const projects = appState.getState().projects;
   const index = projects.findIndex((p) => p.slug === projectSlug);
   return 3000 + (index >= 0 ? index : projects.length) * 100;
+}
+
+/**
+ * Compute port offset for a workspace within a project.
+ * Main workspace = 0, others = 20 * workspaceIndex (1-based).
+ */
+function computeWorkspaceOffset(
+  appState: AppState,
+  projectSlug: string,
+  workspaceSlug: string,
+): number {
+  if (workspaceSlug === AppState.ROOT_WORKSPACE_SLUG) return 0;
+  const project = appState.getProject(projectSlug);
+  if (!project) return 0;
+  const nonMain = project.workspaces.filter((w) => w.slug !== AppState.ROOT_WORKSPACE_SLUG);
+  const wsIndex = nonMain.findIndex((w) => w.slug === workspaceSlug);
+  return 20 * (wsIndex >= 0 ? wsIndex + 1 : nonMain.length + 1);
 }
 
 export function triggerDiscovery(

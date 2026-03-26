@@ -13,6 +13,7 @@ import type {
 } from "@iara/contracts";
 import { cleanEnv } from "@iara/shared/env";
 import { killProcessGroup } from "@iara/shared/process";
+import { interpolate } from "./interpolation.js";
 
 type PushFn = <E extends keyof WsPushEvents>(event: E, params: WsPushEvents[E]) => void;
 
@@ -68,7 +69,7 @@ export class ScriptSupervisor {
       await this.stopByKey(key);
     }
 
-    const fullCommand = opts.commands.join(" && ");
+    const fullCommand = opts.commands.map((cmd) => interpolate(cmd, opts.env)).join(" && ");
 
     // Log the command being executed
     this.pushFn("scripts:log", {
@@ -108,7 +109,7 @@ export class ScriptSupervisor {
 
     const child = spawn(fullCommand, {
       cwd: opts.cwd,
-      env: { ...cleanEnv(), ...opts.env },
+      env: cleanEnv(),
       shell: true,
       stdio: ["ignore", "pipe", "pipe"],
       detached: true,

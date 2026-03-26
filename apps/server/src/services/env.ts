@@ -130,7 +130,8 @@ export function generateDotEnvFiles(workspaceDir: string, repoNames: string[]): 
     const repoDir = path.join(workspaceDir, svc.name);
     if (!fs.existsSync(repoDir)) continue;
 
-    const lines = svc.entries.map((e) => `${e.key}=${e.value}`);
+    const filtered = svc.entries.filter((e) => e.key !== IARA_PORT_KEY);
+    const lines = filtered.map((e) => `${e.key}=${e.value}`);
     const content = DOTENV_HEADER + lines.join("\n") + (lines.length > 0 ? "\n" : "");
     fs.writeFileSync(path.join(repoDir, ".env"), content);
   }
@@ -140,7 +141,7 @@ export function generateDotEnvFiles(workspaceDir: string, repoNames: string[]): 
 // Port offset for workspace creation (R4.11)
 // ---------------------------------------------------------------------------
 
-const PORT_KEY_RE = /^PORT$|_PORT$/;
+const IARA_PORT_KEY = "IARA_PORT";
 
 /**
  * Copy env.toml from source workspace, offsetting PORT values for repo sections.
@@ -163,7 +164,7 @@ export function copyEnvTomlWithPortOffset(
     return {
       name: svc.name,
       entries: svc.entries.map((entry) => {
-        if (PORT_KEY_RE.test(entry.key)) {
+        if (entry.key === IARA_PORT_KEY) {
           const port = Number.parseInt(entry.value, 10);
           if (!Number.isNaN(port)) {
             return { key: entry.key, value: String(port + offset) };

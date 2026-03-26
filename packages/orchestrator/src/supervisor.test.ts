@@ -1289,15 +1289,16 @@ describe("ScriptSupervisor", () => {
       expect(supervisor.status()).toHaveLength(2);
     });
 
-    it("passes commands through without interpolation", async () => {
+    it("interpolates {{ENV}} refs in commands", async () => {
       const push = vi.fn();
       const supervisor = new ScriptSupervisor(push);
 
       const services: ResolvedServiceDef[] = [
         makeResolved("api", [], {
           resolvedPort: 3000,
+          resolvedEnv: { PORT: "3000" },
           essencial: {
-            dev: { run: ["start --port $PORT"], output: "always" },
+            dev: { run: ["start --port {PORT}"], output: "always" },
           },
         }),
       ];
@@ -1312,7 +1313,7 @@ describe("ScriptSupervisor", () => {
 
       const logCalls = push.mock.calls.filter((c) => c[0] === "scripts:log");
       const commandLog = logCalls.find((c) => c[1].line.includes("start --port"));
-      expect(commandLog?.[1].line).toContain("$PORT");
+      expect(commandLog?.[1].line).toContain("start --port 3000");
     });
   });
 

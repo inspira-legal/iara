@@ -72,7 +72,7 @@ export function buildDiscoveryPrompt(
   const userSection = userPrompt ? `\n\n## User Request\n${userPrompt}` : "";
 
   const portHint = basePort
-    ? `\nBase port for this project is ${basePort}. Assign PORT values starting at ${basePort}, incrementing by 1 for each repo service. Non-repo services (databases, caches) use their well-known ports (e.g., 5432 for postgres, 6379 for redis).`
+    ? `\nPorts are auto-assigned by iara at runtime (base port ${basePort}, incrementing by 1 per repo service). Use port ${basePort} for the first repo, ${basePort + 1} for the second, etc. when writing cross-service URLs. Non-repo services (databases, caches) use their well-known ports (e.g., 5432 for postgres, 6379 for redis).`
     : "";
 
   return `You are analyzing a project's repositories to generate scripts and environment configuration.
@@ -104,9 +104,11 @@ Analyze each repository's build system and generate a JSON object with two top-l
     }
   },
   "env": {
-    "<service-name>": {
-      "PORT": "3000",
+    "<repo-service>": {
       "DATABASE_URL": "postgres://localhost:5432/mydb"
+    },
+    "<non-repo-service>": {
+      "IARA_PORT": "5432"
     }
   }
 }
@@ -116,20 +118,21 @@ Analyze each repository's build system and generate a JSON object with two top-l
 1. Service names MUST match repo names for repositories.
 2. Add non-repo services (databases, caches) only if docker-compose.yml or similar config is detected.
 3. Use \`dependsOn\` when one service needs another running first.
-4. Commands use \`$PORT\` and other \`$ENV_VAR\` shell variable references — NOT \`{service.PORT}\` syntax.
-   - Example: \`"pnpm dev --port $PORT"\`, \`"uvicorn app.main:app --port $PORT --reload"\`
+4. Commands use \`{IARA_PORT}\` and other \`{ENV_VAR}\` template references — NOT shell \`$IARA_PORT\` syntax.
+   - Example: \`"pnpm dev --port {IARA_PORT}"\`, \`"uvicorn app.main:app --port {IARA_PORT} --reload"\`
 5. Only include scripts that actually exist in the repo's config.
 6. Be language-agnostic — inspect package.json, Makefile, Cargo.toml, pyproject.toml, go.mod, build.gradle, Dockerfile, docker-compose.yml, etc.
 7. For Docker services, NEVER use \`-d\` (detached mode). Run in foreground. Example: \`"docker compose up db"\`.
 
 ## Env Rules
 1. Each service gets a \`[service]\` section in env with key-value string pairs.
-2. Assign \`PORT\` values for services that listen on ports.${portHint}
-3. Wire cross-service references with concrete port values:
-   - If api depends on db (port 5432): \`"DATABASE_URL": "postgres://localhost:5432/mydb"\`
-   - If app depends on api (port 3001): \`"NEXT_PUBLIC_API": "http://localhost:3001"\`
-4. Non-repo services use well-known ports (postgres=5432, redis=6379, mysql=3306, etc.).
-5. All env values MUST be strings (e.g., \`"PORT": "3000"\`, not \`"PORT": 3000\`).`;
+2. Do NOT assign \`IARA_PORT\` for repo services — iara auto-assigns ports at runtime.${portHint}
+3. DO assign \`IARA_PORT\` for non-repo services (databases, caches) that need a well-known pinned port: \`"IARA_PORT": "5432"\` for postgres, \`"IARA_PORT": "6379"\` for redis, etc. This ensures health checks target the correct port.
+4. Wire cross-service references with concrete port values matching the auto-assigned or pinned ports:
+   - If api depends on db (pinned port 5432): \`"DATABASE_URL": "postgres://localhost:5432/mydb"\`
+   - If app depends on api (auto-assigned port 3001): \`"NEXT_PUBLIC_API": "http://localhost:3001"\`
+5. All env values MUST be strings.
+6. A repo service section can be empty \`{}\` if it has no env vars — iara still tracks it for port assignment.`;
 }
 
 /** Known build config files to look for during discovery. */

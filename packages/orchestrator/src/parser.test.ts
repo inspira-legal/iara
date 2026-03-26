@@ -45,10 +45,10 @@ backend:
   dependsOn: [db]
   timeout: 60
   env:
-    DATABASE_URL: "postgresql://localhost:{db.PORT}/mydb"
+    DATABASE_URL: "postgresql://localhost:{DB_PORT}/mydb"
   essencial:
     setup: go mod download
-    dev: "go run ./cmd/server --port={backend.PORT}"
+    dev: "go run ./cmd/server --port {PORT}"
     build: go build ./cmd/server
     check: golangci-lint run
   advanced:
@@ -58,10 +58,10 @@ frontend:
   dependsOn: [backend]
   port: 8080
   env:
-    API_URL: "http://localhost:{backend.PORT}"
+    API_URL: "http://localhost:{BACKEND_PORT}"
   essencial:
     setup: pnpm i
-    dev: "pnpm dev --port={frontend.PORT}"
+    dev: "pnpm dev --port {PORT}"
 `;
 
     const services = parseScriptsYaml(yaml, ["backend", "frontend"]);
