@@ -1,5 +1,11 @@
 import { parse } from "yaml";
-import type { EssencialKey, ScriptEntry, ScriptOutputLevel, ServiceDef } from "@iara/contracts";
+import type {
+  EssencialKey,
+  ScriptEntry,
+  ScriptOutputLevel,
+  ServiceConfig,
+  ServiceDef,
+} from "@iara/contracts";
 
 const ESSENCIAL_KEYS: Set<string> = new Set<EssencialKey>([
   "setup",
@@ -57,6 +63,16 @@ export function parseScriptsYaml(content: string, repoNames: string[]): ServiceD
     if (typeof def !== "object" || def === null) continue;
     const d = def as Record<string, unknown>;
 
+    // Parse config block (port: number | "auto", default "auto")
+    const rawConfig =
+      typeof d.config === "object" && d.config !== null
+        ? (d.config as Record<string, unknown>)
+        : {};
+    const rawPort = rawConfig.port;
+    const config: ServiceConfig = {
+      port: typeof rawPort === "number" ? rawPort : "auto",
+    };
+
     const dependsOn = Array.isArray(d.dependsOn) ? (d.dependsOn as string[]) : [];
 
     const timeout = typeof d.timeout === "number" ? d.timeout : DEFAULT_TIMEOUT;
@@ -86,6 +102,7 @@ export function parseScriptsYaml(content: string, repoNames: string[]): ServiceD
 
     services.push({
       name,
+      config,
       dependsOn,
       timeout,
       essencial,

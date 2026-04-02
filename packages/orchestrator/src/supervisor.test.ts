@@ -91,6 +91,7 @@ function makeResolved(
 ): ResolvedServiceDef {
   return {
     name,
+    config: { port: "auto" },
     dependsOn,
     timeout: 30,
     essencial: {},
@@ -110,7 +111,7 @@ function defaultStartOpts(overrides: Record<string, unknown> = {}) {
     script: "dev",
     commands: ["npm start"],
     cwd: "/tmp/test",
-    env: {},
+    interpolationCtx: { config: { port: 3000 }, env: {}, allConfigs: {} },
     port: 3000,
     output: "always" as const,
     isLongRunning: false,
@@ -1289,16 +1290,16 @@ describe("ScriptSupervisor", () => {
       expect(supervisor.status()).toHaveLength(2);
     });
 
-    it("interpolates {{ENV}} refs in commands", async () => {
+    it("interpolates {config.port} refs in commands", async () => {
       const push = vi.fn();
       const supervisor = new ScriptSupervisor(push);
 
       const services: ResolvedServiceDef[] = [
         makeResolved("api", [], {
           resolvedPort: 3000,
-          resolvedEnv: { PORT: "3000" },
+          resolvedEnv: {},
           essencial: {
-            dev: { run: ["start --port {PORT}"], output: "always" },
+            dev: { run: ["start --port {config.port}"], output: "always" },
           },
         }),
       ];

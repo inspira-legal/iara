@@ -3,6 +3,7 @@ import * as path from "node:path";
 import * as crypto from "node:crypto";
 import type { EssencialKey, ResolvedServiceDef } from "@iara/contracts";
 import { ScriptSupervisor } from "@iara/orchestrator/supervisor";
+import type { InterpolationContext } from "@iara/orchestrator/interpolation";
 import { parseScriptsYaml } from "@iara/orchestrator/parser";
 import {
   buildDiscoveryPrompt,
@@ -80,33 +81,43 @@ function loadResolvedConfig(
     const isRepo = repoSet.has(svc.name);
 
     let resolvedPort: number;
-    if (envFromToml.IARA_PORT) {
-      // Pinned port — user explicitly set IARA_PORT in env.toml
-      resolvedPort = Number.parseInt(envFromToml.IARA_PORT, 10) || 0;
+    if (typeof svc.config.port === "number") {
+      // Pinned port — explicitly set in config block
+      resolvedPort = svc.config.port;
     } else if (isRepo) {
       // Auto-assign port for repo services
       resolvedPort = basePort + wsOffset + repoServiceIndex;
     } else {
-      // Non-repo services without IARA_PORT get no health check
+      // Non-repo services without config.port get no health check
       resolvedPort = 0;
     }
 
     if (isRepo) repoServiceIndex++;
 
-    // Ensure IARA_PORT is in resolvedEnv for command interpolation ({IARA_PORT})
-    const resolvedEnv =
-      resolvedPort > 0 && !envFromToml.IARA_PORT
-        ? { ...envFromToml, IARA_PORT: String(resolvedPort) }
-        : envFromToml;
-
     resolved.push({
       ...svc,
       resolvedPort,
-      resolvedEnv,
+      resolvedEnv: envFromToml,
     });
   }
 
   return { services: resolved, repoNames };
+}
+
+/** Build an InterpolationContext for a single service within a resolved config. */
+function buildInterpolationCtx(
+  svc: ResolvedServiceDef,
+  allServices: ResolvedServiceDef[],
+): InterpolationContext {
+  const allConfigs: Record<string, { port: number }> = {};
+  for (const s of allServices) {
+    allConfigs[s.name] = { port: s.resolvedPort };
+  }
+  return {
+    config: { port: svc.resolvedPort },
+    env: svc.resolvedEnv,
+    allConfigs,
+  };
 }
 
 /**
@@ -254,7 +265,7 @@ export function registerScriptHandlers(
       script: params.script,
       commands: script.run,
       cwd,
-      env: svc.resolvedEnv,
+      interpolationCtx: buildInterpolationCtx(svc, services),
       port: svc.resolvedPort,
       output: script.output,
       isLongRunning: params.script === "dev",

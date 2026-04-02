@@ -21,6 +21,11 @@
       "types": "./src/discovery.ts",
       "import": "./src/discovery.ts",
       "require": "./dist/discovery.cjs"
+    },
+    "./interpolation": {
+      "types": "./src/interpolation.ts",
+      "import": "./src/interpolation.ts",
+      "require": "./dist/interpolation.cjs"
     }
   },
   "scripts": {

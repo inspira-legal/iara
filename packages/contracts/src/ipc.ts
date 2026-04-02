@@ -89,9 +89,15 @@ export interface ScriptEntry {
   output: ScriptOutputLevel;
 }
 
+/** Service-level configuration block from scripts.yaml */
+export interface ServiceConfig {
+  port: number | "auto";
+}
+
 /** A service definition parsed from scripts.yaml */
 export interface ServiceDef {
   name: string;
+  config: ServiceConfig;
   dependsOn: string[];
   timeout: number;
   essencial: Partial<Record<EssencialKey, ScriptEntry>>;

@@ -39,16 +39,18 @@ describe("parseScriptsYaml", () => {
   it("parses a complete scripts.yaml", () => {
     const yaml = `
 db:
+  config:
+    port: 5432
   dev: "docker compose up postgres"
 
 backend:
   dependsOn: [db]
   timeout: 60
   env:
-    DATABASE_URL: "postgresql://localhost:{DB_PORT}/mydb"
+    DATABASE_URL: "postgresql://localhost:{db.config.port}/mydb"
   essencial:
     setup: go mod download
-    dev: "go run ./cmd/server --port {PORT}"
+    dev: "go run ./cmd/server --port {config.port}"
     build: go build ./cmd/server
     check: golangci-lint run
   advanced:
@@ -56,12 +58,13 @@ backend:
 
 frontend:
   dependsOn: [backend]
-  port: 8080
+  config:
+    port: 8080
   env:
-    API_URL: "http://localhost:{BACKEND_PORT}"
+    API_URL: "http://localhost:{backend.config.port}"
   essencial:
     setup: pnpm i
-    dev: "pnpm dev --port {PORT}"
+    dev: "pnpm dev --port {config.port}"
 `;
 
     const services = parseScriptsYaml(yaml, ["backend", "frontend"]);
@@ -71,6 +74,7 @@ frontend:
     expect(db.name).toBe("db");
     expect(db.isRepo).toBe(false);
     expect(db.dependsOn).toEqual([]);
+    expect(db.config.port).toBe(5432);
     expect(db.essencial.dev?.run).toEqual(["docker compose up postgres"]);
 
     const backend = services[1]!;
@@ -78,6 +82,7 @@ frontend:
     expect(backend.isRepo).toBe(true);
     expect(backend.dependsOn).toEqual(["db"]);
     expect(backend.timeout).toBe(60);
+    expect(backend.config.port).toBe("auto");
     expect(backend.essencial.setup?.run).toEqual(["go mod download"]);
     expect(backend.essencial.dev?.output).toBe("always");
     expect(backend.advanced.migrate?.run).toEqual(["go run ./cmd/migrate up"]);
@@ -85,6 +90,7 @@ frontend:
     const frontend = services[2]!;
     expect(frontend.name).toBe("frontend");
     expect(frontend.dependsOn).toEqual(["backend"]);
+    expect(frontend.config.port).toBe(8080);
   });
 
   it("handles top-level shorthand essencial keys", () => {
@@ -107,5 +113,17 @@ myservice:
     const yaml = `svc:\n  dev: "cmd"`;
     const services = parseScriptsYaml(yaml, []);
     expect(services[0]!.timeout).toBe(30);
+  });
+
+  it("defaults config.port to 'auto' when config is omitted", () => {
+    const yaml = `svc:\n  dev: "cmd"`;
+    const services = parseScriptsYaml(yaml, []);
+    expect(services[0]!.config).toEqual({ port: "auto" });
+  });
+
+  it("parses config.port as number when specified", () => {
+    const yaml = `db:\n  config:\n    port: 5432\n  dev: "docker compose up db"`;
+    const services = parseScriptsYaml(yaml, []);
+    expect(services[0]!.config.port).toBe(5432);
   });
 });

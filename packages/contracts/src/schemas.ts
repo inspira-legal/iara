@@ -75,8 +75,13 @@ export const ScriptStatusSchema = z.object({
   exitCode: z.number().nullable(),
 });
 
+export const ServiceConfigSchema = z.object({
+  port: z.union([z.number(), z.literal("auto")]),
+});
+
 export const ServiceDefSchema = z.object({
   name: z.string(),
+  config: ServiceConfigSchema,
   dependsOn: z.array(z.string()),
   timeout: z.number(),
   essencial: z.record(z.string(), ScriptEntrySchema),

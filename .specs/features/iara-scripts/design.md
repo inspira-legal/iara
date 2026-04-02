@@ -16,7 +16,7 @@ The scripts system is a vertical slice across all layers: contracts (types) → 
 │  src/ports.ts:        PortAllocator                 │
 │  src/parser.ts:       scripts.yaml parser           │
 │  src/discovery.ts:    Claude discovery prompt/logic  │
-│  src/interpolation.ts: {service.PORT} resolver      │
+│  src/interpolation.ts: {config.port} resolver       │
 ├─────────────────────────────────────────────────────┤
 │ apps/server                                         │
 │  handlers/scripts.ts: WS method registration        │
@@ -61,9 +61,9 @@ scripts.load(projectId, workspace)
   │   ├── Workspace already has allocation? → reuse
   │   └── New workspace? → allocate next range from global counter
   ├── For each service:
-  │   ├── Has `port: N`? → pinned, use N
-  │   └── No port field? → assign base + offset (0, 1, 2...)
-  ├── Interpolate {service.PORT} in all env values and script commands
+  │   ├── Has `config.port: N`? → pinned, use N
+  │   └── No config.port? → assign base + offset (0, 1, 2...)
+  ├── Interpolate {config.port} and {service.config.port} in all env values and script commands
   └── Return resolved config
 ```
 
@@ -84,13 +84,17 @@ interface ScriptEntry {
 // Well-known essencial keys
 type EssencialKey = "setup" | "dev" | "build" | "check" | "test" | "codegen";
 
+// Service-level configuration
+interface ServiceConfig {
+  port: number | "auto"; // "auto" = auto-assigned
+}
+
 // A service definition (parsed from scripts.yaml)
 interface ServiceDef {
   name: string;
+  config: ServiceConfig;
   dependsOn: string[];
-  port: number | null; // null = auto-assigned
   timeout: number; // seconds, default 30
-  env: Record<string, string>; // raw, before interpolation
   essencial: Partial<Record<EssencialKey, ScriptEntry>>;
   advanced: Record<string, ScriptEntry>;
   isRepo: boolean; // matched a repo name
@@ -99,7 +103,7 @@ interface ServiceDef {
 // Resolved config (ports interpolated)
 interface ResolvedServiceDef extends ServiceDef {
   resolvedPort: number; // actual port (pinned or auto)
-  resolvedEnv: Record<string, string>; // after {x.PORT} interpolation
+  resolvedEnv: Record<string, string>; // env from env.toml
 }
 
 // Runtime status of a running script
@@ -263,7 +267,7 @@ async function discoverScripts(projectId: string, pushFn: PushFn): Promise<strin
 
 - Lists all repos with their detected files (package.json, Makefile, etc.)
 - Provides the scripts.yaml schema with examples
-- Instructs to use `{service.PORT}` syntax (never bare `{PORT}`)
+- Instructs to use `{config.port}` (own port) and `{service.config.port}` (cross-ref) syntax
 - If existing scripts.yaml provided, instructs to merge/update
 
 ### scripts.yaml Parser (`src/parser.ts`)

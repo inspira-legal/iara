@@ -7,7 +7,14 @@ import { stringify } from "yaml";
 
 const ScriptValueSchema = z.union([z.string(), z.array(z.string())]);
 
+const ServiceConfigSchema = z
+  .object({
+    port: z.number().optional(),
+  })
+  .optional();
+
 const ServiceScriptsSchema = z.object({
+  config: ServiceConfigSchema,
   dependsOn: z.array(z.string()).optional(),
   timeout: z.number().optional(),
   essencial: z.record(z.string(), ScriptValueSchema).optional(),
@@ -72,7 +79,7 @@ export function buildDiscoveryPrompt(
   const userSection = userPrompt ? `\n\n## User Request\n${userPrompt}` : "";
 
   const portHint = basePort
-    ? `\nPorts are auto-assigned by iara at runtime (base port ${basePort}, incrementing by 1 per repo service). Use port ${basePort} for the first repo, ${basePort + 1} for the second, etc. when writing cross-service URLs. Non-repo services (databases, caches) use their well-known ports (e.g., 5432 for postgres, 6379 for redis).`
+    ? `\nPorts are auto-assigned by iara at runtime (base port ${basePort}, incrementing by 1 per repo service). Use \`{service.config.port}\` for cross-service URLs instead of hardcoded ports. Non-repo services (databases, caches) use their well-known ports via \`config: { port: N }\`.`
     : "";
 
   return `You are analyzing a project's repositories to generate scripts and environment configuration.
@@ -87,12 +94,18 @@ Analyze each repository's build system and generate a JSON object with two top-l
 \`\`\`json
 {
   "scripts": {
-    "<service-name>": {
+    "<non-repo-service>": {
+      "config": { "port": 5432 },
+      "essencial": {
+        "dev": "docker compose up db"
+      }
+    },
+    "<repo-service>": {
       "dependsOn": ["<other-service>"],
       "timeout": 30,
       "essencial": {
         "setup": "<string or string[]>",
-        "dev": "<string or string[]>",
+        "dev": "uvicorn app.main:app --port {config.port} --reload",
         "build": "<string or string[]>",
         "check": "<string or string[]>",
         "test": "<string or string[]>",
@@ -105,10 +118,7 @@ Analyze each repository's build system and generate a JSON object with two top-l
   },
   "env": {
     "<repo-service>": {
-      "DATABASE_URL": "postgres://localhost:5432/mydb"
-    },
-    "<non-repo-service>": {
-      "IARA_PORT": "5432"
+      "DATABASE_URL": "postgres://localhost:{db.config.port}/mydb"
     }
   }
 }
@@ -118,21 +128,23 @@ Analyze each repository's build system and generate a JSON object with two top-l
 1. Service names MUST match repo names for repositories.
 2. Add non-repo services (databases, caches) only if docker-compose.yml or similar config is detected.
 3. Use \`dependsOn\` when one service needs another running first.
-4. Commands use \`{IARA_PORT}\` and other \`{ENV_VAR}\` template references — NOT shell \`$IARA_PORT\` syntax.
-   - Example: \`"pnpm dev --port {IARA_PORT}"\`, \`"uvicorn app.main:app --port {IARA_PORT} --reload"\`
+4. Commands use \`{config.port}\` for the service's own port and \`{service.config.port}\` for another service's port — NOT shell \`$VAR\` syntax.
+   - Example: \`"pnpm dev --port {config.port}"\`, \`"uvicorn app.main:app --port {config.port} --reload"\`
 5. Only include scripts that actually exist in the repo's config.
 6. Be language-agnostic — inspect package.json, Makefile, Cargo.toml, pyproject.toml, go.mod, build.gradle, Dockerfile, docker-compose.yml, etc.
 7. For Docker services, NEVER use \`-d\` (detached mode). Run in foreground. Example: \`"docker compose up db"\`.
 
+## Config Rules
+1. Non-repo services (databases, caches) MUST have \`"config": { "port": N }\` with their well-known port (e.g., 5432 for postgres, 6379 for redis).
+2. Repo services do NOT need a config block — iara auto-assigns ports at runtime.${portHint}
+
 ## Env Rules
 1. Each service gets a \`[service]\` section in env with key-value string pairs.
-2. Do NOT assign \`IARA_PORT\` for repo services — iara auto-assigns ports at runtime.${portHint}
-3. DO assign \`IARA_PORT\` for non-repo services (databases, caches) that need a well-known pinned port: \`"IARA_PORT": "5432"\` for postgres, \`"IARA_PORT": "6379"\` for redis, etc. This ensures health checks target the correct port.
-4. Wire cross-service references with concrete port values matching the auto-assigned or pinned ports:
-   - If api depends on db (pinned port 5432): \`"DATABASE_URL": "postgres://localhost:5432/mydb"\`
-   - If app depends on api (auto-assigned port 3001): \`"NEXT_PUBLIC_API": "http://localhost:3001"\`
-5. All env values MUST be strings.
-6. A repo service section can be empty \`{}\` if it has no env vars — iara still tracks it for port assignment.`;
+2. Wire cross-service references using \`{service.config.port}\` syntax:
+   - If api depends on db (pinned port): \`"DATABASE_URL": "postgres://localhost:{db.config.port}/mydb"\`
+   - If app depends on api (auto-assigned): \`"NEXT_PUBLIC_API": "http://localhost:{api.config.port}"\`
+3. All env values MUST be strings.
+4. A repo service section can be empty \`{}\` if it has no env vars.`;
 }
 
 /** Known build config files to look for during discovery. */

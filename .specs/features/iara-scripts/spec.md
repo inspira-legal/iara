@@ -15,31 +15,33 @@ Replace the "Dev Servers" panel with a scripts/service orchestration system. Ser
 
 ### R2 — scripts.yaml Schema
 
-- **R2.1** File: `<project-dir>/scripts.yaml`.
+- **R2.1** File: `<project-dir>/iara-scripts.yaml`.
 - **R2.2** Top-level keys are **services** (repos, databases, caches — all equal). Iara matches service names to repo names; matching services run in the repo's worktree, non-matching run in project root.
 
 ```yaml
 db:
-  port: 5432
+  config:
+    port: 5432
   essencial:
     dev: "docker compose up db"
 
 redis:
-  port: 6379
+  config:
+    port: 6379
   essencial:
     dev: "docker compose up redis"
 
 backend:
   env:
-    DATABASE_URL: "postgresql://localhost:{db.PORT}/mydb"
-    REDIS_URL: "redis://localhost:{redis.PORT}"
+    DATABASE_URL: "postgresql://localhost:{db.config.port}/mydb"
+    REDIS_URL: "redis://localhost:{redis.config.port}"
   essencial:
     setup: uv sync
     codegen:
       run: "uv run python scripts/generate_schema.py"
       dependsOn: [db.dev]
     dev:
-      run: "uvicorn app.main:app --port={backend.PORT} --reload"
+      run: "uvicorn app.main:app --port={config.port} --reload"
       dependsOn: [db.dev, redis.dev]
     check:
       - "uv run ruff check src"
@@ -52,14 +54,14 @@ backend:
 
 frontend:
   env:
-    API_URL: "http://localhost:{backend.PORT}"
+    API_URL: "http://localhost:{backend.config.port}"
   essencial:
     setup: pnpm i
     codegen:
       run: pnpm graphql-codegen
       dependsOn: [backend.dev]
     dev:
-      run: "pnpm dev --port={frontend.PORT}"
+      run: "pnpm dev --port={config.port}"
       dependsOn: [backend.dev]
     build: pnpm build
     check:
@@ -76,7 +78,8 @@ frontend:
 - **R2.3** Script values: `string | string[]` (short form) or `{ run, dependsOn }` (object form). Arrays execute sequentially.
 - **R2.4** The `essencial` category has 6 well-known keys in fixed order: `setup`, `codegen`, `dev`, `build`, `check`, `test`. Each gets a dedicated icon and quick-action button.
 - **R2.5** The `advanced` category holds arbitrary key-value scripts, shown in a collapsible section.
-- **R2.6** `env` block per service — injected into all scripts for that service. Values support `{service.PORT}` interpolation. Merged with project env files (scripts.yaml takes precedence).
+- **R2.6** `env` block per service — injected into all scripts for that service. Values support `{config.port}` (own port) and `{service.config.port}` (cross-ref) interpolation. Merged with project env files (scripts.yaml takes precedence).
+- **R2.7** `config` block per service — structured settings. Currently supports `port: <number>` (pinned) or omission (auto-assigned).
 
 ### R3 — Per-Script Dependencies
 
@@ -98,9 +101,9 @@ frontend:
 
 ### R5 — PORT System
 
-- **R5.1** No `port` field → auto-assigned from workspace range. `port: <number>` → pinned.
+- **R5.1** No `config.port` → auto-assigned from workspace range. `config: { port: <number> }` → pinned.
 - **R5.2** Each workspace gets a base PORT (global counter, spacing 20).
-- **R5.3** Always explicit: `{service.PORT}`. No bare `{PORT}`. Supports hyphens in names: `{lexflow-api.PORT}`.
+- **R5.3** Own port: `{config.port}`. Cross-service: `{service.config.port}`. Supports hyphens: `{lexflow-api.config.port}`. No bare `{PORT}`.
 - **R5.4** Pinned-port services are **shared across workspaces** — if port is already in use, attach as healthy without spawning.
 - **R5.5** Port released when task is deleted.
 
@@ -145,19 +148,19 @@ Codegen runs before dev because:
 
 ## Decisions
 
-| #   | Decision                                                 | Rationale                                                    |
-| --- | -------------------------------------------------------- | ------------------------------------------------------------ |
-| D1  | `scripts.yaml` (YAML, not JSON)                          | Readable for commands, supports comments                     |
-| D2  | Flat services model                                      | DB, Redis, repos all equal                                   |
-| D3  | Auto PORT per workspace, pinnable per service            | No overlaps, zero config                                     |
-| D4  | 20-port spacing per workspace                            | ~350 workspaces in range 3000-9999                           |
-| D5  | Per-script `dependsOn` (not service-level)               | Codegen may need DB, test may need API, etc.                 |
-| D6  | essencial order: setup, codegen, dev, build, check, test | Codegen before dev, natural workflow order                   |
-| D7  | Keep scripts running on task switch                      | User manages manually                                        |
-| D8  | Clean break — no fallback auto-discovery                 | "Discover Scripts" CTA                                       |
-| D9  | Auto-discover on project creation                        | Seamless onboarding                                          |
-| D10 | No output levels — all scripts always create output tab  | Simpler, always see what's happening                         |
-| D11 | Pinned-port services shared across workspaces            | Don't restart DB per task                                    |
-| D12 | Persistent (dev) vs one-shot (everything else)           | UI knows what should keep running vs finish                  |
-| D13 | `{service.PORT}` always explicit, supports hyphens       | Prevents AI hallucination, supports names like `lexflow-api` |
-| D14 | Resilient runAll — continue on dep failure               | See all errors at once, not blocked by first failure         |
+| #   | Decision                                                  | Rationale                                                |
+| --- | --------------------------------------------------------- | -------------------------------------------------------- |
+| D1  | `scripts.yaml` (YAML, not JSON)                           | Readable for commands, supports comments                 |
+| D2  | Flat services model                                       | DB, Redis, repos all equal                               |
+| D3  | Auto PORT per workspace, pinnable per service             | No overlaps, zero config                                 |
+| D4  | 20-port spacing per workspace                             | ~350 workspaces in range 3000-9999                       |
+| D5  | Per-script `dependsOn` (not service-level)                | Codegen may need DB, test may need API, etc.             |
+| D6  | essencial order: setup, codegen, dev, build, check, test  | Codegen before dev, natural workflow order               |
+| D7  | Keep scripts running on task switch                       | User manages manually                                    |
+| D8  | Clean break — no fallback auto-discovery                  | "Discover Scripts" CTA                                   |
+| D9  | Auto-discover on project creation                         | Seamless onboarding                                      |
+| D10 | No output levels — all scripts always create output tab   | Simpler, always see what's happening                     |
+| D11 | Pinned-port services shared across workspaces             | Don't restart DB per task                                |
+| D12 | Persistent (dev) vs one-shot (everything else)            | UI knows what should keep running vs finish              |
+| D13 | `{config.port}` / `{service.config.port}` always explicit | Namespaced, extensible, prevents collision with env vars |
+| D14 | Resilient runAll — continue on dep failure                | See all errors at once, not blocked by first failure     |

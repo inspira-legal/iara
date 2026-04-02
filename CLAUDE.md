@@ -61,4 +61,4 @@ bun run smoke-test       # Electron smoke test
 
 ## Scripts System
 
-Services are defined in `<project-dir>/scripts.yaml`. Each top-level key is a service. Claude discovers scripts automatically on project creation. Ports are auto-assigned per workspace with 20-port spacing. `{service.PORT}` syntax for port references (always explicit prefix). See `.specs/features/iara-scripts/` for full spec and design.
+Services are defined in `<project-dir>/iara-scripts.yaml`. Each top-level key is a service. Claude discovers scripts automatically on project creation. Ports are auto-assigned per workspace with 20-port spacing or pinned via `config: { port: N }`. Port interpolation: `{config.port}` (own port), `{service.config.port}` (cross-ref). See `.specs/features/iara-scripts/` for full spec and design.

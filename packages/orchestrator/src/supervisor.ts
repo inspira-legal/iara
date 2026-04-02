@@ -14,6 +14,7 @@ import type {
 import { cleanEnv } from "@iara/shared/env";
 import { killProcessGroup } from "@iara/shared/process";
 import { interpolate } from "./interpolation.js";
+import type { InterpolationContext } from "./interpolation.js";
 
 type PushFn = <E extends keyof WsPushEvents>(event: E, params: WsPushEvents[E]) => void;
 
@@ -56,7 +57,7 @@ export class ScriptSupervisor {
     script: string;
     commands: string[];
     cwd: string;
-    env: Record<string, string>;
+    interpolationCtx: InterpolationContext;
     port: number;
     output: ScriptOutputLevel;
     isLongRunning: boolean;
@@ -69,7 +70,9 @@ export class ScriptSupervisor {
       await this.stopByKey(key);
     }
 
-    const fullCommand = opts.commands.map((cmd) => interpolate(cmd, opts.env)).join(" && ");
+    const fullCommand = opts.commands
+      .map((cmd) => interpolate(cmd, opts.interpolationCtx))
+      .join(" && ");
 
     // Log the command being executed
     this.pushFn("scripts:log", {
@@ -419,6 +422,12 @@ export class ScriptSupervisor {
     const sorted = topologicalSort(opts.services);
     const isLongRunning = opts.category === "dev";
 
+    // Build cross-service config map for interpolation
+    const allConfigs: Record<string, { port: number }> = {};
+    for (const svc of opts.services) {
+      allConfigs[svc.name] = { port: svc.resolvedPort };
+    }
+
     // Build set of services that are depended on by others
     const dependedOn = new Set<string>();
     for (const svc of sorted) {
@@ -431,6 +440,12 @@ export class ScriptSupervisor {
       const script = svc.essencial[opts.category];
       if (!script) continue;
 
+      const interpolationCtx: InterpolationContext = {
+        config: { port: svc.resolvedPort },
+        env: svc.resolvedEnv,
+        allConfigs,
+      };
+
       await this.startChecked({
         projectId: opts.projectId,
         workspace: opts.workspace,
@@ -438,7 +453,7 @@ export class ScriptSupervisor {
         script: opts.category,
         commands: script.run,
         cwd: opts.cwd(svc.name),
-        env: svc.resolvedEnv,
+        interpolationCtx,
         port: svc.resolvedPort,
         output: script.output,
         isLongRunning,
