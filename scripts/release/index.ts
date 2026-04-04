@@ -70,7 +70,7 @@ if (existsSync(desktopResources)) {
   cpSync(desktopResources, resolve(STAGING, "resources"), { recursive: true });
 }
 
-const serverDistStaged = resolve(STAGING, "extraResources/apps/server/dist");
+const serverDistStaged = resolve(STAGING, "extraResources/server/dist");
 mkdirSync(serverDistStaged, { recursive: true });
 cpSync(resolve(ROOT, "apps/server/dist"), serverDistStaged, { recursive: true });
 
@@ -120,7 +120,7 @@ writeFileSync(
   ),
 );
 
-const serverModulesDir = resolve(STAGING, "extraResources/apps/server");
+const serverModulesDir = resolve(STAGING, "extraResources/server");
 writeFileSync(
   resolve(serverModulesDir, "package.json"),
   JSON.stringify(

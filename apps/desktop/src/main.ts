@@ -109,7 +109,7 @@ const windowStatePath = path.join(stateDir, "window-state.json");
 function spawnServer(): void {
   const serverEntry = isDevelopment
     ? path.resolve(__dirname, "../../server/dist/main.mjs")
-    : path.join(process.resourcesPath, "apps", "server", "dist", "main.mjs");
+    : path.join(process.resourcesPath, "server", "dist", "main.mjs");
 
   const env: Record<string, string | undefined> = {
     ...process.env,
@@ -123,7 +123,7 @@ function spawnServer(): void {
     env.IARA_WEB_DIR = useWsl
       ? toWslPath(path.join(process.resourcesPath, "web"))
       : path.join(process.resourcesPath, "web");
-    const serverModules = path.join(process.resourcesPath, "apps", "server", "node_modules");
+    const serverModules = path.join(process.resourcesPath, "server", "node_modules");
     env.NODE_PATH = useWsl ? toWslPath(serverModules) : serverModules;
   }
 

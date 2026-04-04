@@ -78,8 +78,8 @@ export function createBuildConfig(platform: Platform, arch: Arch[]): Record<stri
     directories: { output: RELEASE, buildResources: "resources" },
     files: ["dist-electron/**/*"],
     extraResources: [
-      { from: "extraResources/apps/server/dist", to: "apps/server/dist" },
-      { from: "extraResources/apps/server/node_modules", to: "apps/server/node_modules" },
+      { from: "extraResources/server/dist", to: "server/dist" },
+      { from: "extraResources/server/node_modules", to: "server/node_modules" },
       { from: "extraResources/web", to: "web" },
     ],
     ...platformConfig,

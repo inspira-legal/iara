@@ -1,5 +1,5 @@
 import { execSync } from "node:child_process";
-import { existsSync, mkdirSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, rmSync, statSync } from "node:fs";
 import { resolve } from "node:path";
 import { STAGING } from "./config.js";
 
@@ -21,9 +21,7 @@ export function prepareWslRuntime(): void {
   const wslDir = resolve(STAGING, "extraResources/wsl-runtime");
   mkdirSync(wslDir, { recursive: true });
 
-  const nodeVersion =
-    process.env.NODE_VERSION ??
-    execSync("node -e 'console.log(process.version)'").toString().trim();
+  const nodeVersion = process.env.NODE_VERSION ?? process.version;
 
   console.log(`\n==> Preparing WSL runtime (Node.js ${nodeVersion}, linux-${ARCH})`);
 
@@ -71,8 +69,8 @@ export function prepareWslRuntime(): void {
       if (existsSync(p)) rmSync(p);
     }
 
-    const size = execSync(`du -sh "${nodeBin}" | cut -f1`, { encoding: "utf-8" }).trim();
-    console.log(`==> Downloaded: ${nodeBin} (${size})`);
+    const sizeMb = (statSync(nodeBin).size / 1024 / 1024).toFixed(0);
+    console.log(`==> Downloaded: ${nodeBin} (${sizeMb}M)`);
   }
 
   console.log(`==> WSL runtime ready`);
