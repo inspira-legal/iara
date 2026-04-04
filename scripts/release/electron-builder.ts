@@ -1,0 +1,103 @@
+import type { Arch, Platform } from "./config.js";
+import { RELEASE } from "./config.js";
+
+interface ExtraResource {
+  from: string;
+  to: string;
+}
+
+interface PlatformBuildConfig {
+  platformConfig: Record<string, unknown>;
+  formatConfigs: Record<string, unknown>;
+}
+
+function linuxConfig(arch: Arch[]): PlatformBuildConfig {
+  return {
+    platformConfig: {
+      linux: {
+        target: [{ target: "AppImage", arch }],
+        category: "Development",
+        icon: "resources/icon.png",
+      },
+    },
+    formatConfigs: {
+      appImage: { artifactName: "iara-${version}-${arch}.AppImage" },
+    },
+  };
+}
+
+function macConfig(arch: Arch[]): PlatformBuildConfig {
+  return {
+    platformConfig: {
+      mac: {
+        target: [{ target: "dmg", arch }],
+        category: "public.app-category.developer-tools",
+        icon: "resources/icon.icns",
+        hardenedRuntime: true,
+        entitlements: "resources/entitlements.mac.plist",
+        entitlementsInherit: "resources/entitlements.mac.plist",
+      },
+    },
+    formatConfigs: {
+      dmg: { artifactName: "iara-${version}-${arch}.dmg" },
+    },
+  };
+}
+
+function winConfig(arch: Arch[]): PlatformBuildConfig {
+  const extraResources: ExtraResource[] = [
+    { from: "extraResources/wsl-runtime/node/bin/node", to: "wsl-runtime/node" },
+    {
+      from: "extraResources/wsl-runtime/native_modules/node-pty/build/Release/pty.node",
+      to: "wsl-runtime/native_modules/node-pty/build/Release/pty.node",
+    },
+    {
+      from: "extraResources/wsl-runtime/native_modules/@parcel/watcher-linux-x64-glibc",
+      to: "wsl-runtime/native_modules/@parcel/watcher-linux-x64-glibc",
+    },
+  ];
+
+  return {
+    platformConfig: {
+      win: {
+        target: [{ target: "nsis", arch }],
+        icon: "resources/icon.ico",
+        forceCodeSigning: false,
+        extraResources,
+      },
+    },
+    formatConfigs: {
+      nsis: {
+        oneClick: false,
+        allowToChangeInstallationDirectory: true,
+        artifactName: "iara-${version}-setup.exe",
+      },
+    },
+  };
+}
+
+const PLATFORM_CONFIGS: Record<Platform, (arch: Arch[]) => PlatformBuildConfig> = {
+  linux: linuxConfig,
+  mac: macConfig,
+  win: winConfig,
+};
+
+export function createBuildConfig(platform: Platform, arch: Arch[]): Record<string, unknown> {
+  const { platformConfig, formatConfigs } = PLATFORM_CONFIGS[platform](arch);
+
+  return {
+    appId: "com.iara.desktop",
+    productName: "iara",
+    copyright: "Copyright © 2026",
+    directories: { output: RELEASE, buildResources: "resources" },
+    files: ["dist-electron/**/*"],
+    extraResources: [
+      { from: "extraResources/apps/server/dist", to: "apps/server/dist" },
+      { from: "extraResources/apps/server/node_modules", to: "apps/server/node_modules" },
+      { from: "extraResources/web", to: "web" },
+    ],
+    ...platformConfig,
+    ...formatConfigs,
+    publish: null,
+  };
+}

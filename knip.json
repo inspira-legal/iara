@@ -5,7 +5,7 @@
       "ignoreBinaries": ["electron-builder", "electron-rebuild"]
     },
     "scripts": {
-      "entry": ["dev-runner.ts"]
+      "entry": ["dev-runner.ts", "release/index.ts"]
     },
     "apps/web": {
       "entry": ["src/**/*.test.{ts,tsx}", "src/routes/**/*.{ts,tsx}"]
