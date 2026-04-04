@@ -4,7 +4,7 @@ import * as path from "node:path";
 import crossSpawn from "cross-spawn";
 import defaultShell from "default-shell";
 import treeKill from "tree-kill";
-import whichSync from "which";
+import which from "which";
 
 export const isWindows = process.platform === "win32";
 const isMacOS = process.platform === "darwin";
@@ -31,7 +31,7 @@ export function getStateDir(appName: string): string {
 
 /** Check whether a command exists on the system PATH. */
 export function commandExists(cmd: string): boolean {
-  return whichSync(cmd, { nothrow: true }) !== null;
+  return which.sync(cmd, { nothrow: true }) !== null;
 }
 
 // ---------------------------------------------------------------------------
