@@ -1,5 +1,4 @@
 import * as fs from "node:fs";
-import * as os from "node:os";
 import * as path from "node:path";
 import { spawn, type ChildProcess } from "node:child_process";
 import {
@@ -24,12 +23,12 @@ import {
   generateToken,
   getMimeType,
 } from "./utils.js";
+import { isWindows, getStateDir } from "@iara/shared/platform";
 
 syncShellEnvironment();
 
 const isDevelopment = Boolean(process.env.VITE_DEV_SERVER_URL);
 const APP_SCHEME = "iara";
-const isWindows = process.platform === "win32";
 
 if (isWindows) {
   app.setAppUserModelId("com.iara.desktop");
@@ -38,9 +37,7 @@ if (isWindows) {
 /** Whether the server should run inside WSL. */
 const useWsl = isWindows && isWslAvailable();
 
-const stateDir = isWindows
-  ? path.join(process.env.LOCALAPPDATA ?? path.join(os.homedir(), "AppData", "Local"), "iara")
-  : path.join(os.homedir(), ".config", "iara");
+const stateDir = getStateDir("iara");
 
 let serverChild: ChildProcess | null = null;
 let serverPort = 0;

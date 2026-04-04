@@ -3,8 +3,7 @@ import { execFileSync } from "node:child_process";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import type { BrowserWindow } from "electron";
-
-const isWindows = process.platform === "win32";
+import { isWindows } from "@iara/shared/platform";
 
 // ---------------------------------------------------------------------------
 // WSL helpers

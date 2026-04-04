@@ -1,7 +1,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as os from "node:os";
-import type { AsyncSubscription } from "@parcel/watcher";
+import * as watcher from "@parcel/watcher";
 import type { PushFn } from "../types.js";
 import { computeProjectHash } from "./sessions.js";
 import type { AppState } from "./state.js";
@@ -15,7 +15,7 @@ const DEBOUNCE_MS = 500;
  * Uses @parcel/watcher for reliable cross-platform file watching.
  */
 export class SessionWatcher {
-  private subscriptions = new Map<string, AsyncSubscription>();
+  private subscriptions = new Map<string, watcher.AsyncSubscription>();
   private hashToWorkspaceIds = new Map<string, Set<string>>();
   private debounceTimers = new Map<string, ReturnType<typeof setTimeout>>();
   private pushAll: PushFn;
@@ -69,7 +69,6 @@ export class SessionWatcher {
         fs.mkdirSync(dir, { recursive: true });
       }
 
-      const watcher = await import("@parcel/watcher");
       const sub = await watcher.subscribe(dir, (_err, events) => {
         const hasJsonl = events.some((e) => e.path.endsWith(".jsonl"));
         if (hasJsonl) {

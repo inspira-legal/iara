@@ -98,7 +98,7 @@ export function registerWorkspaceHandlers(
     // Stop file watchers that hold directory handles (prevents EPERM on Windows)
     await watcher.stop();
     await envWatcher.stop();
-    await new Promise((resolve) => setTimeout(resolve, 500));
+
     const projectDir = appState.getProjectDir(project.slug);
     const wsDir = appState.getWorkspaceDir(workspaceId);
     try {
