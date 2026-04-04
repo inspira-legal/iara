@@ -1,7 +1,6 @@
-import type { ChildProcess } from "node:child_process";
+import { spawn, type ChildProcess } from "node:child_process";
 import * as os from "node:os";
 import * as path from "node:path";
-import crossSpawn from "cross-spawn";
 import defaultShell from "default-shell";
 import treeKill from "tree-kill";
 import which from "which";
@@ -55,22 +54,15 @@ export function buildShellCommand(cmd: string): { command: string; args: string[
   return { command: defaultShell, args: ["-lc", cmd] };
 }
 
-/**
- * Spawn a command inside the user's login shell (`$SHELL -lc "cmd"`).
- * Returns a ChildProcess augmented with `killTree()` for process-tree cleanup.
- */
+/** Spawn a command inside the user's login shell (`$SHELL -lc "cmd"`). */
 export function spawnWithLoginShell(
   cmd: string,
   opts: { cwd?: string; env?: Record<string, string>; stdio?: any },
-): ChildProcess & { killTree: (graceMs?: number) => () => void } {
+): ChildProcess {
   const { command, args } = buildShellCommand(cmd);
-  const child = crossSpawn(command, args, {
+  return spawn(command, args, {
     ...opts,
     detached: true,
-  });
-  return Object.assign(child, {
-    killTree: (graceMs?: number) =>
-      killProcessTree(child.pid!, graceMs != null ? { graceMs } : undefined),
   });
 }
 

@@ -12,7 +12,7 @@ import type {
   WsPushEvents,
 } from "@iara/contracts";
 import { cleanEnv } from "@iara/shared/env";
-import { spawnWithLoginShell } from "@iara/shared/platform";
+import { spawnWithLoginShell, killProcessTree } from "@iara/shared/platform";
 import { interpolate } from "./interpolation.js";
 import type { InterpolationContext } from "./interpolation.js";
 
@@ -130,7 +130,7 @@ export class ScriptSupervisor {
       cancelKill: null,
       kill: () => {
         if (child.pid) {
-          entry.cancelKill = child.killTree(3000);
+          entry.cancelKill = killProcessTree(child.pid, { graceMs: 3000 });
         }
       },
     };
