@@ -47,14 +47,6 @@ function macConfig(arch: Arch[]): PlatformBuildConfig {
 function winConfig(arch: Arch[]): PlatformBuildConfig {
   const extraResources: ExtraResource[] = [
     { from: "extraResources/wsl-runtime/node/bin/node", to: "wsl-runtime/node" },
-    {
-      from: "extraResources/wsl-runtime/native_modules/node-pty/build/Release/pty.node",
-      to: "wsl-runtime/native_modules/node-pty/build/Release/pty.node",
-    },
-    {
-      from: "extraResources/wsl-runtime/native_modules/@parcel/watcher-linux-x64-glibc",
-      to: "wsl-runtime/native_modules/@parcel/watcher-linux-x64-glibc",
-    },
   ];
 
   return {

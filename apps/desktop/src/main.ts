@@ -116,7 +116,7 @@ function spawnServer(): void {
     ELECTRON_RUN_AS_NODE: "1",
     IARA_PORT: String(serverPort),
     IARA_AUTH_TOKEN: authToken,
-    IARA_STATE_DIR: useWsl ? "~/.config/iara" : stateDir,
+    IARA_STATE_DIR: stateDir,
   };
 
   if (!isDevelopment) {
@@ -137,16 +137,10 @@ function spawnServer(): void {
       : toWslPath(path.join(process.resourcesPath, "wsl-runtime", "node"));
     const wslServerEntry = toWslPath(serverEntry);
 
-    // Prepend native module paths so the Linux prebuilds are found
-    const nativeModulesDir = isDevelopment
-      ? toWslPath(path.resolve(__dirname, "../../desktop/resources/wsl-runtime/native_modules"))
-      : toWslPath(path.join(process.resourcesPath, "wsl-runtime", "native_modules"));
-
     const wslEnv: Record<string, string> = {
       IARA_PORT: String(serverPort),
       IARA_AUTH_TOKEN: authToken,
-      IARA_STATE_DIR: "~/.config/iara",
-      NODE_PATH: [nativeModulesDir, env.NODE_PATH].filter(Boolean).join(":"),
+      ...(env.NODE_PATH ? { NODE_PATH: env.NODE_PATH } : {}),
     };
     if (env.IARA_WEB_DIR) wslEnv.IARA_WEB_DIR = env.IARA_WEB_DIR;
 
