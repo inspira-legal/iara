@@ -365,7 +365,17 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
   },
 
   onStateResync: (payload) => {
-    set({ projects: payload.projects, settings: payload.settings });
+    const validWsIds = new Set(payload.projects.flatMap((p) => p.workspaces.map((w) => w.id)));
+    // Prune stale repoInfo/sessions for deleted workspaces
+    const repoInfo = { ...get().repoInfo };
+    const sessions = { ...get().sessions };
+    for (const key of Object.keys(repoInfo)) {
+      if (!validWsIds.has(key)) delete repoInfo[key];
+    }
+    for (const key of Object.keys(sessions)) {
+      if (!validWsIds.has(key)) delete sessions[key];
+    }
+    set({ projects: payload.projects, settings: payload.settings, repoInfo, sessions });
   },
 
   onSettingsChanged: (key, value) => {
@@ -424,8 +434,29 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
       transport.subscribe("workspace:changed", (params) => {
         get().onWorkspaceChanged(params.workspace);
       }),
-      transport.subscribe("state:resync", (params) => {
+      transport.subscribe("state:resync", async (params) => {
         get().onStateResync(params.state);
+
+        // Prune stale entries from other stores for deleted workspaces
+        const validWsIds = new Set(
+          params.state.projects.flatMap((p: any) => p.workspaces.map((w: any) => w.id)),
+        );
+        const { useTerminalStore } = await import("./terminal.js");
+        for (const wsId of useTerminalStore.getState().entries.keys()) {
+          if (!validWsIds.has(wsId)) {
+            void useTerminalStore.getState().destroy(wsId);
+          }
+        }
+        const { useScriptsStore } = await import("./scripts.js");
+        const scripts = useScriptsStore.getState();
+        if (scripts.currentWorkspaceId && !validWsIds.has(scripts.currentWorkspaceId)) {
+          useScriptsStore.setState({
+            config: null,
+            currentWorkspaceId: null,
+            logs: new Map(),
+            selectedLog: null,
+          });
+        }
       }),
       transport.subscribe("settings:changed", (params) => {
         get().onSettingsChanged(params.key, params.value);

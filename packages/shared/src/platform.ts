@@ -52,7 +52,7 @@ export function spawnShell(
   cmd: string,
   opts: { cwd?: string; env?: Record<string, string>; stdio?: any },
 ): ChildProcess {
-  return crossSpawn(defaultShell, ["-ilc", cmd], {
+  return crossSpawn(defaultShell, ["-lc", cmd], {
     ...opts,
     detached: true,
   });
@@ -71,7 +71,7 @@ function shellQuote(arg: string): string {
  */
 export function resolveCommand(name: string, args: string[]): { command: string; args: string[] } {
   const cmdString = [name, ...args].map(shellQuote).join(" ");
-  return { command: defaultShell, args: ["-ilc", cmdString] };
+  return { command: defaultShell, args: ["-lc", cmdString] };
 }
 
 // ---------------------------------------------------------------------------
