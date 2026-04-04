@@ -39,6 +39,7 @@
     "test:coverage": "vitest run"
   },
   "dependencies": {
+    "atomically": "^2.1.1",
     "default-shell": "^2.2.0",
     "which": "^6.0.1",
     "zod": "^4.3.6"

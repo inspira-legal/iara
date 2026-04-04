@@ -137,7 +137,7 @@ export function registerProjectHandlers(
 
     const projectDir = appState.getProjectDir(existing.slug);
     try {
-      rmGraceful(projectDir);
+      await rmGraceful(projectDir);
     } catch (err) {
       await watcher.start();
       await envWatcher.start();

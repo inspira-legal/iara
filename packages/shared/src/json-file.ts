@@ -1,7 +1,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import type { z } from "zod";
-import { writeFileAtomicSync } from "./fs.js";
+import { writeFileSync as writeFileAtomicSync } from "atomically";
 
 export interface JsonFileHandle<T> {
   /** Read + validate. With regenerate: self-heals on missing/corrupt. Without: throws. */

@@ -332,7 +332,7 @@ async function createWorkspace(
   } catch (err) {
     // Rollback: clean up partial filesystem state
     try {
-      rmGraceful(wp.root);
+      await rmGraceful(wp.root);
     } catch {
       // Best effort
     }
@@ -380,7 +380,7 @@ async function cleanupWorktrees(projectDir: string, wsDir: string): Promise<void
   }
 
   try {
-    rmGraceful(wsDir);
+    await rmGraceful(wsDir);
   } catch (err) {
     if ((err as NodeJS.ErrnoException).code === "ENOENT") return;
     throw new Error(
