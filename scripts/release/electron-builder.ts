@@ -8,7 +8,7 @@ interface ExtraResource {
 
 interface PlatformBuildConfig {
   platformConfig: Record<string, unknown>;
-  formatConfigs: Record<string, unknown>;
+  formatConfigs?: Record<string, unknown>;
 }
 
 function linuxConfig(arch: Arch[]): PlatformBuildConfig {
@@ -52,17 +52,11 @@ function winConfig(arch: Arch[]): PlatformBuildConfig {
   return {
     platformConfig: {
       win: {
-        target: [{ target: "nsis", arch }],
+        target: [{ target: "zip", arch }],
         icon: "resources/icon.ico",
         forceCodeSigning: false,
+        artifactName: "iara-${version}-win-${arch}.${ext}",
         extraResources,
-      },
-    },
-    formatConfigs: {
-      nsis: {
-        oneClick: false,
-        allowToChangeInstallationDirectory: true,
-        artifactName: "iara-${version}-setup.exe",
       },
     },
   };
