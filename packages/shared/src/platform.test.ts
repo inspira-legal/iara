@@ -1,5 +1,11 @@
 import { describe, expect, it, vi, afterEach } from "vitest";
-import { resolveCommand, buildTerminalEnv, killProcessTree } from "./platform.js";
+import {
+  buildInteractiveShell,
+  buildShellCommand,
+  shellQuote,
+  buildTerminalEnv,
+  killProcessTree,
+} from "./platform.js";
 
 vi.mock("tree-kill", () => ({ default: vi.fn() }));
 
@@ -10,31 +16,36 @@ afterEach(async () => {
   vi.useRealTimers();
 });
 
-describe("resolveCommand (shellQuote)", () => {
+describe("shellQuote", () => {
   it("passes safe args unquoted", () => {
-    const { args } = resolveCommand("git", ["-C", "/foo/bar", "--flag=value"]);
-    const cmd = args.find((a) => a.includes("git"))!;
-    expect(cmd).toBe("git -C /foo/bar --flag=value");
+    expect(shellQuote("/foo/bar")).toBe("/foo/bar");
+    expect(shellQuote("--flag=value")).toBe("--flag=value");
   });
 
   it("quotes args with spaces", () => {
-    const { args } = resolveCommand("echo", ["hello world"]);
-    expect(args.find((a) => a.includes("echo"))!).toContain("'hello world'");
+    expect(shellQuote("hello world")).toBe("'hello world'");
   });
 
   it("escapes single quotes", () => {
-    const { args } = resolveCommand("echo", ["it's"]);
-    expect(args.find((a) => a.includes("echo"))!).toContain("'it'\\''s'");
+    expect(shellQuote("it's")).toBe("'it'\\''s'");
   });
 
   it("quotes empty string", () => {
-    const { args } = resolveCommand("echo", [""]);
-    expect(args.find((a) => a.includes("echo"))!).toContain("''");
+    expect(shellQuote("")).toBe("''");
   });
+});
 
-  it("wraps in login shell with -lc", () => {
-    const { args } = resolveCommand("ls", []);
-    expect(args[0]).toBe("-lc");
+describe("buildInteractiveShell", () => {
+  it("returns login shell with --login flag", () => {
+    const { args } = buildInteractiveShell();
+    expect(args).toEqual(["--login"]);
+  });
+});
+
+describe("buildShellCommand", () => {
+  it("wraps command with -lc", () => {
+    const { args } = buildShellCommand("ls -la");
+    expect(args).toEqual(["-lc", "ls -la"]);
   });
 });
 

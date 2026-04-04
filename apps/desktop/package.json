@@ -14,6 +14,7 @@
     "smoke-test": "node scripts/smoke-test.mjs"
   },
   "dependencies": {
+    "@iara/shared": "workspace:*",
     "get-port": "^7.2.0",
     "ws": "^8.18.0"
   },

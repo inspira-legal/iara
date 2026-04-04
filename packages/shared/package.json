@@ -20,10 +20,6 @@
       "types": "./src/json-file.ts",
       "import": "./src/json-file.ts"
     },
-    "./process": {
-      "types": "./src/process.ts",
-      "import": "./src/process.ts"
-    },
     "./paths": {
       "types": "./src/paths.ts",
       "import": "./src/paths.ts"

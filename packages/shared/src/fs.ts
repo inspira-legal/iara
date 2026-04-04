@@ -21,17 +21,18 @@ function fsRetry<T>(fn: () => T, maxRetries = 5, baseDelayMs = 200): T {
     try {
       return fn();
     } catch (err: any) {
+      // Only retry on Windows — transient file locks (EBUSY/EPERM/EACCES) don't occur on Unix.
       if (attempt >= maxRetries || !isWindows || !RETRY_CODES.has(err?.code)) {
         throw err;
       }
       const delay = baseDelayMs * 2 ** attempt;
-      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, delay);
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, delay); // sync sleep for retry backoff
     }
   }
 }
 
 /** Remove a directory tree with retry for Windows file locking. */
-export function rmSyncSafe(dirPath: string): void {
+export function rmGraceful(dirPath: string): void {
   try {
     fsRetry(() => {
       fs.rmSync(dirPath, { recursive: true, force: true });

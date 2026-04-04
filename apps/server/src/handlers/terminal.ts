@@ -1,5 +1,6 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
+import { execGitSync } from "@iara/shared/git";
 import type { RepoContext } from "../services/launcher.js";
 import { buildSystemPrompt, buildSystemPromptFromDir } from "../services/launcher.js";
 import { registerMethod } from "../router.js";
@@ -61,7 +62,6 @@ export function registerTerminalHandlers(appState: AppState, manager: TerminalMa
       if (fs.existsSync(wtDir)) {
         let branch = "main";
         try {
-          const { execGitSync } = await import("@iara/shared/git");
           branch = execGitSync(["rev-parse", "--abbrev-ref", "HEAD"], {
             cwd: wtDir,
             timeout: 5000,

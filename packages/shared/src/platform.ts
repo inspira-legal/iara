@@ -38,40 +38,40 @@ export function commandExists(cmd: string): boolean {
 // Shell resolution
 // ---------------------------------------------------------------------------
 
-/** Returns the user's default shell with login flag for interactive use. */
-export function resolveShell(): { command: string; args: string[] } {
-  return { command: defaultShell, args: ["--login"] };
-}
-
-/**
- * Spawn a shell command through the user's login shell.
- * Uses cross-spawn for reliable process creation.
- * `$SHELL -lc "cmd"` with detached process group.
- */
-export function spawnShell(
-  cmd: string,
-  opts: { cwd?: string; env?: Record<string, string>; stdio?: any },
-): ChildProcess {
-  return crossSpawn(defaultShell, ["-lc", cmd], {
-    ...opts,
-    detached: true,
-  });
-}
-
 /** Escape a single argument for embedding in a shell command string. */
-function shellQuote(arg: string): string {
+export function shellQuote(arg: string): string {
   if (arg === "") return "''";
   if (/^[a-zA-Z0-9_./:=@,+-]+$/.test(arg)) return arg;
   return `'${arg.replace(/'/g, "'\\''")}'`;
 }
 
+/** Build an interactive login shell as `{ command, args }` — for PTY sessions. */
+export function buildInteractiveShell(): { command: string; args: string[] } {
+  return { command: defaultShell, args: ["--login"] };
+}
+
+/** Build a shell command wrapped in the user's login shell (`$SHELL -lc "cmd"`) as `{ command, args }`. */
+export function buildShellCommand(cmd: string): { command: string; args: string[] } {
+  return { command: defaultShell, args: ["-lc", cmd] };
+}
+
 /**
- * Wraps a command to run through the user's login shell so that
- * shell profile is loaded (PATH, nvm, pyenv, etc.).
+ * Spawn a command inside the user's login shell (`$SHELL -lc "cmd"`).
+ * Returns a ChildProcess augmented with `killTree()` for process-tree cleanup.
  */
-export function resolveCommand(name: string, args: string[]): { command: string; args: string[] } {
-  const cmdString = [name, ...args].map(shellQuote).join(" ");
-  return { command: defaultShell, args: ["-lc", cmdString] };
+export function spawnWithLoginShell(
+  cmd: string,
+  opts: { cwd?: string; env?: Record<string, string>; stdio?: any },
+): ChildProcess & { killTree: (graceMs?: number) => () => void } {
+  const { command, args } = buildShellCommand(cmd);
+  const child = crossSpawn(command, args, {
+    ...opts,
+    detached: true,
+  });
+  return Object.assign(child, {
+    killTree: (graceMs?: number) =>
+      killProcessTree(child.pid!, graceMs != null ? { graceMs } : undefined),
+  });
 }
 
 // ---------------------------------------------------------------------------

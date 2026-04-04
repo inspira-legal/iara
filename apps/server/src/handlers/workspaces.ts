@@ -6,7 +6,7 @@ import type { CreateWorkspaceInput, CreationStage, Workspace } from "@iara/contr
 import type { ScriptSupervisor } from "@iara/orchestrator/supervisor";
 import { gitWorktreeAdd, gitWorktreeRemove } from "@iara/shared/git";
 import { projectPaths, workspacePaths } from "@iara/shared/paths";
-import { rmSyncSafe } from "@iara/shared/fs";
+import { rmGraceful } from "@iara/shared/fs";
 import type { TerminalManager } from "../services/terminal.js";
 import type { GitWatcher } from "../services/git-watcher.js";
 import { z } from "zod";
@@ -72,8 +72,6 @@ export function registerWorkspaceHandlers(
     const workspace = appState.getWorkspace(workspaceId);
     if (!workspace) throw new Error(`Workspace not found: ${workspaceId}`);
 
-    // No metadata to update — names derived from slugs.
-    // Rescan and push in case filesystem changed.
     const project = appState.rescanProject(workspace.projectId);
     if (project) {
       const updated = project.workspaces.find((w) => w.id === workspaceId);
@@ -92,32 +90,24 @@ export function registerWorkspaceHandlers(
     const project = appState.getProject(workspace.projectId);
     if (!project) throw new Error(`Project not found: ${workspace.projectId}`);
 
-    // 1. Destroy terminals and stop scripts for this workspace
     terminalManager.destroyByWorkspaceId(workspaceId);
     await scriptSupervisor.stopAll(project.slug, workspace.slug);
 
-    // 2. Close git watchers (will re-watch after deletion)
     gitWatcher.unwatchProject(project.slug);
 
-    // 3. Stop file watchers that hold directory handles (prevents EPERM on Windows)
+    // Stop file watchers that hold directory handles (prevents EPERM on Windows)
     await watcher.stop();
     await envWatcher.stop();
-
-    // Wait for processes to fully exit and OS to release file handles
     await new Promise((resolve) => setTimeout(resolve, 500));
-
-    // 4. Remove git worktrees and workspace directory
     const projectDir = appState.getProjectDir(project.slug);
     const wsDir = appState.getWorkspaceDir(workspaceId);
     try {
       await cleanupWorktrees(projectDir, wsDir);
     } finally {
-      // 5. Restart file watchers even on failure
       await watcher.start();
       await envWatcher.start();
     }
 
-    // 6. Re-watch remaining repos and rescan
     gitWatcher.watchProject(project.slug);
     appState.rescanProject(project.slug);
     pushFn("state:resync", { state: appState.getState() });
@@ -314,19 +304,15 @@ async function createWorkspace(
   try {
     fs.mkdirSync(wp.root, { recursive: true });
 
-    // Symlink CLAUDE.md and iara-scripts.yaml to project root.
     for (const [source, link] of [
       [pp.claudeMd, wp.claudeMdSymlink],
       [pp.scriptsYaml, wp.scriptsYamlSymlink],
     ] as const) {
       try {
         fs.symlinkSync(path.relative(path.dirname(link), source), link);
-      } catch {
-        // Source missing or link already exists — skip
-      }
+      } catch {}
     }
 
-    // Create worktrees from project root repos
     const repoNames = appState.discoverRepos(project.slug);
     await Promise.all(
       repoNames.map((repo: string) => {
@@ -336,19 +322,17 @@ async function createWorkspace(
       }),
     );
 
-    // Copy env.toml from main workspace with port offset (R4.11)
     const existingNonMainWorkspaces = project.workspaces.filter(
       (w) => w.slug !== AppState.ROOT_WORKSPACE_SLUG,
     );
     const workspaceIndex = existingNonMainWorkspaces.length + 1;
     copyEnvTomlWithPortOffset(pp.root, wp.root, repoNames, workspaceIndex);
 
-    // Generate .code-workspace file
     generateCodeWorkspace(wp.root, input.slug, repoNames);
   } catch (err) {
     // Rollback: clean up partial filesystem state
     try {
-      rmSyncSafe(wp.root);
+      rmGraceful(wp.root);
     } catch {
       // Best effort
     }
@@ -369,7 +353,6 @@ async function createWorkspace(
 }
 
 async function cleanupWorktrees(projectDir: string, wsDir: string): Promise<void> {
-  // Remove git worktrees from source repos at project root
   let entries: string[];
   try {
     entries = fs.readdirSync(wsDir);
@@ -383,26 +366,21 @@ async function cleanupWorktrees(projectDir: string, wsDir: string): Promise<void
         const wtDir = path.join(wsDir, name);
         const gitFile = path.join(wtDir, ".git");
         try {
-          // Only process worktrees (dirs with .git file)
           if (!fs.statSync(gitFile).isFile()) return;
         } catch {
           return;
         }
 
-        // Find the source repo at project root
         const sourceRepo = path.join(projectDir, name);
         try {
           await gitWorktreeRemove(sourceRepo, wtDir);
-        } catch {
-          // Worktree may already be removed
-        }
+        } catch {}
       }),
     );
   }
 
-  // Remove the workspace directory
   try {
-    rmSyncSafe(wsDir);
+    rmGraceful(wsDir);
   } catch (err) {
     if ((err as NodeJS.ErrnoException).code === "ENOENT") return;
     throw new Error(

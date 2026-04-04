@@ -1,8 +1,8 @@
 import * as os from "node:os";
 import * as path from "node:path";
 import open from "open";
-import { commandExists, spawnShell } from "@iara/shared/platform";
 import { registerMethod } from "../router.js";
+import { openInVSCode } from "../services/editor.js";
 import type { AppState } from "../services/state.js";
 
 export function registerFileHandlers(appState: AppState): void {
@@ -28,20 +28,4 @@ export function registerFileHandlers(appState: AppState): void {
     const dir = appState.getWorkspaceDir(params.workspaceId);
     await open(dir);
   });
-}
-
-/** Open a file/folder in VS Code. Returns true if VS Code was found and launched. */
-function openInVSCode(target: string): boolean {
-  if (!commandExists("code")) return false;
-
-  spawnShell(`code --goto ${shellQuote(target)}`, {
-    stdio: "ignore",
-  });
-  return true;
-}
-
-function shellQuote(arg: string): string {
-  if (arg === "") return "''";
-  if (/^[a-zA-Z0-9_./:=@,+\-\\]+$/.test(arg)) return arg;
-  return `'${arg.replace(/'/g, "'\\''")}'`;
 }

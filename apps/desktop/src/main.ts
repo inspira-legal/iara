@@ -1,5 +1,4 @@
-import * as crypto from "node:crypto";
-import { execFileSync } from "node:child_process";
+import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { spawn, type ChildProcess } from "node:child_process";
@@ -16,6 +15,15 @@ import {
 import WebSocket from "ws";
 import { syncShellEnvironment } from "./services/shell-env.js";
 import { BrowserPanel } from "./services/browser-panel.js";
+import {
+  isWslAvailable,
+  toWslPath,
+  loadWindowState,
+  saveWindowState,
+  reservePort,
+  generateToken,
+  getMimeType,
+} from "./utils.js";
 
 syncShellEnvironment();
 
@@ -25,32 +33,6 @@ const isWindows = process.platform === "win32";
 
 if (isWindows) {
   app.setAppUserModelId("com.iara.desktop");
-}
-
-// ---------------------------------------------------------------------------
-// WSL helpers (desktop-only, used to spawn server inside WSL on Windows)
-// ---------------------------------------------------------------------------
-
-let _wslAvailable: boolean | undefined;
-
-function isWslAvailable(): boolean {
-  if (!isWindows) return false;
-  if (_wslAvailable !== undefined) return _wslAvailable;
-  try {
-    execFileSync("wsl.exe", ["--status"], { timeout: 5000, stdio: "ignore" });
-    _wslAvailable = true;
-  } catch {
-    _wslAvailable = false;
-  }
-  return _wslAvailable;
-}
-
-/** Convert a Windows path to WSL path (C:\foo → /mnt/c/foo). */
-function toWslPath(winPath: string): string {
-  const normalized = winPath.replace(/\\/g, "/");
-  const match = normalized.match(/^([A-Za-z]):(\/.*)/);
-  if (match) return `/mnt/${match[1]!.toLowerCase()}${match[2]}`;
-  return normalized;
 }
 
 /** Whether the server should run inside WSL. */
@@ -121,62 +103,7 @@ protocol.registerSchemesAsPrivileged([
   },
 ]);
 
-// ---------------------------------------------------------------------------
-// Window state persistence (position, size, maximized)
-// ---------------------------------------------------------------------------
-
-const fs = require("node:fs") as typeof import("node:fs");
 const windowStatePath = path.join(stateDir, "window-state.json");
-
-interface WindowState {
-  x?: number;
-  y?: number;
-  width: number;
-  height: number;
-  maximized?: boolean;
-  zoomLevel?: number;
-}
-
-function loadWindowState(): WindowState {
-  try {
-    const data = fs.readFileSync(windowStatePath, "utf-8");
-    return JSON.parse(data) as WindowState;
-  } catch {
-    return { width: 1280, height: 800 };
-  }
-}
-
-function saveWindowState(win: BrowserWindow): void {
-  const maximized = win.isMaximized();
-  const bounds = maximized ? ((win as any).__restoreBounds ?? win.getBounds()) : win.getBounds();
-  const state: WindowState = {
-    x: bounds.x,
-    y: bounds.y,
-    width: bounds.width,
-    height: bounds.height,
-    maximized,
-    zoomLevel: win.webContents.getZoomLevel(),
-  };
-  try {
-    fs.mkdirSync(path.dirname(windowStatePath), { recursive: true });
-    fs.writeFileSync(windowStatePath, JSON.stringify(state));
-  } catch {
-    // best-effort
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Port & Token
-// ---------------------------------------------------------------------------
-
-async function reservePort(): Promise<number> {
-  const { default: getPort } = await import("get-port");
-  return getPort();
-}
-
-function generateToken(): string {
-  return crypto.randomBytes(24).toString("hex");
-}
 
 // ---------------------------------------------------------------------------
 // Server child process
@@ -355,7 +282,7 @@ function connectWs(): void {
 // ---------------------------------------------------------------------------
 
 function createWindow(): BrowserWindow {
-  const saved = loadWindowState();
+  const saved = loadWindowState(windowStatePath);
 
   const win = new BrowserWindow({
     ...(saved.x != null && saved.y != null ? { x: saved.x, y: saved.y } : {}),
@@ -386,7 +313,7 @@ function createWindow(): BrowserWindow {
   let saveTimer: ReturnType<typeof setTimeout> | null = null;
   const debouncedSave = () => {
     if (saveTimer) clearTimeout(saveTimer);
-    saveTimer = setTimeout(() => saveWindowState(win), 500);
+    saveTimer = setTimeout(() => saveWindowState(win, windowStatePath), 500);
   };
 
   (win as any).__restoreBounds = win.getBounds();
@@ -402,7 +329,7 @@ function createWindow(): BrowserWindow {
   win.on("unmaximize", debouncedSave);
   win.on("close", () => {
     if (saveTimer) clearTimeout(saveTimer);
-    saveWindowState(win);
+    saveWindowState(win, windowStatePath);
   });
 
   browserPanel.attach(win);
@@ -512,22 +439,6 @@ function registerCustomProtocol(): void {
       headers: { "Content-Type": getMimeType(filePath) },
     });
   });
-}
-
-function getMimeType(filePath: string): string {
-  const ext = path.extname(filePath).toLowerCase();
-  const types: Record<string, string> = {
-    ".html": "text/html",
-    ".js": "application/javascript",
-    ".css": "text/css",
-    ".json": "application/json",
-    ".png": "image/png",
-    ".svg": "image/svg+xml",
-    ".ico": "image/x-icon",
-    ".woff": "font/woff",
-    ".woff2": "font/woff2",
-  };
-  return types[ext] ?? "application/octet-stream";
 }
 
 // ---------------------------------------------------------------------------

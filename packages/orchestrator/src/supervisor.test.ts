@@ -6,16 +6,14 @@ import type { ResolvedServiceDef } from "@iara/contracts";
 // Mocks — must be declared before importing the module under test
 // ---------------------------------------------------------------------------
 
-const { mockKillProcessTree, mockCreateConnection, mockSpawnShell } = vi.hoisted(() => ({
-  mockKillProcessTree: vi.fn(() => vi.fn()),
+const { mockCreateConnection, mockSpawnInShell } = vi.hoisted(() => ({
   mockCreateConnection: vi.fn(),
-  mockSpawnShell: vi.fn(),
+  mockSpawnInShell: vi.fn(),
 }));
 
 vi.mock("@iara/shared/platform", () => ({
   isWindows: false,
-  killProcessTree: mockKillProcessTree,
-  spawnShell: mockSpawnShell,
+  spawnWithLoginShell: mockSpawnInShell,
 }));
 
 vi.mock("@iara/shared/env", () => ({
@@ -46,16 +44,18 @@ vi.mock("node:net", () => ({
   createConnection: (...args: unknown[]) => mockCreateConnection(...args),
 }));
 
-/** Creates a fake ChildProcess that behaves like spawn() output. */
+/** Creates a fake ChildProcess that behaves like spawnWithLoginShell() output. */
 function createMockChild(pid = 12345) {
   const child = new EventEmitter() as EventEmitter & {
     pid: number;
     stdout: EventEmitter;
     stderr: EventEmitter;
+    killTree: ReturnType<typeof vi.fn>;
   };
   child.pid = pid;
   child.stdout = new EventEmitter();
   child.stderr = new EventEmitter();
+  child.killTree = vi.fn(() => vi.fn());
   return child;
 }
 
@@ -148,7 +148,7 @@ function mockPortFree() {
 beforeEach(() => {
   vi.clearAllMocks();
   mockChild = createMockChild();
-  mockSpawnShell.mockImplementation(() => mockChild);
+  mockSpawnInShell.mockImplementation(() => mockChild);
   // Reset default implementation
   mockCreateConnection.mockImplementation(() => {
     const socket = createMockSocket();
@@ -318,11 +318,12 @@ describe("ScriptSupervisor", () => {
       const supervisor = new ScriptSupervisor(push);
 
       supervisor.start(defaultStartOpts());
+      const firstChild = mockChild;
 
       mockChild = createMockChild(99999);
       supervisor.start(defaultStartOpts());
 
-      expect(mockKillProcessTree).toHaveBeenCalled();
+      expect(firstChild.killTree).toHaveBeenCalled();
     });
 
     it("reuses pinned-port service if already running", () => {
@@ -480,9 +481,9 @@ describe("ScriptSupervisor", () => {
       const statuses = supervisor.status();
       expect(statuses[0]!.pid).toBeNull();
 
-      // stop should not call killProcessGroup since pid was undefined
+      // stop should not call killTree since pid was undefined
       supervisor.stop("3000:api:dev");
-      expect(mockKillProcessTree).not.toHaveBeenCalled();
+      expect(noPidChild.killTree).not.toHaveBeenCalled();
     });
   });
 
@@ -1149,7 +1150,7 @@ describe("ScriptSupervisor", () => {
       const child1 = createMockChild(1111);
       const child2 = createMockChild(2222);
       let childIdx = 0;
-      mockSpawnShell.mockImplementation(() => {
+      mockSpawnInShell.mockImplementation(() => {
         const c = [child1, child2][childIdx] ?? child2;
         childIdx++;
         return c;
@@ -1229,7 +1230,7 @@ describe("ScriptSupervisor", () => {
       const child1 = createMockChild(1111);
       const child2 = createMockChild(2222);
       let childIdx = 0;
-      mockSpawnShell.mockImplementation(() => {
+      mockSpawnInShell.mockImplementation(() => {
         const c = [child1, child2][childIdx] ?? child2;
         childIdx++;
         return c;

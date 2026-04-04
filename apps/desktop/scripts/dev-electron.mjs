@@ -1,13 +1,13 @@
-import { spawn, spawnSync } from "node:child_process";
+import { spawn } from "node:child_process";
 import { watch } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import waitOn from "wait-on";
+import { killProcessTree } from "@iara/shared/platform";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const desktopDir = resolve(__dirname, "..");
 const serverDistDir = resolve(desktopDir, "../server/dist");
-const isWindows = process.platform === "win32";
 const electronBin = resolve(desktopDir, "node_modules/.bin/electron");
 
 const port = Number(process.env.ELECTRON_RENDERER_PORT ?? 5173);
@@ -27,28 +27,11 @@ await waitOn({
 let child = null;
 let restarting = false;
 
-/** Kill a child process tree. */
-function killChild(proc, signal = "SIGTERM") {
-  if (isWindows && proc.pid !== undefined) {
-    try {
-      spawnSync("taskkill", ["/pid", String(proc.pid), "/T", "/F"], { stdio: "ignore" });
-      return;
-    } catch {
-      // fallback
-    }
-  }
-  try {
-    proc.kill(signal);
-  } catch {}
-}
-
 function startElectron() {
   child = spawn(electronBin, ["."], {
     cwd: desktopDir,
     stdio: ["pipe", "inherit", "inherit"],
     env: { ...process.env, VITE_DEV_SERVER_URL: devServerUrl },
-    shell: isWindows,
-    windowsHide: true,
   });
 
   child.on("exit", (code) => {
@@ -68,17 +51,12 @@ function scheduleRestart(source) {
     restarting = true;
 
     if (child) {
-      killChild(child, "SIGTERM");
-      const forceKill = isWindows
-        ? null
-        : setTimeout(() => {
-            try {
-              child?.kill("SIGKILL");
-            } catch {}
-          }, forcedShutdownTimeoutMs);
+      const cancel = child.pid
+        ? killProcessTree(child.pid, { graceMs: forcedShutdownTimeoutMs })
+        : () => {};
 
       child.once("exit", () => {
-        if (forceKill) clearTimeout(forceKill);
+        cancel();
         restarting = false;
         startElectron();
       });

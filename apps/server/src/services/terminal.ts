@@ -2,8 +2,9 @@ import type { WsPushEvents } from "@iara/contracts";
 import * as pty from "node-pty";
 import { cleanEnv } from "@iara/shared/env";
 import {
-  resolveShell,
-  resolveCommand,
+  buildInteractiveShell,
+  buildShellCommand,
+  shellQuote,
   buildTerminalEnv,
   getProcessCwd,
   killProcessTree,
@@ -78,7 +79,7 @@ export class TerminalManager {
     let args: string[];
 
     if (mode === "shell") {
-      const shell = resolveShell();
+      const shell = buildInteractiveShell();
       command = shell.command;
       args = shell.args;
       console.log("[terminal] spawn shell", { cwd: config.workspaceDir, command });
@@ -100,7 +101,8 @@ export class TerminalManager {
       };
 
       const claudeArgs = buildClaudeArgs(launchConfig);
-      const resolved = resolveCommand("claude", claudeArgs);
+      const cmdString = ["claude", ...claudeArgs].map(shellQuote).join(" ");
+      const resolved = buildShellCommand(cmdString);
 
       command = resolved.command;
       args = resolved.args;

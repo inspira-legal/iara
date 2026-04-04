@@ -68,10 +68,10 @@ export function EnvEditor({
     (services: EnvServiceEntries[]) => {
       if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
       saveTimerRef.current = setTimeout(() => {
-        void transport.request("env.write", { workspaceId, services });
+        void transport.request("env.write", { workspaceId, services }).then(() => load());
       }, 500);
     },
-    [workspaceId],
+    [workspaceId, load],
   );
 
   const updateData = (serviceName: string, newEntries: EnvEntry[]): EnvData => {

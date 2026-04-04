@@ -12,7 +12,7 @@ import type {
   WsPushEvents,
 } from "@iara/contracts";
 import { cleanEnv } from "@iara/shared/env";
-import { spawnShell, killProcessTree } from "@iara/shared/platform";
+import { spawnWithLoginShell } from "@iara/shared/platform";
 import { interpolate } from "./interpolation.js";
 import type { InterpolationContext } from "./interpolation.js";
 
@@ -110,7 +110,7 @@ export class ScriptSupervisor {
       return;
     }
 
-    const child = spawnShell(fullCommand, {
+    const child = spawnWithLoginShell(fullCommand, {
       cwd: opts.cwd,
       env: cleanEnv(),
       stdio: ["ignore", "pipe", "pipe"],
@@ -130,7 +130,7 @@ export class ScriptSupervisor {
       cancelKill: null,
       kill: () => {
         if (child.pid) {
-          entry.cancelKill = killProcessTree(child.pid, { graceMs: 3000 });
+          entry.cancelKill = child.killTree(3000);
         }
       },
     };
