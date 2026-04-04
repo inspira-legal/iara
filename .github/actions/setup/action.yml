@@ -14,3 +14,9 @@ runs:
 
     - shell: bash
       run: bun install --frozen-lockfile
+
+    - shell: bash
+      run: cd apps/web && bunx @tanstack/router-cli generate
+
+    - shell: bash
+      run: bun run build
