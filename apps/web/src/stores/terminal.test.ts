@@ -47,6 +47,7 @@ interface TerminalEntry {
   sessionId: string | null;
   status: TerminalStatus;
   exitCode: number | null;
+  errorCode: string | null;
   hasData: boolean;
 }
 
@@ -55,6 +56,7 @@ const DEFAULT_ENTRY: TerminalEntry = {
   sessionId: null,
   status: "idle",
   exitCode: null,
+  errorCode: null,
   hasData: false,
 };
 
@@ -88,6 +90,7 @@ describe("useTerminalStore", () => {
         sessionId: "sess-1",
         status: "active",
         exitCode: null,
+        errorCode: null,
         hasData: false,
       };
       const entries = new Map<string, TerminalEntry>();
@@ -174,6 +177,7 @@ describe("useTerminalStore", () => {
         sessionId: "old-sess",
         status: "active",
         exitCode: null,
+        errorCode: null,
         hasData: false,
       });
       useTerminalStore.setState({ entries });
@@ -198,6 +202,7 @@ describe("useTerminalStore", () => {
         sessionId: "old-sess",
         status: "exited",
         exitCode: 1,
+        errorCode: null,
         hasData: false,
       });
       useTerminalStore.setState({ entries });
@@ -223,6 +228,7 @@ describe("useTerminalStore", () => {
         sessionId: "old-sess",
         status: "active",
         exitCode: null,
+        errorCode: null,
         hasData: false,
       });
       useTerminalStore.setState({ entries });
@@ -251,6 +257,7 @@ describe("useTerminalStore", () => {
         sessionId: "sess-1",
         status: "active",
         exitCode: null,
+        errorCode: null,
         hasData: false,
       });
       useTerminalStore.setState({ entries });
@@ -270,6 +277,7 @@ describe("useTerminalStore", () => {
         sessionId: "sess-1",
         status: "active",
         exitCode: null,
+        errorCode: null,
         hasData: false,
       });
       useTerminalStore.setState({ entries });
@@ -305,6 +313,7 @@ describe("useTerminalStore", () => {
         sessionId: "sess-1",
         status: "active",
         exitCode: null,
+        errorCode: null,
         hasData: false,
       });
       useTerminalStore.setState({ entries });
@@ -342,6 +351,7 @@ describe("useTerminalStore", () => {
         sessionId: "sess-1",
         status: "active",
         exitCode: null,
+        errorCode: null,
         hasData: false,
       });
       useTerminalStore.setState({ entries });
@@ -359,6 +369,7 @@ describe("useTerminalStore", () => {
         sessionId: "sess-1",
         status: "active",
         exitCode: null,
+        errorCode: null,
         hasData: false,
       });
       useTerminalStore.setState({ entries });
@@ -378,6 +389,7 @@ describe("useTerminalStore", () => {
         sessionId: "sess-1",
         status: "active",
         exitCode: null,
+        errorCode: null,
         hasData: false,
       });
       useTerminalStore.setState({ entries });
@@ -395,6 +407,7 @@ describe("useTerminalStore", () => {
         sessionId: "sess-1",
         status: "active",
         exitCode: null,
+        errorCode: null,
         hasData: false,
       });
       useTerminalStore.setState({ entries });
@@ -425,6 +438,7 @@ describe("useTerminalStore", () => {
         sessionId: "sess-1",
         status: "active",
         exitCode: null,
+        errorCode: null,
         hasData: false,
       });
       useTerminalStore.setState({ entries });
@@ -441,6 +455,7 @@ describe("useTerminalStore", () => {
         sessionId: "sess-1",
         status: "active",
         exitCode: null,
+        errorCode: null,
         hasData: true,
       };
       entries.set("proj1/ws1", entry);
@@ -459,6 +474,7 @@ describe("useTerminalStore", () => {
         sessionId: "sess-1",
         status: "active",
         exitCode: null,
+        errorCode: null,
         hasData: false,
       });
       useTerminalStore.setState({ entries });
@@ -477,6 +493,7 @@ describe("useTerminalStore", () => {
         sessionId: "sess-1",
         status: "active",
         exitCode: null,
+        errorCode: null,
         hasData: false,
       });
       entries.set("proj1/ws2", {
@@ -484,6 +501,7 @@ describe("useTerminalStore", () => {
         sessionId: "sess-2",
         status: "active",
         exitCode: null,
+        errorCode: null,
         hasData: false,
       });
       useTerminalStore.setState({ entries });
@@ -508,6 +526,7 @@ describe("useTerminalStore", () => {
         sessionId: "old-sess",
         status: "active",
         exitCode: null,
+        errorCode: null,
         hasData: true,
       });
       useTerminalStore.setState({ entries });

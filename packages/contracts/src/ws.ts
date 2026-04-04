@@ -1,5 +1,6 @@
 import type {
   AddRepoInput,
+  AppCapabilities,
   AppInfo,
   CreationProgress,
   CreateProjectInput,
@@ -29,6 +30,7 @@ import type {
 export type WsMethods = {
   // App
   "app.info": { params: Record<string, never>; result: AppInfo };
+  "app.capabilities": { params: Record<string, never>; result: AppCapabilities };
 
   // State
   "state.init": {
@@ -188,6 +190,7 @@ export type WsPushEvents = {
   "terminal:exit": { terminalId: string; exitCode: number };
   "scripts:status": { service: string; script: string; status: ScriptStatus };
   "scripts:log": { scriptId: string; service: string; script: string; line: string };
+  "scripts:discovering": { projectId: string };
   "scripts:reload": { projectId: string };
   notification: { title: string; body: string; type?: string };
   "clone:progress": CloneProgress;

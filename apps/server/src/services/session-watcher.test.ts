@@ -36,7 +36,7 @@ afterEach(() => {
 
 describe("SessionWatcher", () => {
   describe("refresh()", () => {
-    it("creates watchers for workspace session directories", () => {
+    it("creates watchers for workspace session directories", async () => {
       const projects = [
         {
           slug: "proj1",
@@ -52,7 +52,7 @@ describe("SessionWatcher", () => {
       const appState = createMockAppState(projects);
       const watcher = new SessionWatcher(pushFn, appState);
 
-      watcher.refresh();
+      await watcher.refresh();
 
       // The watcher should have mapped workspace IDs to session hashes
       const w = watcher as any;
@@ -61,7 +61,7 @@ describe("SessionWatcher", () => {
       watcher.stop();
     });
 
-    it("removes watchers for deleted projects", () => {
+    it("removes watchers for deleted projects", async () => {
       const pushFn = vi.fn();
       const projects = [
         {
@@ -76,20 +76,20 @@ describe("SessionWatcher", () => {
       const appState = createMockAppState(projects);
       const watcher = new SessionWatcher(pushFn, appState);
 
-      watcher.refresh();
+      await watcher.refresh();
       const w = watcher as any;
       const initialSize = w.hashToWorkspaceIds.size;
       expect(initialSize).toBeGreaterThan(0);
 
       // Now refresh with empty projects
       appState.getState.mockReturnValue({ projects: [] });
-      watcher.refresh();
+      await watcher.refresh();
 
       expect(w.hashToWorkspaceIds.size).toBe(0);
       watcher.stop();
     });
 
-    it("handles projects with multiple workspaces", () => {
+    it("handles projects with multiple workspaces", async () => {
       const projects = [
         {
           slug: "proj1",
@@ -109,7 +109,7 @@ describe("SessionWatcher", () => {
       const appState = createMockAppState(projects);
       const watcher = new SessionWatcher(pushFn, appState);
 
-      watcher.refresh();
+      await watcher.refresh();
       const w = watcher as any;
       // Should have watchers for both workspaces (possibly shared hashes)
       expect(w.hashToWorkspaceIds.size).toBeGreaterThan(0);
@@ -119,7 +119,7 @@ describe("SessionWatcher", () => {
   });
 
   describe("push events", () => {
-    it("pushes session:changed events after debounce", () => {
+    it("pushes session:changed events after debounce", async () => {
       const projects = [
         {
           slug: "proj1",
@@ -133,7 +133,7 @@ describe("SessionWatcher", () => {
       const pushFn = vi.fn();
       const appState = createMockAppState(projects);
       const watcher = new SessionWatcher(pushFn, appState);
-      watcher.refresh();
+      await watcher.refresh();
 
       // Simulate debounced notify via private method
       const w = watcher as any;
@@ -149,7 +149,7 @@ describe("SessionWatcher", () => {
       watcher.stop();
     });
 
-    it("debounces multiple rapid changes", () => {
+    it("debounces multiple rapid changes", async () => {
       const projects = [
         {
           slug: "proj1",
@@ -163,7 +163,7 @@ describe("SessionWatcher", () => {
       const pushFn = vi.fn();
       const appState = createMockAppState(projects);
       const watcher = new SessionWatcher(pushFn, appState);
-      watcher.refresh();
+      await watcher.refresh();
 
       const w = watcher as any;
       const hashes = Array.from(w.hashToWorkspaceIds.keys()) as string[];
@@ -238,7 +238,7 @@ describe("SessionWatcher", () => {
   });
 
   describe("watchHash()", () => {
-    it("ignores non-jsonl files in watched directory", () => {
+    it("ignores non-jsonl files in watched directory", async () => {
       const projects = [
         {
           slug: "proj1",
@@ -252,10 +252,10 @@ describe("SessionWatcher", () => {
       const pushFn = vi.fn();
       const appState = createMockAppState(projects);
       const watcher = new SessionWatcher(pushFn, appState);
-      watcher.refresh();
+      await watcher.refresh();
 
       const w = watcher as any;
-      const hashes = Array.from(w.watchers.keys()) as string[];
+      const hashes = Array.from(w.subscriptions.keys()) as string[];
 
       // Write a non-jsonl file to one of the watched dirs
       if (hashes.length > 0) {
@@ -270,7 +270,7 @@ describe("SessionWatcher", () => {
       watcher.stop();
     });
 
-    it("detects jsonl file changes in watched directory", () => {
+    it("detects jsonl file changes in watched directory", async () => {
       const projects = [
         {
           slug: "proj1",
@@ -284,10 +284,10 @@ describe("SessionWatcher", () => {
       const pushFn = vi.fn();
       const appState = createMockAppState(projects);
       const watcher = new SessionWatcher(pushFn, appState);
-      watcher.refresh();
+      await watcher.refresh();
 
       const w = watcher as any;
-      const hashes = Array.from(w.watchers.keys()) as string[];
+      const hashes = Array.from(w.subscriptions.keys()) as string[];
 
       if (hashes.length > 0) {
         const home = process.env.HOME ?? "";
@@ -303,7 +303,7 @@ describe("SessionWatcher", () => {
   });
 
   describe("refresh() edge cases", () => {
-    it("reuses existing watchers for unchanged hashes", () => {
+    it("reuses existing watchers for unchanged hashes", async () => {
       const projects = [
         {
           slug: "proj1",
@@ -318,16 +318,16 @@ describe("SessionWatcher", () => {
       const appState = createMockAppState(projects);
       const watcher = new SessionWatcher(pushFn, appState);
 
-      watcher.refresh();
+      await watcher.refresh();
       const w = watcher as any;
-      const firstWatchers = new Map(w.watchers);
+      const firstWatchers = new Map(w.subscriptions);
 
       // Refresh again with same projects — should reuse watchers
-      watcher.refresh();
+      await watcher.refresh();
 
       for (const [hash, fsWatcher] of firstWatchers) {
         // Same watcher instance should be reused
-        expect(w.watchers.get(hash)).toBe(fsWatcher);
+        expect(w.subscriptions.get(hash)).toBe(fsWatcher);
       }
 
       watcher.stop();
@@ -335,7 +335,7 @@ describe("SessionWatcher", () => {
   });
 
   describe("stop()", () => {
-    it("cleans up all watchers and timers", () => {
+    it("cleans up all watchers and timers", async () => {
       const projects = [
         {
           slug: "proj1",
@@ -349,12 +349,12 @@ describe("SessionWatcher", () => {
       const pushFn = vi.fn();
       const appState = createMockAppState(projects);
       const watcher = new SessionWatcher(pushFn, appState);
-      watcher.refresh();
+      await watcher.refresh();
 
       watcher.stop();
 
       const w = watcher as any;
-      expect(w.watchers.size).toBe(0);
+      expect(w.subscriptions.size).toBe(0);
       expect(w.debounceTimers.size).toBe(0);
     });
 

@@ -1,4 +1,3 @@
-import { execFileSync } from "node:child_process";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import type { RepoContext } from "../services/launcher.js";
@@ -62,9 +61,9 @@ export function registerTerminalHandlers(appState: AppState, manager: TerminalMa
       if (fs.existsSync(wtDir)) {
         let branch = "main";
         try {
-          branch = execFileSync("git", ["rev-parse", "--abbrev-ref", "HEAD"], {
+          const { execGitSync } = await import("@iara/shared/git");
+          branch = execGitSync(["rev-parse", "--abbrev-ref", "HEAD"], {
             cwd: wtDir,
-            encoding: "utf-8",
             timeout: 5000,
           }).trim();
         } catch {}

@@ -129,6 +129,25 @@ export class GitWatcher {
     }
   }
 
+  /** Close watchers for a specific project and its workspaces. */
+  unwatchProject(projectSlug: string): void {
+    const projectDir = this.appState.getProjectDir(projectSlug);
+
+    for (const [key, watcher] of this.watchers) {
+      if (key.startsWith(projectDir)) {
+        watcher.close();
+        this.watchers.delete(key);
+      }
+    }
+
+    for (const [key, timer] of this.debounceTimers) {
+      if (key === `project:${projectSlug}` || key.startsWith(`${projectSlug}/`)) {
+        clearTimeout(timer);
+        this.debounceTimers.delete(key);
+      }
+    }
+  }
+
   stop(): void {
     for (const timer of this.debounceTimers.values()) {
       clearTimeout(timer);

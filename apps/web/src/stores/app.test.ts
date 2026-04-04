@@ -102,6 +102,7 @@ describe("useAppStore", () => {
       const projects = [makeProject()];
       const settings = { theme: "dark" };
       mockRequest.mockResolvedValueOnce({ projects, settings, repoInfo: {}, sessions: {} });
+      mockRequest.mockResolvedValueOnce({ claude: true, platform: "linux" });
 
       await useAppStore.getState().init();
 
@@ -114,6 +115,7 @@ describe("useAppStore", () => {
 
     it("propagates transport errors", async () => {
       mockRequest.mockRejectedValueOnce(new Error("network"));
+      mockRequest.mockResolvedValueOnce({ claude: true, platform: "linux" });
       await expect(useAppStore.getState().init()).rejects.toThrow("network");
       expect(useAppStore.getState().initialized).toBe(false);
     });

@@ -1,4 +1,4 @@
-import { exec, spawn } from "node:child_process";
+import { exec } from "node:child_process";
 import { existsSync } from "node:fs";
 import { createConnection } from "node:net";
 import { promisify } from "node:util";
@@ -12,7 +12,7 @@ import type {
   WsPushEvents,
 } from "@iara/contracts";
 import { cleanEnv } from "@iara/shared/env";
-import { killProcessGroup } from "@iara/shared/process";
+import { spawnShell, killProcessTree } from "@iara/shared/platform";
 import { interpolate } from "./interpolation.js";
 import type { InterpolationContext } from "./interpolation.js";
 
@@ -110,12 +110,10 @@ export class ScriptSupervisor {
       return;
     }
 
-    const child = spawn(fullCommand, {
+    const child = spawnShell(fullCommand, {
       cwd: opts.cwd,
       env: cleanEnv(),
-      shell: true,
       stdio: ["ignore", "pipe", "pipe"],
-      detached: true,
     });
 
     const entry: RunningScript = {
@@ -132,7 +130,7 @@ export class ScriptSupervisor {
       cancelKill: null,
       kill: () => {
         if (child.pid) {
-          entry.cancelKill = killProcessGroup(child.pid, { graceMs: 3000 });
+          entry.cancelKill = killProcessTree(child.pid, { graceMs: 3000 });
         }
       },
     };
@@ -597,7 +595,7 @@ export class ScriptSupervisor {
   }
 }
 
-/** Kill process(es) listening on a port via lsof (async to avoid blocking event loop). */
+/** Kill process(es) listening on a port (async to avoid blocking event loop). */
 async function killByPort(port: number): Promise<void> {
   try {
     const { stdout } = await execAsync(`lsof -ti:${port}`, { encoding: "utf-8" });

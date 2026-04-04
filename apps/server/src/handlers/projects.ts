@@ -4,6 +4,7 @@ import * as path from "node:path";
 import type { CreationStage } from "@iara/contracts";
 import { gitClone } from "@iara/shared/git";
 import { projectPaths } from "@iara/shared/paths";
+import { rmSyncSafe } from "@iara/shared/fs";
 import { z } from "zod";
 import { registerMethod } from "../router.js";
 import { runClaude, activeRuns, streamClaudeRun } from "../services/claude-runner.js";
@@ -16,10 +17,15 @@ import {
   syncRepos,
   listLocalBranches,
 } from "../services/repos.js";
+import type { ScriptSupervisor } from "@iara/orchestrator/supervisor";
+import type { TerminalManager } from "../services/terminal.js";
+import type { GitWatcher } from "../services/git-watcher.js";
+import type { SessionWatcher } from "../services/session-watcher.js";
 import type { AppState } from "../services/state.js";
+import type { EnvWatcher } from "../services/env-watcher.js";
 import type { ProjectsWatcher } from "../services/watcher.js";
 import type { PushFn } from "./index.js";
-import { triggerDiscovery } from "./scripts.js";
+import { triggerDiscovery, cancelDiscovery } from "./scripts.js";
 
 const ProjectMetadataSchema = z.object({
   name: z.string().min(1).describe("nome curto e descritivo do projeto"),
@@ -48,6 +54,11 @@ function repoNameFromSource(source: string): string {
 export function registerProjectHandlers(
   appState: AppState,
   watcher: ProjectsWatcher,
+  envWatcher: EnvWatcher,
+  terminalManager: TerminalManager,
+  scriptSupervisor: ScriptSupervisor,
+  gitWatcher: GitWatcher,
+  sessionWatcher: SessionWatcher,
   pushFn: PushFn,
 ): void {
   registerMethod("projects.create", async (params) => {
@@ -112,11 +123,46 @@ export function registerProjectHandlers(
     const existing = appState.getProject(params.id);
     if (!existing) throw new Error(`Project not found: ${params.id}`);
 
-    const projectDir = appState.getProjectDir(existing.slug);
-    fs.rmSync(projectDir, { recursive: true, force: true });
+    // 1. Cancel in-flight discoveries
+    cancelDiscovery(existing.slug);
 
-    // Rescan (will remove from state since dir is gone)
+    // 2. Destroy terminals and stop scripts for all workspaces
+    for (const ws of existing.workspaces) {
+      terminalManager.destroyByWorkspaceId(ws.id);
+      await scriptSupervisor.stopAll(existing.slug, ws.slug);
+    }
+
+    // 3. Close git watchers for this project
+    gitWatcher.unwatchProject(existing.slug);
+
+    // 4. Stop file watchers that hold directory handles (prevents EPERM on Windows)
+    await watcher.stop();
+    await envWatcher.stop();
+
+    // Wait for processes to fully exit and OS to release file handles
+    await new Promise((resolve) => setTimeout(resolve, 500));
+
+    // 5. Delete project directory
+    const projectDir = appState.getProjectDir(existing.slug);
+    try {
+      rmSyncSafe(projectDir);
+    } catch (err) {
+      // Restart watchers even on failure
+      await watcher.start();
+      await envWatcher.start();
+      throw new Error(
+        `Failed to delete project directory: ${err instanceof Error ? err.message : String(err)}`,
+        { cause: err },
+      );
+    }
+
+    // 6. Restart file watchers
+    await watcher.start();
+    await envWatcher.start();
+
+    // 7. Rescan and notify
     appState.scan();
+    sessionWatcher.refresh();
     pushFn("state:resync", { state: appState.getState() });
   });
 
@@ -135,7 +181,9 @@ export function registerProjectHandlers(
     const { projectId, ...input } = params;
     const project = appState.getProject(projectId);
     if (!project) throw new Error(`Project not found: ${projectId}`);
-    await addRepo(appState, projectId, project.slug, input);
+    await addRepo(appState, projectId, project.slug, input, (progress) => {
+      pushFn("clone:progress", progress);
+    });
   });
 
   registerMethod("repos.fetch", async (params) => {

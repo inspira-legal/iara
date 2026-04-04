@@ -2,6 +2,7 @@ import * as path from "node:path";
 import * as os from "node:os";
 import { z } from "zod";
 import { createJsonFile } from "@iara/shared/json-file";
+import { getStateDir } from "@iara/shared/platform";
 
 const AppConfigSchema = z.object({
   projectsDir: z.string(),
@@ -15,11 +16,15 @@ export function getConfig(): AppConfig {
   if (cachedConfig) return cachedConfig;
 
   const configFile = createJsonFile(getConfigPath(), AppConfigSchema, () => ({
-    projectsDir: path.join(os.homedir(), "iara"),
+    projectsDir: defaultProjectsDir(),
   }));
 
   cachedConfig = configFile.read();
   return cachedConfig;
+}
+
+function defaultProjectsDir(): string {
+  return path.join(os.homedir(), "iara");
 }
 
 export function getProjectsDir(): string {
@@ -27,5 +32,5 @@ export function getProjectsDir(): string {
 }
 
 function getConfigPath(): string {
-  return path.join(os.homedir(), ".config", "iara", "config.json");
+  return path.join(getStateDir("iara"), "config.json");
 }

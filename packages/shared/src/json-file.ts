@@ -1,6 +1,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import type { z } from "zod";
+import { writeFileAtomicSync } from "./fs.js";
 
 export interface JsonFileHandle<T> {
   /** Read + validate. With regenerate: self-heals on missing/corrupt. Without: throws. */
@@ -54,9 +55,7 @@ export function createJsonFile<T>(
     schema.parse(data);
     const dir = path.dirname(filePath);
     fs.mkdirSync(dir, { recursive: true });
-    const tmpPath = `${filePath}.tmp`;
-    fs.writeFileSync(tmpPath, JSON.stringify(data, null, 2) + "\n");
-    fs.renameSync(tmpPath, filePath);
+    writeFileAtomicSync(filePath, JSON.stringify(data, null, 2) + "\n");
   }
 
   return {

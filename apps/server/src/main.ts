@@ -52,6 +52,7 @@ await envWatcher.start();
 registerAllHandlers({
   appState,
   watcher,
+  gitWatcher,
   scriptSupervisor,
   notificationService,
   terminalManager,

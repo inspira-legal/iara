@@ -1,5 +1,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
+import * as os from "node:os";
+import type { AsyncSubscription } from "@parcel/watcher";
 import type { PushFn } from "../types.js";
 import { computeProjectHash } from "./sessions.js";
 import type { AppState } from "./state.js";
@@ -9,9 +11,11 @@ const DEBOUNCE_MS = 500;
 /**
  * Watches Claude session JSONL directories for changes and pushes
  * `session:changed` events to connected clients.
+ *
+ * Uses @parcel/watcher for reliable cross-platform file watching.
  */
 export class SessionWatcher {
-  private watchers = new Map<string, fs.FSWatcher>();
+  private subscriptions = new Map<string, AsyncSubscription>();
   private hashToWorkspaceIds = new Map<string, Set<string>>();
   private debounceTimers = new Map<string, ReturnType<typeof setTimeout>>();
   private pushAll: PushFn;
@@ -26,61 +30,55 @@ export class SessionWatcher {
    * Rebuild watches for all workspaces across all projects.
    * Call on startup and when workspaces/projects change.
    */
-  refresh(): void {
+  async refresh(): Promise<void> {
     const { projects } = this.appState.getState();
     const newHashes = new Map<string, Set<string>>();
 
     for (const project of projects) {
       for (const workspace of project.workspaces) {
         const wsDir = this.appState.getWorkspaceDir(workspace.id);
-        const hash = computeProjectHash(wsDir);
 
-        if (!newHashes.has(hash)) {
-          newHashes.set(hash, new Set());
-        }
+        const hash = computeProjectHash(wsDir);
+        if (!newHashes.has(hash)) newHashes.set(hash, new Set());
         newHashes.get(hash)!.add(workspace.id);
       }
     }
 
-    // Remove watchers for hashes that no longer exist
-    for (const [hash, watcher] of this.watchers) {
+    // Remove subscriptions for hashes that no longer exist
+    for (const [hash, sub] of this.subscriptions) {
       if (!newHashes.has(hash)) {
-        watcher.close();
-        this.watchers.delete(hash);
+        await sub.unsubscribe();
+        this.subscriptions.delete(hash);
       }
     }
 
     this.hashToWorkspaceIds = newHashes;
 
-    // Add watchers for new hashes
+    // Add subscriptions for new hashes
     for (const hash of newHashes.keys()) {
-      if (!this.watchers.has(hash)) {
-        this.watchHash(hash);
+      if (!this.subscriptions.has(hash)) {
+        await this.watchHash(hash);
       }
     }
   }
 
-  private watchHash(hash: string): void {
-    const home = process.env.HOME ?? process.env.USERPROFILE ?? "";
-    const dir = path.join(home, ".claude", "projects", hash);
-
-    // Create dir if it doesn't exist so we can watch it
-    fs.mkdirSync(dir, { recursive: true });
-
+  private async watchHash(hash: string): Promise<void> {
+    const dir = path.join(os.homedir(), ".claude", "projects", hash);
     try {
-      const watcher = fs.watch(dir, (_event, filename) => {
-        if (!filename?.endsWith(".jsonl")) return;
-        this.debouncedNotify(hash);
-      });
+      if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true });
+      }
 
-      watcher.on("error", () => {
-        // Directory may have been removed
-        this.watchers.delete(hash);
+      const watcher = await import("@parcel/watcher");
+      const sub = await watcher.subscribe(dir, (_err, events) => {
+        const hasJsonl = events.some((e) => e.path.endsWith(".jsonl"));
+        if (hasJsonl) {
+          this.debouncedNotify(hash);
+        }
       });
-
-      this.watchers.set(hash, watcher);
+      this.subscriptions.set(hash, sub);
     } catch {
-      // Directory doesn't exist yet — will be created when Claude launches
+      // Directory not accessible
     }
   }
 
@@ -103,10 +101,10 @@ export class SessionWatcher {
   }
 
   stop(): void {
-    for (const watcher of this.watchers.values()) {
-      watcher.close();
+    for (const sub of this.subscriptions.values()) {
+      void sub.unsubscribe().catch(() => {});
     }
-    this.watchers.clear();
+    this.subscriptions.clear();
     for (const timer of this.debounceTimers.values()) {
       clearTimeout(timer);
     }

@@ -6,13 +6,16 @@ import type { ResolvedServiceDef } from "@iara/contracts";
 // Mocks — must be declared before importing the module under test
 // ---------------------------------------------------------------------------
 
-const { mockKillProcessGroup, mockCreateConnection } = vi.hoisted(() => ({
-  mockKillProcessGroup: vi.fn(() => vi.fn()),
+const { mockKillProcessTree, mockCreateConnection, mockSpawnShell } = vi.hoisted(() => ({
+  mockKillProcessTree: vi.fn(() => vi.fn()),
   mockCreateConnection: vi.fn(),
+  mockSpawnShell: vi.fn(),
 }));
 
-vi.mock("@iara/shared/process", () => ({
-  killProcessGroup: mockKillProcessGroup,
+vi.mock("@iara/shared/platform", () => ({
+  isWindows: false,
+  killProcessTree: mockKillProcessTree,
+  spawnShell: mockSpawnShell,
 }));
 
 vi.mock("@iara/shared/env", () => ({
@@ -62,7 +65,6 @@ vi.mock("node:child_process", async (importOriginal) => {
   const actual = await importOriginal<typeof import("node:child_process")>();
   return {
     ...actual,
-    spawn: vi.fn(() => mockChild),
     execSync: vi.fn(),
   };
 });
@@ -146,6 +148,7 @@ function mockPortFree() {
 beforeEach(() => {
   vi.clearAllMocks();
   mockChild = createMockChild();
+  mockSpawnShell.mockImplementation(() => mockChild);
   // Reset default implementation
   mockCreateConnection.mockImplementation(() => {
     const socket = createMockSocket();
@@ -319,7 +322,7 @@ describe("ScriptSupervisor", () => {
       mockChild = createMockChild(99999);
       supervisor.start(defaultStartOpts());
 
-      expect(mockKillProcessGroup).toHaveBeenCalled();
+      expect(mockKillProcessTree).toHaveBeenCalled();
     });
 
     it("reuses pinned-port service if already running", () => {
@@ -479,7 +482,7 @@ describe("ScriptSupervisor", () => {
 
       // stop should not call killProcessGroup since pid was undefined
       supervisor.stop("3000:api:dev");
-      expect(mockKillProcessGroup).not.toHaveBeenCalled();
+      expect(mockKillProcessTree).not.toHaveBeenCalled();
     });
   });
 
@@ -1146,8 +1149,7 @@ describe("ScriptSupervisor", () => {
       const child1 = createMockChild(1111);
       const child2 = createMockChild(2222);
       let childIdx = 0;
-      const { spawn } = await import("node:child_process");
-      (spawn as ReturnType<typeof vi.fn>).mockImplementation(() => {
+      mockSpawnShell.mockImplementation(() => {
         const c = [child1, child2][childIdx] ?? child2;
         childIdx++;
         return c;
@@ -1227,8 +1229,7 @@ describe("ScriptSupervisor", () => {
       const child1 = createMockChild(1111);
       const child2 = createMockChild(2222);
       let childIdx = 0;
-      const { spawn } = await import("node:child_process");
-      (spawn as ReturnType<typeof vi.fn>).mockImplementation(() => {
+      mockSpawnShell.mockImplementation(() => {
         const c = [child1, child2][childIdx] ?? child2;
         childIdx++;
         return c;

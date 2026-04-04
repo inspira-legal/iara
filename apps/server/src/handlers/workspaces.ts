@@ -1,14 +1,19 @@
 import * as crypto from "node:crypto";
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { execFileSync } from "node:child_process";
+import { execGitSync } from "@iara/shared/git";
 import type { CreateWorkspaceInput, CreationStage, Workspace } from "@iara/contracts";
+import type { ScriptSupervisor } from "@iara/orchestrator/supervisor";
 import { gitWorktreeAdd, gitWorktreeRemove } from "@iara/shared/git";
 import { projectPaths, workspacePaths } from "@iara/shared/paths";
+import { rmSyncSafe } from "@iara/shared/fs";
+import type { TerminalManager } from "../services/terminal.js";
+import type { GitWatcher } from "../services/git-watcher.js";
 import { z } from "zod";
 import { registerMethod } from "../router.js";
 import type { SessionWatcher } from "../services/session-watcher.js";
 import { AppState } from "../services/state.js";
+import type { EnvWatcher } from "../services/env-watcher.js";
 import type { ProjectsWatcher } from "../services/watcher.js";
 import { copyEnvTomlWithPortOffset } from "../services/env.js";
 import { runClaude, activeRuns, streamClaudeRun } from "../services/claude-runner.js";
@@ -35,11 +40,7 @@ const WorkspaceMetadataSchema = z.object({
 
 function listRepoBranches(repoDir: string): string[] {
   try {
-    const output = execFileSync("git", ["branch", "-r", "--list"], {
-      cwd: repoDir,
-      encoding: "utf-8",
-      timeout: 10000,
-    });
+    const output = execGitSync(["branch", "-r", "--list"], { cwd: repoDir, timeout: 10_000 });
     return output
       .split("\n")
       .map((b) => b.trim().replace(/^origin\//, ""))
@@ -52,6 +53,10 @@ function listRepoBranches(repoDir: string): string[] {
 export function registerWorkspaceHandlers(
   appState: AppState,
   watcher: ProjectsWatcher,
+  envWatcher: EnvWatcher,
+  terminalManager: TerminalManager,
+  scriptSupervisor: ScriptSupervisor,
+  gitWatcher: GitWatcher,
   sessionWatcher: SessionWatcher,
   pushFn: PushFn,
 ): void {
@@ -87,13 +92,33 @@ export function registerWorkspaceHandlers(
     const project = appState.getProject(workspace.projectId);
     if (!project) throw new Error(`Project not found: ${workspace.projectId}`);
 
+    // 1. Destroy terminals and stop scripts for this workspace
+    terminalManager.destroyByWorkspaceId(workspaceId);
+    await scriptSupervisor.stopAll(project.slug, workspace.slug);
+
+    // 2. Close git watchers (will re-watch after deletion)
+    gitWatcher.unwatchProject(project.slug);
+
+    // 3. Stop file watchers that hold directory handles (prevents EPERM on Windows)
+    await watcher.stop();
+    await envWatcher.stop();
+
+    // Wait for processes to fully exit and OS to release file handles
+    await new Promise((resolve) => setTimeout(resolve, 500));
+
+    // 4. Remove git worktrees and workspace directory
     const projectDir = appState.getProjectDir(project.slug);
     const wsDir = appState.getWorkspaceDir(workspaceId);
+    try {
+      await cleanupWorktrees(projectDir, wsDir);
+    } finally {
+      // 5. Restart file watchers even on failure
+      await watcher.start();
+      await envWatcher.start();
+    }
 
-    // Remove git worktrees first (from source repos at project root)
-    await cleanupWorktrees(projectDir, wsDir);
-
-    // Rescan project state and push update
+    // 6. Re-watch remaining repos and rescan
+    gitWatcher.watchProject(project.slug);
     appState.rescanProject(project.slug);
     pushFn("state:resync", { state: appState.getState() });
 
@@ -147,11 +172,7 @@ NÃO explore arquivos. Responda apenas com base nas informações acima.`;
     const wsDir = appState.getWorkspaceDir(workspaceId);
     const repoDir = path.join(wsDir, repoName);
 
-    execFileSync("git", ["checkout", branch], {
-      cwd: repoDir,
-      encoding: "utf-8",
-      timeout: 10000,
-    });
+    execGitSync(["checkout", branch], { cwd: repoDir, timeout: 10_000 });
 
     return getRepoInfo(appState, workspace.projectId, workspace.slug);
   });
@@ -167,11 +188,7 @@ NÃO explore arquivos. Responda apenas com base nas informações acima.`;
     const wsDir = appState.getWorkspaceDir(workspaceId);
     const repoDir = path.join(wsDir, repoName);
 
-    execFileSync("git", ["branch", "-m", newBranch], {
-      cwd: repoDir,
-      encoding: "utf-8",
-      timeout: 10000,
-    });
+    execGitSync(["branch", "-m", newBranch], { cwd: repoDir, timeout: 10_000 });
 
     // Return fresh repo info after rename
     return getRepoInfo(appState, workspace.projectId, workspace.slug);
@@ -297,14 +314,16 @@ async function createWorkspace(
   try {
     fs.mkdirSync(wp.root, { recursive: true });
 
-    // Symlink CLAUDE.md → ../../CLAUDE.md
-    if (fs.existsSync(pp.claudeMd) && !fs.existsSync(wp.claudeMdSymlink)) {
-      fs.symlinkSync(path.relative(wp.root, pp.claudeMd), wp.claudeMdSymlink);
-    }
-
-    // Symlink iara-scripts.yaml → ../../iara-scripts.yaml
-    if (fs.existsSync(pp.scriptsYaml) && !fs.existsSync(wp.scriptsYamlSymlink)) {
-      fs.symlinkSync(path.relative(wp.root, pp.scriptsYaml), wp.scriptsYamlSymlink);
+    // Symlink CLAUDE.md and iara-scripts.yaml to project root.
+    for (const [source, link] of [
+      [pp.claudeMd, wp.claudeMdSymlink],
+      [pp.scriptsYaml, wp.scriptsYamlSymlink],
+    ] as const) {
+      try {
+        fs.symlinkSync(path.relative(path.dirname(link), source), link);
+      } catch {
+        // Source missing or link already exists — skip
+      }
     }
 
     // Create worktrees from project root repos
@@ -329,7 +348,7 @@ async function createWorkspace(
   } catch (err) {
     // Rollback: clean up partial filesystem state
     try {
-      fs.rmSync(wp.root, { recursive: true, force: true });
+      rmSyncSafe(wp.root);
     } catch {
       // Best effort
     }
@@ -351,14 +370,14 @@ async function createWorkspace(
 
 async function cleanupWorktrees(projectDir: string, wsDir: string): Promise<void> {
   // Remove git worktrees from source repos at project root
-  if (fs.existsSync(wsDir)) {
-    let entries: string[];
-    try {
-      entries = fs.readdirSync(wsDir);
-    } catch {
-      entries = [];
-    }
+  let entries: string[];
+  try {
+    entries = fs.readdirSync(wsDir);
+  } catch {
+    entries = [];
+  }
 
+  if (entries.length > 0) {
     await Promise.all(
       entries.map(async (name) => {
         const wtDir = path.join(wsDir, name);
@@ -382,11 +401,13 @@ async function cleanupWorktrees(projectDir: string, wsDir: string): Promise<void
   }
 
   // Remove the workspace directory
-  if (fs.existsSync(wsDir)) {
-    try {
-      fs.rmSync(wsDir, { recursive: true, force: true });
-    } catch {
-      // Best effort
-    }
+  try {
+    rmSyncSafe(wsDir);
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === "ENOENT") return;
+    throw new Error(
+      `Failed to delete workspace directory: ${err instanceof Error ? err.message : String(err)}`,
+      { cause: err },
+    );
   }
 }

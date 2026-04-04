@@ -22,6 +22,25 @@ import type { PushFn } from "./index.js";
 
 /** Track projects with in-flight discovery to avoid duplicates */
 const pendingDiscovery = new Set<string>();
+/** Maps requestId → projectSlug for in-flight discoveries */
+const discoveryRequestMap = new Map<string, string>();
+
+/** Cancel any in-flight discovery for a project. */
+export function cancelDiscovery(projectSlug: string): void {
+  if (!pendingDiscovery.has(projectSlug)) return;
+  pendingDiscovery.delete(projectSlug);
+
+  for (const [requestId, slug] of discoveryRequestMap) {
+    if (slug === projectSlug) {
+      const run = activeRuns.get(requestId);
+      if (run) {
+        run.abort();
+        activeRuns.delete(requestId);
+      }
+      discoveryRequestMap.delete(requestId);
+    }
+  }
+}
 
 function getScriptsYamlPath(appState: AppState, projectSlug: string): string {
   const pp = projectPaths(appState.getProjectsDir(), projectSlug);
@@ -173,6 +192,7 @@ export function triggerDiscovery(
   if (repos.every((r) => r.files.length === 0)) return null;
 
   pendingDiscovery.add(projectSlug);
+  pushFn("scripts:discovering", { projectId: projectSlug });
 
   const basePort = computeBasePort(appState, projectSlug);
   const pp = projectPaths(appState.getProjectsDir(), projectSlug);
@@ -181,6 +201,7 @@ export function triggerDiscovery(
 
   const run = runClaude({ prompt, cwd: projectDir }, DiscoveryResultSchema);
   activeRuns.set(requestId, run);
+  discoveryRequestMap.set(requestId, projectSlug);
   streamClaudeRun(
     run,
     requestId,
@@ -195,6 +216,7 @@ export function triggerDiscovery(
     },
     () => {
       pendingDiscovery.delete(projectSlug);
+      discoveryRequestMap.delete(requestId);
       pushFn("scripts:reload", { projectId: projectSlug });
     },
   );

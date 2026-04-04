@@ -3,15 +3,9 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import * as os from "node:os";
 
-// Mock child_process and git helpers before importing repos
+// Mock child_process (still used indirectly) and git helpers before importing repos
 vi.mock("node:child_process", () => ({
-  exec: vi.fn((_cmd: string, _opts: unknown, cb?: Function) => {
-    if (typeof _opts === "function") {
-      _opts(null, { stdout: "", stderr: "" });
-    } else if (cb) {
-      cb(null, { stdout: "", stderr: "" });
-    }
-  }),
+  exec: vi.fn(),
   execSync: vi.fn().mockReturnValue(Buffer.from("")),
 }));
 
@@ -29,6 +23,7 @@ vi.mock("@iara/shared/git", () => ({
   GitNotInstalledError: class GitNotInstalledError extends Error {
     override readonly name = "GitNotInstalledError";
   },
+  execGitAsync: vi.fn().mockResolvedValue({ stdout: "", stderr: "" }),
   gitCloneWithProgress: vi.fn().mockResolvedValue(undefined),
   gitLsRemote: vi.fn().mockResolvedValue(undefined),
   gitFetch: vi.fn().mockResolvedValue(undefined),
@@ -37,8 +32,9 @@ vi.mock("@iara/shared/git", () => ({
   gitWorktreeAdd: vi.fn().mockResolvedValue(undefined),
 }));
 
-import { exec, execSync } from "node:child_process";
+import { execSync } from "node:child_process";
 import {
+  execGitAsync,
   gitCloneWithProgress,
   gitFetch,
   gitLsRemote,
@@ -48,13 +44,10 @@ import {
 } from "@iara/shared/git";
 import { validateGitUrl, getRepoInfo, addRepo, syncRepos, fetchRepos } from "./repos.js";
 
-/** Helper to set up the exec mock (used by promisify → execAsync). */
-function mockExec(handler: (cmd: string) => { stdout: string; stderr: string }) {
-  vi.mocked(exec).mockImplementation((_cmd: unknown, _opts: unknown, cb?: unknown) => {
-    const result = handler(String(_cmd));
-    if (typeof _opts === "function") (_opts as Function)(null, result);
-    else if (typeof cb === "function") (cb as Function)(null, result);
-    return undefined as any;
+/** Helper to set up the execGitAsync mock. */
+function mockExecGit(handler: (args: string[]) => { stdout: string; stderr: string }) {
+  vi.mocked(execGitAsync).mockImplementation(async (args: string[]) => {
+    return handler(args);
   });
 }
 
@@ -80,7 +73,7 @@ beforeEach(() => {
   tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "repos-test-"));
   vi.restoreAllMocks();
   // Restore default mock implementations after restoreAllMocks clears them
-  mockExec(() => ({ stdout: "", stderr: "" }));
+  vi.mocked(execGitAsync).mockResolvedValue({ stdout: "", stderr: "" });
   vi.mocked(execSync).mockReturnValue(Buffer.from(""));
   vi.mocked(gitCloneWithProgress).mockResolvedValue(undefined);
   vi.mocked(gitLsRemote).mockResolvedValue(undefined);
@@ -100,10 +93,10 @@ describe("getRepoInfo()", () => {
     const reposDir = path.join(tmpDir, projectSlug, "default");
     fs.mkdirSync(path.join(reposDir, "my-repo"), { recursive: true });
 
-    mockExec((cmd) => {
-      if (cmd.includes("branch --show-current")) return { stdout: "main\n", stderr: "" };
-      if (cmd.includes("status --porcelain")) return { stdout: "", stderr: "" };
-      if (cmd.includes("rev-list")) return { stdout: "2\t1", stderr: "" };
+    mockExecGit((args) => {
+      if (args.includes("--show-current")) return { stdout: "main\n", stderr: "" };
+      if (args.includes("--porcelain")) return { stdout: "", stderr: "" };
+      if (args.includes("rev-list")) return { stdout: "2\t1", stderr: "" };
       return { stdout: "", stderr: "" };
     });
 
@@ -132,12 +125,7 @@ describe("getRepoInfo()", () => {
     const reposDir = path.join(tmpDir, projectSlug, "default");
     fs.mkdirSync(path.join(reposDir, "repo1"), { recursive: true });
 
-    vi.mocked(exec).mockImplementation((_cmd: unknown, _opts: unknown, cb?: unknown) => {
-      const err = new Error("git error");
-      if (typeof _opts === "function") (_opts as Function)(err, { stdout: "", stderr: "" });
-      else if (typeof cb === "function") (cb as Function)(err, { stdout: "", stderr: "" });
-      return undefined as any;
-    });
+    vi.mocked(execGitAsync).mockRejectedValue(new Error("git error"));
 
     const appState = createMockAppState(projectSlug, ["repo1"]);
     const result = await getRepoInfo(appState, projectSlug);
@@ -181,11 +169,7 @@ describe("addRepo()", () => {
 
       const dest = path.join(projectDir, "new-repo");
       expect(fs.existsSync(dest)).toBe(true);
-      expect(vi.mocked(exec)).toHaveBeenCalledWith(
-        "git init",
-        expect.objectContaining({ cwd: dest }),
-        expect.any(Function),
-      );
+      expect(vi.mocked(execGitAsync)).toHaveBeenCalledWith(["init"], { cwd: dest });
     });
   });
 
@@ -420,13 +404,9 @@ describe("addRepo()", () => {
     expect(onProgress).toHaveBeenCalledWith(
       expect.objectContaining({ message: "Initializing git..." }),
     );
-    expect(vi.mocked(exec)).toHaveBeenCalledWith(
-      "git init",
-      expect.objectContaining({
-        cwd: path.join(projectDir, "local-no-git"),
-      }),
-      expect.any(Function),
-    );
+    expect(vi.mocked(execGitAsync)).toHaveBeenCalledWith(["init"], {
+      cwd: path.join(projectDir, "local-no-git"),
+    });
   });
 
   it("skips worktree creation when workspace dir does not exist", async () => {
@@ -704,10 +684,9 @@ describe("getRepoInfo() with workspaceSlug", () => {
     const projectSlug = "proj";
     const appState = createMockAppState(projectSlug, ["repo1"]);
 
-    mockExec((cmd) => {
-      if (cmd.includes("branch --show-current")) return { stdout: "", stderr: "" };
-      if (cmd.includes("status --porcelain"))
-        return { stdout: "M file.txt\nA new.txt", stderr: "" };
+    mockExecGit((args) => {
+      if (args.includes("--show-current")) return { stdout: "", stderr: "" };
+      if (args.includes("--porcelain")) return { stdout: "M file.txt\nA new.txt", stderr: "" };
       return { stdout: "", stderr: "" };
     });
 

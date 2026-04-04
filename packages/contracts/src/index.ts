@@ -1,5 +1,6 @@
 export type {
   AddRepoInput,
+  AppCapabilities,
   AppInfo,
   AppNotification,
   CreationProgress,

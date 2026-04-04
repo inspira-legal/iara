@@ -30,6 +30,13 @@ extraResources:
     to: apps/server/node_modules/@anthropic-ai/claude-agent-sdk
   - from: ../web/dist
     to: web
+  # WSL runtime: Linux Node.js binary + native modules for running server inside WSL
+  - from: resources/wsl-runtime/node/bin/node
+    to: wsl-runtime/node
+  - from: resources/wsl-runtime/native_modules/node-pty/build/Release/pty.node
+    to: wsl-runtime/native_modules/node-pty/build/Release/pty.node
+  - from: resources/wsl-runtime/native_modules/@parcel/watcher-linux-x64-glibc
+    to: wsl-runtime/native_modules/@parcel/watcher-linux-x64-glibc
 
 mac:
   target:
@@ -63,8 +70,8 @@ win:
     - target: nsis
       arch:
         - x64
-        - arm64
   icon: resources/icon.ico
+  forceCodeSigning: false
 
 nsis:
   oneClick: false

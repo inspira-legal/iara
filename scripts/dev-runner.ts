@@ -1,8 +1,9 @@
-import { execSync, spawn, type ChildProcess } from "node:child_process";
+import { execSync, spawn, spawnSync, type ChildProcess } from "node:child_process";
 import { resolve } from "node:path";
 
 const root = resolve(import.meta.dirname, "..");
 const port = Number(process.env.PORT ?? 5173);
+const isWindows = process.platform === "win32";
 
 // Build packages first (sync — fast, cached)
 execSync("turbo run build --filter='./packages/*'", {
@@ -22,7 +23,13 @@ function prefix(name: string, data: Buffer) {
 }
 
 function spawnDev(name: string, cmd: string, args: string[], cwd: string): ChildProcess {
-  const child = spawn(cmd, args, { cwd, stdio: ["ignore", "pipe", "pipe"], env });
+  const child = spawn(cmd, args, {
+    cwd,
+    stdio: ["ignore", "pipe", "pipe"],
+    env,
+    shell: isWindows,
+    windowsHide: true,
+  });
   child.stdout?.on("data", (data: Buffer) => prefix(name, data));
   child.stderr?.on("data", (data: Buffer) => prefix(name, data));
   child.on("exit", (code) => {
@@ -33,26 +40,44 @@ function spawnDev(name: string, cmd: string, args: string[], cwd: string): Child
   return child;
 }
 
+function killChild(child: ChildProcess): void {
+  if (isWindows && child.pid !== undefined) {
+    try {
+      spawnSync("taskkill", ["/pid", String(child.pid), "/T", "/F"], { stdio: "ignore" });
+      return;
+    } catch {
+      // fallback
+    }
+  }
+  try {
+    child.kill("SIGTERM");
+  } catch {}
+}
+
 function shutdown() {
   if (shuttingDown) return;
   shuttingDown = true;
   for (const child of children) {
-    try {
-      child.kill("SIGTERM");
-    } catch {}
+    killChild(child);
   }
-  // Force kill after 2s
-  setTimeout(() => {
-    for (const child of children) {
-      try {
-        child.kill("SIGKILL");
-      } catch {}
-    }
+  if (!isWindows) {
+    // Force kill after 2s (Unix only — taskkill already force-killed on Windows)
+    setTimeout(() => {
+      for (const child of children) {
+        try {
+          child.kill("SIGKILL");
+        } catch {}
+      }
+      process.exit(0);
+    }, 2000);
+  } else {
     process.exit(0);
-  }, 2000);
+  }
 }
 
-process.on("SIGTERM", shutdown);
+if (!isWindows) {
+  process.on("SIGTERM", shutdown);
+}
 process.on("SIGINT", shutdown);
 
 // Start watchers

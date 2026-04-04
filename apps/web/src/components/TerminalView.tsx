@@ -2,7 +2,8 @@ import { useState, useEffect, useCallback, type RefCallback } from "react";
 import "@xterm/xterm/css/xterm.css";
 import { ConnectedTerminal, destroyXTermInstance } from "~/components/ConnectedTerminal";
 import { useTerminalStore } from "~/stores/terminal";
-import { RotateCw } from "lucide-react";
+import { useAppStore } from "~/stores/app";
+import { AlertTriangle, RotateCw } from "lucide-react";
 
 interface TerminalViewProps {
   workspaceId: string;
@@ -13,7 +14,7 @@ export function TerminalView({ workspaceId, resumeSessionId }: TerminalViewProps
   const entry = useTerminalStore((s) => s.getEntry(workspaceId));
   const createTerminal = useTerminalStore((s) => s.create);
   const restartTerminal = useTerminalStore((s) => s.restart);
-  const { terminalId, status, exitCode, hasData } = entry;
+  const { terminalId, status, exitCode, errorCode, hasData } = entry;
   const [timedOut, setTimedOut] = useState(false);
 
   useEffect(() => {
@@ -46,11 +47,13 @@ export function TerminalView({ workspaceId, resumeSessionId }: TerminalViewProps
 
   const showLoading = !timedOut && (status === "connecting" || (status === "active" && !hasData));
   const showStartupError = timedOut && !hasData && status !== "exited";
+  const isClaudeUnavailable = errorCode === "CLAUDE_NOT_AVAILABLE";
 
   return (
     <div className="relative flex flex-1 flex-col overflow-hidden">
       <ConnectedTerminal terminalId={terminalId} instancePrefix="claude" className="p-3" />
-      {status === "exited" && (
+      {status === "exited" && isClaudeUnavailable && <ClaudeUnavailableOverlay />}
+      {status === "exited" && !isClaudeUnavailable && (
         <div className="absolute inset-0 flex items-center justify-center bg-zinc-950/80">
           <div className="flex flex-col items-center gap-3 text-zinc-400" role="alert">
             <p className="text-sm">Claude exited{exitCode != null ? ` (code ${exitCode})` : ""}</p>
@@ -89,6 +92,36 @@ export function TerminalView({ workspaceId, resumeSessionId }: TerminalViewProps
           <p className="text-sm text-zinc-500">Starting Claude...</p>
         </div>
       )}
+    </div>
+  );
+}
+
+function ClaudeUnavailableOverlay() {
+  const isWindowsServer = useAppStore((s) => s.capabilities.platform === "win32");
+
+  return (
+    <div className="absolute inset-0 flex items-center justify-center bg-zinc-950/90">
+      <div className="flex max-w-md flex-col items-center gap-4 px-6 text-center" role="alert">
+        <div className="flex h-12 w-12 items-center justify-center rounded-full bg-amber-500/10">
+          <AlertTriangle size={24} className="text-amber-400" />
+        </div>
+        <div className="space-y-2">
+          <p className="text-base font-medium text-zinc-200">Claude CLI is not available</p>
+          <p className="text-sm text-zinc-400">
+            {isWindowsServer
+              ? "Install WSL and Claude CLI inside it to use Claude terminals on Windows."
+              : "Install the Claude CLI to use Claude terminals."}
+          </p>
+        </div>
+        <a
+          href="https://docs.anthropic.com/en/docs/claude-code/overview"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-sm text-blue-400 underline hover:text-blue-300"
+        >
+          Installation guide
+        </a>
+      </div>
     </div>
   );
 }

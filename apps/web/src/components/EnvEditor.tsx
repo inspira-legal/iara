@@ -21,13 +21,17 @@ export function EnvEditor({
   const [envDirty, setEnvDirty] = useState(false);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Listen for env:changed push events
+  // Listen for env:changed push events scoped to this workspace
   useEffect(() => {
-    const unsub = transport.subscribe("env:changed", () => {
-      if (hasActiveTerminal) setEnvDirty(true);
-    });
+    const unsub = transport.subscribe(
+      "env:changed",
+      ({ workspaceId: changedWsId }: { workspaceId: string }) => {
+        if (changedWsId !== workspaceId) return;
+        if (hasActiveTerminal) setEnvDirty(true);
+      },
+    );
     return unsub;
-  }, [hasActiveTerminal]);
+  }, [hasActiveTerminal, workspaceId]);
 
   const load = useCallback(() => {
     transport

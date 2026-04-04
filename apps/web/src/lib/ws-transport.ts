@@ -172,7 +172,9 @@ class WsTransport {
 
       const asError = msg as unknown as { error?: { code: string; message: string } };
       if (asError.error) {
-        pending.reject(new Error(asError.error.message));
+        const err = new Error(asError.error.message);
+        (err as any).code = asError.error.code;
+        pending.reject(err);
       } else {
         pending.resolve((msg as { result: unknown }).result);
       }

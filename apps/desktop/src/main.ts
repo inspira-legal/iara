@@ -1,5 +1,5 @@
 import * as crypto from "node:crypto";
-import * as net from "node:net";
+import { execFileSync } from "node:child_process";
 import * as os from "node:os";
 import * as path from "node:path";
 import { spawn, type ChildProcess } from "node:child_process";
@@ -21,7 +21,44 @@ syncShellEnvironment();
 
 const isDevelopment = Boolean(process.env.VITE_DEV_SERVER_URL);
 const APP_SCHEME = "iara";
-const stateDir = path.join(os.homedir(), ".config", "iara");
+const isWindows = process.platform === "win32";
+
+if (isWindows) {
+  app.setAppUserModelId("com.iara.desktop");
+}
+
+// ---------------------------------------------------------------------------
+// WSL helpers (desktop-only, used to spawn server inside WSL on Windows)
+// ---------------------------------------------------------------------------
+
+let _wslAvailable: boolean | undefined;
+
+function isWslAvailable(): boolean {
+  if (!isWindows) return false;
+  if (_wslAvailable !== undefined) return _wslAvailable;
+  try {
+    execFileSync("wsl.exe", ["--status"], { timeout: 5000, stdio: "ignore" });
+    _wslAvailable = true;
+  } catch {
+    _wslAvailable = false;
+  }
+  return _wslAvailable;
+}
+
+/** Convert a Windows path to WSL path (C:\foo → /mnt/c/foo). */
+function toWslPath(winPath: string): string {
+  const normalized = winPath.replace(/\\/g, "/");
+  const match = normalized.match(/^([A-Za-z]):(\/.*)/);
+  if (match) return `/mnt/${match[1]!.toLowerCase()}${match[2]}`;
+  return normalized;
+}
+
+/** Whether the server should run inside WSL. */
+const useWsl = isWindows && isWslAvailable();
+
+const stateDir = isWindows
+  ? path.join(process.env.LOCALAPPDATA ?? path.join(os.homedir(), "AppData", "Local"), "iara")
+  : path.join(os.homedir(), ".config", "iara");
 
 let serverChild: ChildProcess | null = null;
 let serverPort = 0;
@@ -34,6 +71,15 @@ let osNotificationsEnabled = true;
 
 // Dev: listen for "restart-server" on stdin from dev-electron.mjs.
 // Kills only the server child — Electron window stays open.
+/** Kill a child process. When running via wsl.exe, killing the wsl.exe process also kills the child inside WSL. */
+function killChild(child: ChildProcess, signal: "SIGTERM" | "SIGKILL" = "SIGTERM"): void {
+  try {
+    child.kill(signal);
+  } catch {
+    // already dead
+  }
+}
+
 if (isDevelopment && process.stdin.readable) {
   process.stdin.setEncoding("utf-8");
   process.stdin.on("data", (data: string) => {
@@ -42,16 +88,12 @@ if (isDevelopment && process.stdin.readable) {
       const child = serverChild;
       serverChild = null;
       child.removeAllListeners("exit");
-      child.kill("SIGTERM");
+      killChild(child, "SIGTERM");
       child.once("exit", () => {
         restartAttempt = 0;
         spawnServer();
       });
-      setTimeout(() => {
-        try {
-          child.kill("SIGKILL");
-        } catch {}
-      }, 2000);
+      setTimeout(() => killChild(child, "SIGKILL"), 2000);
     }
   });
 }
@@ -127,16 +169,9 @@ function saveWindowState(win: BrowserWindow): void {
 // Port & Token
 // ---------------------------------------------------------------------------
 
-function reservePort(): Promise<number> {
-  return new Promise((resolve, reject) => {
-    const srv = net.createServer();
-    srv.listen(0, "127.0.0.1", () => {
-      const addr = srv.address();
-      const port = typeof addr === "object" && addr ? addr.port : 0;
-      srv.close(() => resolve(port));
-    });
-    srv.on("error", reject);
-  });
+async function reservePort(): Promise<number> {
+  const { default: getPort } = await import("get-port");
+  return getPort();
 }
 
 function generateToken(): string {
@@ -157,19 +192,51 @@ function spawnServer(): void {
     ELECTRON_RUN_AS_NODE: "1",
     IARA_PORT: String(serverPort),
     IARA_AUTH_TOKEN: authToken,
-    IARA_STATE_DIR: stateDir,
+    IARA_STATE_DIR: useWsl ? "~/.config/iara" : stateDir,
   };
 
   if (!isDevelopment) {
-    env.IARA_WEB_DIR = path.join(process.resourcesPath, "web");
+    env.IARA_WEB_DIR = useWsl
+      ? toWslPath(path.join(process.resourcesPath, "web"))
+      : path.join(process.resourcesPath, "web");
     const serverModules = path.join(process.resourcesPath, "apps", "server", "node_modules");
-    env.NODE_PATH = serverModules;
+    env.NODE_PATH = useWsl ? toWslPath(serverModules) : serverModules;
   }
 
-  const child = spawn(process.execPath, [serverEntry], {
-    env,
-    stdio: isDevelopment ? "inherit" : ["ignore", "pipe", "pipe"],
-  });
+  let child: ChildProcess;
+
+  if (useWsl) {
+    // Spawn server inside WSL using the bundled Linux Node.js binary.
+    // wsl.exe doesn't inherit Windows env vars — pass them via `env KEY=VAL` prefix.
+    const wslNode = isDevelopment
+      ? toWslPath(path.resolve(__dirname, "../../desktop/resources/wsl-runtime/node/bin/node"))
+      : toWslPath(path.join(process.resourcesPath, "wsl-runtime", "node"));
+    const wslServerEntry = toWslPath(serverEntry);
+
+    // Prepend native module paths so the Linux prebuilds are found
+    const nativeModulesDir = isDevelopment
+      ? toWslPath(path.resolve(__dirname, "../../desktop/resources/wsl-runtime/native_modules"))
+      : toWslPath(path.join(process.resourcesPath, "wsl-runtime", "native_modules"));
+
+    const wslEnv: Record<string, string> = {
+      IARA_PORT: String(serverPort),
+      IARA_AUTH_TOKEN: authToken,
+      IARA_STATE_DIR: "~/.config/iara",
+      NODE_PATH: [nativeModulesDir, env.NODE_PATH].filter(Boolean).join(":"),
+    };
+    if (env.IARA_WEB_DIR) wslEnv.IARA_WEB_DIR = env.IARA_WEB_DIR;
+
+    // Build: wsl.exe -e env KEY1=VAL1 KEY2=VAL2 /path/to/node /path/to/server.mjs
+    const envArgs = Object.entries(wslEnv).map(([k, v]) => `${k}=${v}`);
+    child = spawn("wsl.exe", ["-e", "env", ...envArgs, wslNode, wslServerEntry], {
+      stdio: isDevelopment ? "inherit" : ["ignore", "pipe", "pipe"],
+    });
+  } else {
+    child = spawn(process.execPath, [serverEntry], {
+      env,
+      stdio: isDevelopment ? "inherit" : ["ignore", "pipe", "pipe"],
+    });
+  }
 
   serverChild = child;
 
@@ -529,6 +596,16 @@ function registerLocalIpcHandlers(): void {
 // ---------------------------------------------------------------------------
 
 app.whenReady().then(async () => {
+  // On Windows, WSL is required for the server
+  if (isWindows && !useWsl) {
+    dialog.showErrorBox(
+      "WSL Required",
+      "iara requires Windows Subsystem for Linux (WSL).\n\nInstall it by running:\n  wsl --install\n\nThen restart iara.",
+    );
+    app.quit();
+    return;
+  }
+
   if (!isDevelopment) {
     registerCustomProtocol();
   }
@@ -591,20 +668,16 @@ app.on("before-quit", (e) => {
   const child = serverChild;
   serverChild = null;
   child.removeAllListeners();
-  child.kill("SIGTERM");
+  killChild(child, "SIGTERM");
 
-  // Force kill the entire process tree if still alive after 2s
+  // Force kill if still alive after 2s
   setTimeout(() => {
     try {
       if (child.pid) process.kill(-child.pid, "SIGKILL");
     } catch {
       /* already dead */
     }
-    try {
-      child.kill("SIGKILL");
-    } catch {
-      /* already dead */
-    }
+    killChild(child, "SIGKILL");
     app.quit();
   }, 2000);
 });
