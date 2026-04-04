@@ -5,5 +5,5 @@ export default defineConfig({
   format: ["esm", "cjs"],
   dts: { eager: true },
   clean: true,
-  noExternal: (id: string) => id.startsWith("@iara/"),
+  inlineOnly: false,
 });

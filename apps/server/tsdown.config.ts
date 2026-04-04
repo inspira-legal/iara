@@ -9,6 +9,7 @@ export default defineConfig({
   clean: true,
   external: ["node-pty", "@anthropic-ai/claude-agent-sdk"],
   noExternal: (id) => !id.startsWith("node:"),
+  inlineOnly: false,
   onSuccess: async () => {
     // Copy static assets to dist (prompts, hooks)
     for (const dir of ["prompts", "hooks"]) {
