@@ -8,7 +8,7 @@
  *   - node_modules/     — production deps with Linux native modules
  *
  * Usage:
- *   bun scripts/release/prepare-wsl-server.ts
+ *   bun scripts/release/build-wsl-server.ts
  */
 
 import { $ } from "zx";

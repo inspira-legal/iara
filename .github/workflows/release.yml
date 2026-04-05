@@ -39,8 +39,8 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-  prepare-wsl-server:
-    name: Prepare WSL Server
+  build-wsl-server:
+    name: Build WSL Server
     needs: preflight
     if: needs.preflight.outputs.should_release == 'true'
     runs-on: ubuntu-24.04
@@ -50,7 +50,7 @@ jobs:
         with:
           build: "true"
 
-      - name: Build WSL server bundle
+      - name: Build WSL server
         run: bun run release:wsl-server
 
       - name: Upload WSL server artifact
@@ -62,7 +62,7 @@ jobs:
 
   build:
     name: Build ${{ matrix.label }}
-    needs: [preflight, prepare-wsl-server]
+    needs: [preflight, build-wsl-server]
     if: needs.preflight.outputs.should_release == 'true'
     runs-on: ${{ matrix.runner }}
     strategy:
@@ -100,10 +100,7 @@ jobs:
 
       - name: Build and package
         shell: bash
-        run: |
-          FLAGS="--platform ${{ matrix.platform }} --arch ${{ matrix.arch }}"
-          if [ "${{ matrix.platform }}" = "win" ]; then FLAGS="$FLAGS --wsl-server"; fi
-          bun scripts/release/index.ts $FLAGS
+        run: bun scripts/release/index.ts --platform ${{ matrix.platform }} --arch ${{ matrix.arch }}
 
       - name: Collect release assets
         shell: bash

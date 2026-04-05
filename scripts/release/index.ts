@@ -9,13 +9,13 @@
  * Usage:
  *   bun scripts/release/index.ts --platform linux [--arch x64]
  *   bun scripts/release/index.ts --platform mac [--arch arm64]
- *   bun scripts/release/index.ts --platform win --wsl-server
+ *   bun scripts/release/index.ts --platform win
  *   bun scripts/release/index.ts --platform linux --skip-build
  *   bun scripts/release/index.ts --platform linux --keep-stage
  */
 
 import { $ } from "zx";
-import { cpSync, existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 import { ROOT, STAGING, RELEASE, parseArgs } from "./config.js";
@@ -30,9 +30,10 @@ const posix = (p: string) => p.replaceAll("\\", "/");
 // ---------------------------------------------------------------------------
 
 const opts = parseArgs(process.argv);
+const isWin = opts.platform === "win";
 
 // Step 1: Build
-if (opts.wslServer) {
+if (isWin) {
   // Windows with pre-built WSL server: only build desktop + web
   if (opts.skipBuild) {
     console.log("\n==> Skipping build (--skip-build)");
@@ -43,7 +44,7 @@ if (opts.wslServer) {
       }
     }
   } else {
-    console.log("\n==> Building desktop + web (server provided via --wsl-server)...");
+    console.log("\n==> Building desktop + web (server provided by wsl-server artifact)...");
     await $({ cwd: posix(ROOT) })`bun build:desktop`;
   }
 } else if (opts.skipBuild) {
@@ -61,7 +62,23 @@ if (opts.wslServer) {
 
 // Step 2: Stage
 console.log("\n==> Preparing staging directory...");
-if (existsSync(STAGING)) rmSync(STAGING, { recursive: true });
+const wslServerDir = resolve(STAGING, "extraResources/wsl-server");
+const keepWslServer = isWin && existsSync(wslServerDir);
+if (existsSync(STAGING)) {
+  if (keepWslServer) {
+    // Preserve wsl-server artifact placed by CI; wipe everything else.
+    for (const entry of readdirSync(STAGING)) {
+      if (entry === "extraResources") continue;
+      rmSync(resolve(STAGING, entry), { recursive: true });
+    }
+    for (const entry of readdirSync(resolve(STAGING, "extraResources"))) {
+      if (entry === "wsl-server") continue;
+      rmSync(resolve(STAGING, "extraResources", entry), { recursive: true });
+    }
+  } else {
+    rmSync(STAGING, { recursive: true });
+  }
+}
 mkdirSync(STAGING, { recursive: true });
 
 cpSync(resolve(ROOT, "apps/desktop/dist-electron"), resolve(STAGING, "dist-electron"), {
@@ -74,14 +91,12 @@ if (existsSync(desktopResources)) {
   cpSync(desktopResources, resolve(STAGING, "resources"), { recursive: true });
 }
 
-if (opts.wslServer) {
-  // Validate pre-built WSL server bundle exists (placed by CI artifact download)
-  const wslServerDir = resolve(STAGING, "extraResources/wsl-server");
+if (isWin) {
+  // Validate pre-built WSL server bundle (placed by CI or bun run release:wsl-server)
   for (const required of ["node", "dist", "node_modules"]) {
-    const p = resolve(wslServerDir, required);
-    if (!existsSync(p)) {
+    if (!existsSync(resolve(wslServerDir, required))) {
       console.error(
-        `ERROR: ${p} does not exist. The wsl-server artifact must be downloaded before running with --wsl-server.`,
+        `ERROR: ${resolve(wslServerDir, required)} does not exist. Run 'bun run release:wsl-server' or download the CI artifact first.`,
       );
       process.exit(1);
     }
@@ -113,7 +128,7 @@ const desktopDeps = resolveProductionDeps(desktopPkg.dependencies, catalog, "des
 
 console.log(`    Desktop deps: ${Object.keys(desktopDeps).join(", ") || "(none)"}`);
 
-if (!opts.wslServer) {
+if (!isWin) {
   const serverPkg = readJson(resolve(ROOT, "apps/server/package.json")) as {
     dependencies: Record<string, string>;
   };
