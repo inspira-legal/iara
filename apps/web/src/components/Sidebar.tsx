@@ -13,7 +13,6 @@ import { transport } from "~/lib/ws-transport";
 export function Sidebar() {
   const navigate = useNavigate();
   const { projects, updateProject, deleteProject } = useAppStore();
-  const loading = useAppStore((s) => !s.initialized);
   const hydrateFromStorage = useSidebarStore((s) => s.hydrateFromStorage);
 
   const [showCreateProject, setShowCreateProject] = useState(false);
@@ -37,7 +36,6 @@ export function Sidebar() {
         <div className="flex h-12 items-center justify-between px-4">
           <div className="flex items-center gap-2">
             <h1 className="text-sm font-bold tracking-wide text-zinc-100">iara</h1>
-            {loading && <div className="h-1.5 w-1.5 animate-pulse rounded-full bg-zinc-500" />}
           </div>
           <div className="flex items-center gap-1">
             <button

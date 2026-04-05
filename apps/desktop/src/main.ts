@@ -151,9 +151,7 @@ function spawnServer(): void {
   if (useWsl) {
     // Spawn server inside WSL using the bundled Linux Node.js binary.
     // wsl.exe doesn't inherit Windows env vars — pass them via `env KEY=VAL` prefix.
-    const wslNode = isDevelopment
-      ? toWslPath(path.resolve(__dirname, "../../desktop/resources/wsl-runtime/node/bin/node"))
-      : toWslPath(path.join(process.resourcesPath, "wsl-server", "node"));
+    const wslNode = toWslPath(path.join(process.resourcesPath, "wsl-server", "node"));
     const wslServerEntry = toWslPath(serverEntry);
 
     const wslEnv: Record<string, string> = {

@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import { createRootRoute, Outlet } from "@tanstack/react-router";
 import { AppShell } from "~/components/AppShell";
 import { ErrorBoundary } from "~/components/ErrorBoundary";
+import { SplashScreen } from "~/components/SplashScreen";
 import { ToastProvider } from "~/components/Toast";
 import { useNotificationStore } from "~/stores/notifications";
 import { useAppStore } from "~/stores/app";
@@ -17,6 +18,7 @@ function CreationToastBridge() {
 }
 
 function RootComponent() {
+  const initialized = useAppStore((s) => s.initialized);
   const loadNotifications = useNotificationStore((s) => s.loadNotifications);
   const subscribePush = useNotificationStore((s) => s.subscribePush);
   const init = useAppStore((s) => s.init);
@@ -33,6 +35,8 @@ function RootComponent() {
     const unsub = subscribeAppPush();
     return unsub;
   }, [init, subscribeAppPush]);
+
+  if (!initialized) return <SplashScreen />;
 
   return (
     <ErrorBoundary>
