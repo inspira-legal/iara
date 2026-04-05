@@ -52,7 +52,7 @@ function winConfig(arch: Arch[]): PlatformBuildConfig {
   return {
     platformConfig: {
       win: {
-        target: [{ target: "zip", arch }],
+        target: [{ target: "nsis", arch }],
         icon: "resources/icon.ico",
         forceCodeSigning: false,
         artifactName: "iara-${version}-win-${arch}.${ext}",

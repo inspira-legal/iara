@@ -2,10 +2,10 @@
   "$schema": "https://unpkg.com/knip@6/schema.json",
   "workspaces": {
     ".": {
-      "ignoreBinaries": ["electron-builder", "electron-rebuild"]
+      "ignoreBinaries": ["electron-rebuild"]
     },
     "scripts": {
-      "entry": ["dev-runner.ts", "release/index.ts"]
+      "entry": ["dev-runner.ts", "release/index.ts", "release-smoke.ts"]
     },
     "apps/web": {
       "entry": ["src/**/*.test.{ts,tsx}", "src/routes/**/*.{ts,tsx}"]

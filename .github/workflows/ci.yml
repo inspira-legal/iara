@@ -6,42 +6,29 @@ on:
   merge_group:
 
 jobs:
-  lint:
+  quality:
     runs-on: ubuntu-latest
-    name: Lint
-    steps:
-      - uses: actions/checkout@v4
-      - uses: ./.github/actions/setup
-      - run: bun run lint
-
-  fmt:
-    runs-on: ubuntu-latest
-    name: Format
+    name: Quality
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/setup
       - run: bun run fmt:check
-
-  typecheck:
-    runs-on: ubuntu-latest
-    name: Typecheck
-    steps:
-      - uses: actions/checkout@v4
-      - uses: ./.github/actions/setup
+      - run: bun run lint
       - run: bun run typecheck
-
-  knip:
-    runs-on: ubuntu-latest
-    name: Knip
-    steps:
-      - uses: actions/checkout@v4
-      - uses: ./.github/actions/setup
       - run: bunx knip --no-progress
+      - run: bun run test:coverage
+      - run: xvfb-run bun run smoke-test
 
-  test:
+  release_smoke:
     runs-on: ubuntu-latest
-    name: Test
+    name: Release Smoke
     steps:
       - uses: actions/checkout@v4
-      - uses: ./.github/actions/setup
-      - run: bun run test:coverage
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.3.11"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - run: bun install --frozen-lockfile
+      - run: bun scripts/release-smoke.ts
