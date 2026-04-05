@@ -3,9 +3,9 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const desktopDir = resolve(__dirname, "..");
-const electronBin = resolve(desktopDir, "node_modules/.bin/electron");
-const mainJs = resolve(desktopDir, "dist-electron/main.js");
+const root = resolve(__dirname, "..");
+const electronBin = resolve(root, "apps/desktop/node_modules/.bin/electron");
+const mainJs = resolve(root, "apps/desktop/dist-electron/main.js");
 
 console.log("\nLaunching Electron smoke test...");
 

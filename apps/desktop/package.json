@@ -10,8 +10,7 @@
     "build": "tsdown",
     "typecheck": "tsc --noEmit",
     "test": "vitest run --passWithNoTests",
-    "test:coverage": "vitest run --passWithNoTests",
-    "smoke-test": "node scripts/smoke-test.mjs"
+    "test:coverage": "vitest run --passWithNoTests"
   },
   "dependencies": {
     "@iara/shared": "workspace:*",

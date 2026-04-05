@@ -46,18 +46,18 @@ jobs:
       - uses: ./.github/actions/setup
       - run: bun run test:coverage
 
-  smoke-test:
+  electron-smoke:
     runs-on: ubuntu-latest
-    name: Smoke Test
+    name: Electron Smoke
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/setup
-      - run: xvfb-run bun run smoke-test
+      - run: xvfb-run bun run electron-smoke
 
-  release_smoke:
+  release-smoke:
     runs-on: ubuntu-latest
     name: Release Smoke
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/setup
-      - run: bun scripts/release-smoke.ts
+      - run: bun run release-smoke
