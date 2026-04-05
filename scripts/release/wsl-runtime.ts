@@ -34,7 +34,8 @@ export async function prepareWslRuntime(): Promise<void> {
   if (!res.ok || !res.body) throw new Error(`Failed to download ${url}: ${res.status}`);
 
   const input = Readable.fromWeb(res.body);
-  await $({ input })`tar xz --strip-components=1 -C ${nodeDir}`;
+  const tarDest = nodeDir.replaceAll("\\", "/");
+  await $({ input })`tar xz --strip-components=1 -C ${tarDest}`;
 
   // Remove unnecessary files
   for (const name of ["lib/node_modules", "share", "include", "CHANGELOG.md", "README.md"]) {
