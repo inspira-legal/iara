@@ -98,6 +98,10 @@ jobs:
           name: wsl-server
           path: .staging/extraResources/wsl-server/
 
+      - name: Install Linux packaging dependencies
+        if: matrix.platform == 'linux'
+        run: sudo apt-get update && sudo apt-get install -y dpkg fakeroot
+
       - name: Build and package
         shell: bash
         run: bun scripts/release/index.ts --platform ${{ matrix.platform }} --arch ${{ matrix.arch }} --version ${{ needs.preflight.outputs.version }}
@@ -109,6 +113,7 @@ jobs:
           shopt -s nullglob
           for pattern in \
             "release/*.AppImage" \
+            "release/*.deb" \
             "release/*.dmg" \
             "release/*.exe" \
             "release/*.zip" \

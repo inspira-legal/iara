@@ -174,7 +174,7 @@ await $({ cwd: posix(STAGING) })`bun install --production`;
 
 // Step 5: Package
 console.log("\n==> Packaging with electron-builder...");
-await $({ cwd: posix(STAGING) })`bunx electron-builder --${opts.platform}`;
+await $({ cwd: posix(STAGING), verbose: true })`bunx electron-builder --${opts.platform}`;
 
 // Cleanup
 if (opts.keepStage) {
