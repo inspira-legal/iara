@@ -15,13 +15,17 @@ function linuxConfig(arch: Arch[]): PlatformBuildConfig {
   return {
     platformConfig: {
       linux: {
-        target: [{ target: "AppImage", arch }],
+        target: [
+          { target: "AppImage", arch },
+          { target: "deb", arch },
+        ],
         category: "Development",
         icon: "resources/icon.png",
       },
     },
     formatConfigs: {
       appImage: { artifactName: "iara-${version}-linux-${arch}.AppImage" },
+      deb: { artifactName: "iara-${version}-linux-${arch}.deb" },
     },
   };
 }

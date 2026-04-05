@@ -10,6 +10,7 @@
           { "path": "release-assets/*-arm64.dmg", "label": "macOS DMG (Apple Silicon)" },
           { "path": "release-assets/*-x64.dmg", "label": "macOS DMG (Intel)" },
           { "path": "release-assets/*.AppImage", "label": "Linux AppImage" },
+          { "path": "release-assets/*.deb", "label": "Linux Installer (Debian/Ubuntu)" },
           { "path": "release-assets/*.exe", "label": "Windows Installer" }
         ]
       }
