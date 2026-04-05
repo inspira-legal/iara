@@ -7,12 +7,16 @@
       "@semantic-release/github",
       {
         "assets": [
+          { "path": "release-assets/*-arm64.dmg", "label": "macOS DMG (Apple Silicon)" },
+          { "path": "release-assets/*-x64.dmg", "label": "macOS DMG (Intel)" },
           { "path": "release-assets/*.AppImage", "label": "Linux AppImage" },
-          { "path": "release-assets/*.dmg", "label": "macOS DMG" },
           { "path": "release-assets/*.exe", "label": "Windows Installer" },
-          { "path": "release-assets/*.zip", "label": "Archive" },
-          { "path": "release-assets/*.blockmap" },
-          { "path": "release-assets/latest*.yml" }
+          { "path": "release-assets/*-arm64.dmg.blockmap" },
+          { "path": "release-assets/*-x64.dmg.blockmap" },
+          { "path": "release-assets/*.exe.blockmap" },
+          { "path": "release-assets/latest-mac.yml", "label": "macOS Manifest" },
+          { "path": "release-assets/latest-linux.yml", "label": "Linux Manifest" },
+          { "path": "release-assets/latest.yml", "label": "Windows Manifest" }
         ]
       }
     ]
