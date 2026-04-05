@@ -155,7 +155,7 @@ writeFileSync(
   JSON.stringify(
     {
       name: "@iara/desktop",
-      version: desktopPkg.version,
+      version: opts.version ?? desktopPkg.version,
       private: true,
       main: "dist-electron/main.js",
       productName: "iara",

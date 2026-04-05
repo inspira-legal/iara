@@ -16,6 +16,7 @@ const DEFAULT_ARCHS: Record<Platform, Arch[]> = {
 export interface ReleaseOptions {
   platform: Platform;
   arch: Arch[];
+  version: string | undefined;
   skipBuild: boolean;
   keepStage: boolean;
 }
@@ -43,6 +44,7 @@ export function parseArgs(argv: string[]): ReleaseOptions {
   return {
     platform: p,
     arch: archArg ? [archArg] : DEFAULT_ARCHS[p],
+    version: getArg("--version"),
     skipBuild: hasFlag("--skip-build"),
     keepStage: hasFlag("--keep-stage"),
   };

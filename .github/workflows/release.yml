@@ -100,7 +100,7 @@ jobs:
 
       - name: Build and package
         shell: bash
-        run: bun scripts/release/index.ts --platform ${{ matrix.platform }} --arch ${{ matrix.arch }}
+        run: bun scripts/release/index.ts --platform ${{ matrix.platform }} --arch ${{ matrix.arch }} --version ${{ needs.preflight.outputs.version }}
 
       - name: Collect release assets
         shell: bash
