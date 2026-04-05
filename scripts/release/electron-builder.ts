@@ -20,6 +20,7 @@ function linuxConfig(arch: Arch[]): PlatformBuildConfig {
           { target: "deb", arch },
         ],
         category: "Development",
+        synopsis: "Workspace manager for Claude Code",
         icon: "resources/icon.png",
       },
     },

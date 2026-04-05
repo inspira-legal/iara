@@ -159,6 +159,7 @@ writeFileSync(
       private: true,
       main: "dist-electron/main.js",
       productName: "iara",
+      description: "A workspace manager for Claude Code",
       homepage: "https://github.com/inspira-legal/iara",
       author: { name: "Inspira Legal", email: "tech-support@inspira.legal" },
       dependencies: desktopDeps,
