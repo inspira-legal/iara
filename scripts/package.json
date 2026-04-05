@@ -5,6 +5,7 @@
   "type": "module",
   "dependencies": {
     "@iara/shared": "workspace:*",
-    "@types/node": "catalog:"
+    "@types/node": "catalog:",
+    "zx": "^8.8.5"
   }
 }

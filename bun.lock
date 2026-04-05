@@ -21,7 +21,6 @@
         "oxlint": "^1.55.0",
         "turbo": "^2.8.19",
         "vitest": "catalog:",
-        "zx": "^8.8.5",
       },
     },
     "apps/desktop": {
@@ -151,6 +150,7 @@
       "dependencies": {
         "@iara/shared": "workspace:*",
         "@types/node": "catalog:",
+        "zx": "^8.8.5",
       },
     },
   },
