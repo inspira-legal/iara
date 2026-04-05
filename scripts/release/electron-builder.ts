@@ -21,7 +21,7 @@ function linuxConfig(arch: Arch[]): PlatformBuildConfig {
       },
     },
     formatConfigs: {
-      appImage: { artifactName: "iara-${version}-${arch}.AppImage" },
+      appImage: { artifactName: "iara-${version}-linux-${arch}.AppImage" },
     },
   };
 }
@@ -38,7 +38,7 @@ function macConfig(arch: Arch[]): PlatformBuildConfig {
       },
     },
     formatConfigs: {
-      dmg: { artifactName: "iara-${version}-${arch}.dmg" },
+      dmg: { artifactName: "iara-${version}-mac-${arch}.dmg" },
     },
   };
 }
