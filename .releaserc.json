@@ -11,12 +11,18 @@
           { "path": "release-assets/*-x64.dmg", "label": "macOS DMG (Intel)" },
           { "path": "release-assets/*.AppImage", "label": "Linux AppImage" },
           { "path": "release-assets/*.exe", "label": "Windows Installer" },
-          { "path": "release-assets/*-arm64.dmg.blockmap" },
-          { "path": "release-assets/*-x64.dmg.blockmap" },
-          { "path": "release-assets/*.exe.blockmap" },
-          { "path": "release-assets/latest-mac.yml", "label": "macOS Manifest" },
-          { "path": "release-assets/latest-linux.yml", "label": "Linux Manifest" },
-          { "path": "release-assets/latest.yml", "label": "Windows Manifest" }
+          {
+            "path": "release-assets/*-arm64.dmg.blockmap",
+            "label": "[INTERNAL] Blockmap macOS (Apple Silicon)"
+          },
+          {
+            "path": "release-assets/*-x64.dmg.blockmap",
+            "label": "[INTERNAL] Blockmap macOS (Intel)"
+          },
+          { "path": "release-assets/*.exe.blockmap", "label": "[INTERNAL] Blockmap Windows" },
+          { "path": "release-assets/latest-mac.yml", "label": "[INTERNAL] Manifest macOS" },
+          { "path": "release-assets/latest-linux.yml", "label": "[INTERNAL] Manifest Linux" },
+          { "path": "release-assets/latest.yml", "label": "[INTERNAL] Manifest Windows" }
         ]
       }
     ]
