@@ -5,10 +5,18 @@ import { STAGING } from "./config.js";
 
 const ARCH = "x64";
 
+async function download(url: string, dest: string): Promise<void> {
+  if (process.platform === "win32") {
+    await $`powershell -Command "Invoke-WebRequest -Uri '${url}' -OutFile '${dest}'"`;
+  } else {
+    await $`curl -fsSL -o ${dest} ${url}`;
+  }
+}
+
 /**
  * Prepare Linux runtime for WSL server execution directly into the staging dir.
  * Downloads a Node.js Linux binary so the server can run inside WSL.
- * Works on any platform — uses curl + tar (available on all CI runners).
+ * Works on any platform — uses PowerShell on Windows, curl elsewhere.
  */
 export async function prepareWslRuntime(): Promise<void> {
   const wslDir = resolve(STAGING, "extraResources/wsl-runtime");
@@ -31,7 +39,7 @@ export async function prepareWslRuntime(): Promise<void> {
   const url = `https://nodejs.org/dist/${nodeVersion}/node-${nodeVersion}-linux-${ARCH}.tar.gz`;
   const tarball = resolve(wslDir, "node.tar.gz");
 
-  await $`curl -fsSL -o ${tarball} ${url}`;
+  await download(url, tarball);
   await $`tar xzf ${tarball} --strip-components=1 -C ${nodeDir}`;
   rmSync(tarball);
 
