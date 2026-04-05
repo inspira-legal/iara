@@ -1,22 +1,15 @@
 import { $ } from "zx";
+import { Readable } from "node:stream";
 import { existsSync, mkdirSync, rmSync, statSync } from "node:fs";
 import { resolve } from "node:path";
 import { STAGING } from "./config.js";
 
 const ARCH = "x64";
 
-async function download(url: string, dest: string): Promise<void> {
-  if (process.platform === "win32") {
-    await $`powershell -Command "Invoke-WebRequest -Uri '${url}' -OutFile '${dest}'"`;
-  } else {
-    await $`curl -fsSL -o ${dest} ${url}`;
-  }
-}
-
 /**
  * Prepare Linux runtime for WSL server execution directly into the staging dir.
  * Downloads a Node.js Linux binary so the server can run inside WSL.
- * Works on any platform — uses PowerShell on Windows, curl elsewhere.
+ * Works on any platform — streams fetch response directly to tar (no temp file).
  */
 export async function prepareWslRuntime(): Promise<void> {
   const wslDir = resolve(STAGING, "extraResources/wsl-runtime");
@@ -37,11 +30,11 @@ export async function prepareWslRuntime(): Promise<void> {
   mkdirSync(nodeDir, { recursive: true });
 
   const url = `https://nodejs.org/dist/${nodeVersion}/node-${nodeVersion}-linux-${ARCH}.tar.gz`;
-  const tarball = resolve(wslDir, "node.tar.gz");
+  const res = await fetch(url);
+  if (!res.ok || !res.body) throw new Error(`Failed to download ${url}: ${res.status}`);
 
-  await download(url, tarball);
-  await $`tar xzf ${tarball} --strip-components=1 -C ${nodeDir}`;
-  rmSync(tarball);
+  const input = Readable.fromWeb(res.body);
+  await $({ input })`tar xz --strip-components=1 -C ${nodeDir}`;
 
   // Remove unnecessary files
   for (const name of [
