@@ -1,6 +1,12 @@
 name: "Setup and install"
 description: "Common setup steps for CI"
 
+inputs:
+  build:
+    description: "Run full build after install"
+    required: false
+    default: "false"
+
 runs:
   using: composite
   steps:
@@ -21,11 +27,16 @@ runs:
         restore-keys: |
           ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}-
 
+    - name: Install setuptools for node-gyp
+      shell: bash
+      run: python3 -m pip install setuptools --break-system-packages || python3 -m pip install setuptools
+
     - shell: bash
       run: bun install --frozen-lockfile
 
-    - shell: bash
-      run: cd apps/web && bunx @tanstack/router-cli generate
-
-    - shell: bash
-      run: bun run build
+    - name: Generate routes and build
+      if: inputs.build == 'true'
+      shell: bash
+      run: |
+        cd apps/web && bunx @tanstack/router-cli generate && cd ../..
+        bun run build
