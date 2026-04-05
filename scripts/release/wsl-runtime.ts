@@ -37,14 +37,7 @@ export async function prepareWslRuntime(): Promise<void> {
   await $({ input })`tar xz --strip-components=1 -C ${nodeDir}`;
 
   // Remove unnecessary files
-  for (const name of [
-    "lib/node_modules",
-    "share",
-    "include",
-    "CHANGELOG.md",
-    "LICENSE",
-    "README.md",
-  ]) {
+  for (const name of ["lib/node_modules", "share", "include", "CHANGELOG.md", "README.md"]) {
     const p = resolve(nodeDir, name);
     if (existsSync(p)) rmSync(p, { recursive: true });
   }
