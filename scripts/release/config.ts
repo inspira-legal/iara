@@ -18,6 +18,7 @@ export interface ReleaseOptions {
   arch: Arch[];
   skipBuild: boolean;
   keepStage: boolean;
+  wslServer: boolean;
 }
 
 export function parseArgs(argv: string[]): ReleaseOptions {
@@ -45,5 +46,6 @@ export function parseArgs(argv: string[]): ReleaseOptions {
     arch: archArg ? [archArg] : DEFAULT_ARCHS[p],
     skipBuild: hasFlag("--skip-build"),
     keepStage: hasFlag("--keep-stage"),
+    wslServer: hasFlag("--wsl-server"),
   };
 }

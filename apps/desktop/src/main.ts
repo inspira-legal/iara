@@ -125,9 +125,10 @@ const windowStatePath = path.join(stateDir, "window-state.json");
 // ---------------------------------------------------------------------------
 
 function spawnServer(): void {
+  const serverDir = useWsl ? "wsl-server" : "server";
   const serverEntry = isDevelopment
     ? path.resolve(__dirname, "../../server/dist/main.mjs")
-    : path.join(process.resourcesPath, "server", "dist", "main.mjs");
+    : path.join(process.resourcesPath, serverDir, "dist", "main.mjs");
 
   const env: Record<string, string | undefined> = {
     ...process.env,
@@ -141,7 +142,7 @@ function spawnServer(): void {
     env.IARA_WEB_DIR = useWsl
       ? toWslPath(path.join(process.resourcesPath, "web"))
       : path.join(process.resourcesPath, "web");
-    const serverModules = path.join(process.resourcesPath, "server", "node_modules");
+    const serverModules = path.join(process.resourcesPath, serverDir, "node_modules");
     env.NODE_PATH = useWsl ? toWslPath(serverModules) : serverModules;
   }
 
@@ -152,7 +153,7 @@ function spawnServer(): void {
     // wsl.exe doesn't inherit Windows env vars — pass them via `env KEY=VAL` prefix.
     const wslNode = isDevelopment
       ? toWslPath(path.resolve(__dirname, "../../desktop/resources/wsl-runtime/node/bin/node"))
-      : toWslPath(path.join(process.resourcesPath, "wsl-runtime", "node"));
+      : toWslPath(path.join(process.resourcesPath, "wsl-server", "node"));
     const wslServerEntry = toWslPath(serverEntry);
 
     const wslEnv: Record<string, string> = {

@@ -9,7 +9,7 @@
  * Usage:
  *   bun scripts/release/index.ts --platform linux [--arch x64]
  *   bun scripts/release/index.ts --platform mac [--arch arm64]
- *   bun scripts/release/index.ts --platform win
+ *   bun scripts/release/index.ts --platform win --wsl-server
  *   bun scripts/release/index.ts --platform linux --skip-build
  *   bun scripts/release/index.ts --platform linux --keep-stage
  */
@@ -18,25 +18,12 @@ import { $ } from "zx";
 import { cpSync, existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 
-import { type Platform, ROOT, STAGING, RELEASE, parseArgs } from "./config.js";
+import { ROOT, STAGING, RELEASE, parseArgs } from "./config.js";
 import { readJson, resolveProductionDeps } from "./deps.js";
 import { createBuildConfig } from "./electron-builder.js";
-import { prepareWslRuntime } from "./wsl-runtime.js";
 
 /** Convert Windows backslashes to forward slashes for Git Bash compatibility. */
 const posix = (p: string) => p.replaceAll("\\", "/");
-
-// ---------------------------------------------------------------------------
-// Platform hooks — run between staging and packaging
-// ---------------------------------------------------------------------------
-
-type PlatformHook = () => Promise<void> | void;
-
-const prePackageHooks: Record<Platform, PlatformHook | undefined> = {
-  linux: undefined,
-  mac: undefined,
-  win: () => prepareWslRuntime(),
-};
 
 // ---------------------------------------------------------------------------
 // Main
@@ -45,7 +32,21 @@ const prePackageHooks: Record<Platform, PlatformHook | undefined> = {
 const opts = parseArgs(process.argv);
 
 // Step 1: Build
-if (opts.skipBuild) {
+if (opts.wslServer) {
+  // Windows with pre-built WSL server: only build desktop + web
+  if (opts.skipBuild) {
+    console.log("\n==> Skipping build (--skip-build)");
+    for (const dir of ["apps/desktop/dist-electron", "apps/web/dist"]) {
+      if (!existsSync(resolve(ROOT, dir))) {
+        console.error(`ERROR: ${dir} does not exist. Run without --skip-build first.`);
+        process.exit(1);
+      }
+    }
+  } else {
+    console.log("\n==> Building desktop + web (server provided via --wsl-server)...");
+    await $({ cwd: posix(ROOT) })`bun build:desktop`;
+  }
+} else if (opts.skipBuild) {
   console.log("\n==> Skipping build (--skip-build)");
   for (const dir of ["apps/desktop/dist-electron", "apps/server/dist", "apps/web/dist"]) {
     if (!existsSync(resolve(ROOT, dir))) {
@@ -73,18 +74,30 @@ if (existsSync(desktopResources)) {
   cpSync(desktopResources, resolve(STAGING, "resources"), { recursive: true });
 }
 
-const serverDistStaged = resolve(STAGING, "extraResources/server/dist");
-mkdirSync(serverDistStaged, { recursive: true });
-cpSync(resolve(ROOT, "apps/server/dist"), serverDistStaged, { recursive: true });
+if (opts.wslServer) {
+  // Validate pre-built WSL server bundle exists (placed by CI artifact download)
+  const wslServerDir = resolve(STAGING, "extraResources/wsl-server");
+  for (const required of ["node", "dist", "node_modules"]) {
+    const p = resolve(wslServerDir, required);
+    if (!existsSync(p)) {
+      console.error(
+        `ERROR: ${p} does not exist. The wsl-server artifact must be downloaded before running with --wsl-server.`,
+      );
+      process.exit(1);
+    }
+  }
+  console.log("    WSL server bundle found at:", wslServerDir);
+} else {
+  const serverDistStaged = resolve(STAGING, "extraResources/server/dist");
+  mkdirSync(serverDistStaged, { recursive: true });
+  cpSync(resolve(ROOT, "apps/server/dist"), serverDistStaged, { recursive: true });
+}
 
 const webDistStaged = resolve(STAGING, "extraResources/web");
 mkdirSync(webDistStaged, { recursive: true });
 cpSync(resolve(ROOT, "apps/web/dist"), webDistStaged, { recursive: true });
 
-// Step 3: Platform-specific pre-package hook
-await prePackageHooks[opts.platform]?.();
-
-// Step 4: Resolve deps & generate staged package.json
+// Step 3: Resolve deps & generate staged package.json
 const rootPkg = readJson(resolve(ROOT, "package.json")) as {
   workspaces: { catalog: Record<string, string> };
 };
@@ -93,17 +106,34 @@ const desktopPkg = readJson(resolve(ROOT, "apps/desktop/package.json")) as {
   dependencies: Record<string, string>;
   devDependencies: Record<string, string>;
 };
-const serverPkg = readJson(resolve(ROOT, "apps/server/package.json")) as {
-  dependencies: Record<string, string>;
-};
 
 const catalog = rootPkg.workspaces?.catalog ?? {};
 const electronVersion = desktopPkg.devDependencies.electron;
 const desktopDeps = resolveProductionDeps(desktopPkg.dependencies, catalog, "desktop");
-const serverDeps = resolveProductionDeps(serverPkg.dependencies, catalog, "server");
 
 console.log(`    Desktop deps: ${Object.keys(desktopDeps).join(", ") || "(none)"}`);
-console.log(`    Server deps:  ${Object.keys(serverDeps).join(", ") || "(none)"}`);
+
+if (!opts.wslServer) {
+  const serverPkg = readJson(resolve(ROOT, "apps/server/package.json")) as {
+    dependencies: Record<string, string>;
+  };
+  const serverDeps = resolveProductionDeps(serverPkg.dependencies, catalog, "server");
+
+  console.log(`    Server deps:  ${Object.keys(serverDeps).join(", ") || "(none)"}`);
+
+  const serverModulesDir = resolve(STAGING, "extraResources/server");
+  writeFileSync(
+    resolve(serverModulesDir, "package.json"),
+    JSON.stringify(
+      { name: "@iara/server-runtime", version: "0.0.1", private: true, dependencies: serverDeps },
+      null,
+      2,
+    ),
+  );
+
+  console.log("\n==> Installing server native dependencies...");
+  await $({ cwd: posix(serverModulesDir) })`bun install --production`;
+}
 
 writeFileSync(
   resolve(STAGING, "package.json"),
@@ -123,41 +153,11 @@ writeFileSync(
   ),
 );
 
-const serverModulesDir = resolve(STAGING, "extraResources/server");
-writeFileSync(
-  resolve(serverModulesDir, "package.json"),
-  JSON.stringify(
-    { name: "@iara/server-runtime", version: "0.0.1", private: true, dependencies: serverDeps },
-    null,
-    2,
-  ),
-);
-
-// Step 5: Install deps
+// Step 4: Install desktop deps
 console.log("\n==> Installing desktop dependencies...");
 await $({ cwd: posix(STAGING) })`bun install --production`;
 
-console.log("\n==> Installing server native dependencies...");
-await $({ cwd: posix(serverModulesDir) })`bun install --production`;
-
-// Step 6: Rebuild native modules for Electron
-console.log("\n==> Rebuilding native modules for Electron...");
-const ebVersion = electronVersion.replace(/^\^/, "");
-await $({
-  cwd: posix(STAGING),
-})`bunx electron-rebuild -v ${ebVersion} -m ${posix(serverModulesDir)} -o node-pty`;
-
-// Step 6b: Copy Linux native modules for WSL (Windows builds only)
-if (opts.platform === "win") {
-  console.log("\n==> Copying Linux native modules for WSL...");
-  const nativeSrc = resolve(ROOT, "apps/desktop/resources/wsl-runtime/native_modules");
-  const ptyLinuxSrc = resolve(nativeSrc, "node-pty/build/Release/pty.node");
-  const ptyLinuxDest = resolve(serverModulesDir, "node_modules/node-pty/prebuilds/linux-x64");
-  mkdirSync(ptyLinuxDest, { recursive: true });
-  cpSync(ptyLinuxSrc, resolve(ptyLinuxDest, "pty.node"));
-}
-
-// Step 7: Package
+// Step 5: Package
 console.log("\n==> Packaging with electron-builder...");
 await $({ cwd: posix(STAGING) })`bunx electron-builder --${opts.platform}`;
 

@@ -31,9 +31,9 @@
     "release-smoke": "bun scripts/release-smoke.ts",
     "release:linux": "bun scripts/release/index.ts --platform linux",
     "release:mac": "bun scripts/release/index.ts --platform mac",
-    "release:win": "bun scripts/release/index.ts --platform win",
+    "release:win": "bun scripts/release/index.ts --platform win --wsl-server",
+    "release:wsl-server": "bun scripts/release/prepare-wsl-server.ts",
     "package:server": "bun build:server",
-    "postinstall": "npx electron-rebuild -v 40.6.0 -m apps/server -o node-pty",
     "knip": "knip",
     "prepare": "lefthook install",
     "clean": "rm -rf node_modules apps/*/node_modules packages/*/node_modules apps/*/dist apps/*/dist-electron packages/*/dist .turbo apps/*/.turbo packages/*/.turbo"

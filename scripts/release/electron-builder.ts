@@ -44,10 +44,6 @@ function macConfig(arch: Arch[]): PlatformBuildConfig {
 }
 
 function winConfig(arch: Arch[]): PlatformBuildConfig {
-  const extraResources: ExtraResource[] = [
-    { from: "extraResources/wsl-runtime/node/bin/node", to: "wsl-runtime/node" },
-  ];
-
   return {
     platformConfig: {
       win: {
@@ -55,7 +51,6 @@ function winConfig(arch: Arch[]): PlatformBuildConfig {
         icon: "resources/icon.ico",
         forceCodeSigning: false,
         artifactName: "iara-${version}-win-${arch}.${ext}",
-        extraResources,
       },
     },
   };
@@ -67,6 +62,22 @@ const PLATFORM_CONFIGS: Record<Platform, (arch: Arch[]) => PlatformBuildConfig> 
   win: winConfig,
 };
 
+function getExtraResources(platform: Platform): ExtraResource[] {
+  if (platform === "win") {
+    return [
+      { from: "extraResources/wsl-server/node", to: "wsl-server/node" },
+      { from: "extraResources/wsl-server/dist", to: "wsl-server/dist" },
+      { from: "extraResources/wsl-server/node_modules", to: "wsl-server/node_modules" },
+      { from: "extraResources/web", to: "web" },
+    ];
+  }
+  return [
+    { from: "extraResources/server/dist", to: "server/dist" },
+    { from: "extraResources/server/node_modules", to: "server/node_modules" },
+    { from: "extraResources/web", to: "web" },
+  ];
+}
+
 export function createBuildConfig(platform: Platform, arch: Arch[]): Record<string, unknown> {
   const { platformConfig, formatConfigs } = PLATFORM_CONFIGS[platform](arch);
 
@@ -76,11 +87,7 @@ export function createBuildConfig(platform: Platform, arch: Arch[]): Record<stri
     copyright: "Copyright © 2026",
     directories: { output: RELEASE, buildResources: "resources" },
     files: ["dist-electron/**/*"],
-    extraResources: [
-      { from: "extraResources/server/dist", to: "server/dist" },
-      { from: "extraResources/server/node_modules", to: "server/node_modules" },
-      { from: "extraResources/web", to: "web" },
-    ],
+    extraResources: getExtraResources(platform),
     ...platformConfig,
     ...formatConfigs,
     publish: null,
