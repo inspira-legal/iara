@@ -1,5 +1,5 @@
 import { execSync } from "node:child_process";
-import { existsSync, mkdirSync, rmSync, statSync } from "node:fs";
+import { writeFileSync, existsSync, mkdirSync, rmSync, statSync } from "node:fs";
 import { resolve } from "node:path";
 import { STAGING } from "./config.js";
 
@@ -8,9 +8,10 @@ const ARCH = "x64";
 /**
  * Prepare Linux runtime for WSL server execution directly into the staging dir.
  * Downloads a Node.js Linux binary so the server can run inside WSL.
- * Works on any platform — the downloaded binary is always linux-x64.
+ * Works on any platform — downloads .tar.gz (universally supported) and
+ * uses fetch() + tar (available on all CI runners).
  */
-export function prepareWslRuntime(): void {
+export async function prepareWslRuntime(): Promise<void> {
   const wslDir = resolve(STAGING, "extraResources/wsl-runtime");
   mkdirSync(wslDir, { recursive: true });
 
@@ -22,34 +23,21 @@ export function prepareWslRuntime(): void {
   const nodeBin = resolve(nodeDir, "bin/node");
 
   if (existsSync(nodeBin)) {
-    // On non-Linux, we can't run the binary to check version — just re-download
-    if (process.platform === "linux") {
-      const existing = execSync(`"${nodeBin}" --version`, { encoding: "utf-8" }).trim();
-      if (existing === nodeVersion) {
-        console.log(`==> Node.js ${nodeVersion} already downloaded`);
-        return;
-      }
-      console.log(`==> Updating Node.js from ${existing} to ${nodeVersion}`);
-    }
     rmSync(nodeDir, { recursive: true });
   }
 
   console.log(`==> Downloading Node.js ${nodeVersion} for linux-${ARCH}...`);
   mkdirSync(nodeDir, { recursive: true });
 
-  const url = `https://nodejs.org/dist/${nodeVersion}/node-${nodeVersion}-linux-${ARCH}.tar.xz`;
-  const tarball = resolve(wslDir, "node.tar.xz");
+  const url = `https://nodejs.org/dist/${nodeVersion}/node-${nodeVersion}-linux-${ARCH}.tar.gz`;
+  const tarball = resolve(wslDir, "node.tar.gz");
 
-  execSync(`curl -fsSL -o "${tarball}" "${url}"`, { stdio: "inherit" });
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`Failed to download ${url}: ${res.status}`);
+  writeFileSync(tarball, Buffer.from(await res.arrayBuffer()));
 
-  // tar handles .tar.xz on all platforms (Windows Git Bash includes tar)
-  execSync(`tar xf "${tarball}" --strip-components=1 -C "${nodeDir}"`, { stdio: "inherit" });
+  execSync(`tar xzf "${tarball}" --strip-components=1 -C "${nodeDir}"`, { stdio: "inherit" });
   rmSync(tarball);
-
-  // Strip debug symbols (Linux only, optional)
-  if (process.platform === "linux") {
-    execSync(`strip "${nodeBin}" 2>/dev/null || true`);
-  }
 
   // Remove unnecessary files
   for (const name of [
