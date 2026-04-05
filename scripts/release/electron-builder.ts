@@ -33,9 +33,8 @@ function macConfig(arch: Arch[]): PlatformBuildConfig {
         target: [{ target: "dmg", arch }],
         category: "public.app-category.developer-tools",
         icon: "resources/icon.icns",
-        hardenedRuntime: true,
-        entitlements: "resources/entitlements.mac.plist",
-        entitlementsInherit: "resources/entitlements.mac.plist",
+        identity: null,
+        forceCodeSigning: false,
       },
     },
     formatConfigs: {
