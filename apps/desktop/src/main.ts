@@ -24,6 +24,7 @@ import {
   getMimeType,
 } from "./utils.js";
 import { isWindows, getStateDir } from "@iara/shared/platform";
+import { RotatingFileSink } from "./services/log-sink.js";
 
 syncShellEnvironment();
 
@@ -38,6 +39,23 @@ if (isWindows) {
 const useWsl = isWindows && isWslAvailable();
 
 const stateDir = getStateDir("iara");
+const logDir = path.join(stateDir, "logs");
+const desktopLog = isDevelopment ? null : new RotatingFileSink(logDir, "desktop");
+const serverLog = isDevelopment ? null : new RotatingFileSink(logDir, "server");
+
+// In production, tee console output to rotating log files
+if (desktopLog) {
+  const origLog = console.log.bind(console);
+  const origError = console.error.bind(console);
+  console.log = (...args: unknown[]) => {
+    origLog(...args);
+    desktopLog.writeLine(args.map(String).join(" "));
+  };
+  console.error = (...args: unknown[]) => {
+    origError(...args);
+    desktopLog.writeLine(`[error] ${args.map(String).join(" ")}`);
+  };
+}
 
 let serverChild: ChildProcess | null = null;
 let serverPort = 0;
@@ -161,11 +179,13 @@ function spawnServer(): void {
   if (!isDevelopment && child.stdout) {
     child.stdout.on("data", (data: Buffer) => {
       process.stdout.write(data);
+      serverLog?.write(data);
     });
   }
   if (!isDevelopment && child.stderr) {
     child.stderr.on("data", (data: Buffer) => {
       process.stderr.write(data);
+      serverLog?.write(data);
     });
   }
 
@@ -562,6 +582,9 @@ app.on("before-quit", (e) => {
     clearTimeout(restartTimer);
     restartTimer = null;
   }
+
+  desktopLog?.close();
+  serverLog?.close();
 
   if (!serverChild) return;
 
