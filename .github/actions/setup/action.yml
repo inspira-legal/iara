@@ -3,7 +3,7 @@ description: "Common setup steps for CI"
 
 inputs:
   build:
-    description: "Run full build after install"
+    description: "Run full build after install (also installs native module tooling on macOS/Windows)"
     required: false
     default: "false"
 
@@ -28,7 +28,7 @@ runs:
           ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}-
 
     - name: Install setuptools for node-gyp
-      if: runner.os != 'Linux'
+      if: inputs.build == 'true' && runner.os != 'Linux'
       shell: bash
       run: python3 -m pip install setuptools --break-system-packages || python3 -m pip install setuptools
 
