@@ -1,10 +1,14 @@
-import { execFile } from "node:child_process";
-import * as fs from "node:fs/promises";
-import { promisify } from "node:util";
 import type { WsPushEvents } from "@iara/contracts";
 import * as pty from "node-pty";
 import { cleanEnv } from "@iara/shared/env";
-import { killProcessGroup } from "@iara/shared/process";
+import {
+  buildInteractiveShell,
+  buildShellCommand,
+  shellQuote,
+  buildTerminalEnv,
+  getProcessCwd,
+  killProcessTree,
+} from "@iara/shared/platform";
 import {
   buildClaudeArgs,
   buildSystemPrompt,
@@ -66,25 +70,18 @@ export class TerminalManager {
     const terminalId = crypto.randomUUID();
     const sessionId = config.resumeSessionId ?? crypto.randomUUID();
 
-    const env: Record<string, string> = {
-      HOME: process.env.HOME ?? "",
-      USER: process.env.USER ?? "",
-      SHELL: process.env.SHELL ?? "/bin/bash",
-      PATH: process.env.PATH ?? "/usr/local/bin:/usr/bin:/bin",
+    const env: Record<string, string> = buildTerminalEnv({
       ...cleanEnv(process.env),
       ...config.env,
-      LANG: process.env.LANG ?? "en_US.UTF-8",
-      LC_ALL: process.env.LC_ALL ?? "en_US.UTF-8",
-      TERM: "xterm-256color",
-      COLORTERM: "truecolor",
-    } as Record<string, string>;
+    });
 
     let command: string;
     let args: string[];
 
     if (mode === "shell") {
-      command = process.env.SHELL ?? "/bin/bash";
-      args = [];
+      const shell = buildInteractiveShell();
+      command = shell.command;
+      args = shell.args;
       console.log("[terminal] spawn shell", { cwd: config.workspaceDir, command });
     } else {
       const systemPrompt =
@@ -99,12 +96,16 @@ export class TerminalManager {
         resumeSessionId: config.resumeSessionId,
         sessionId,
         appendSystemPrompt: systemPrompt,
-        pluginDir: config.pluginDir ?? process.env.IARA_PLUGIN_DIR,
+        pluginDir: config.pluginDir || process.env.IARA_PLUGIN_DIR || undefined,
         env: config.env,
       };
 
-      command = "claude";
-      args = buildClaudeArgs(launchConfig);
+      const claudeArgs = buildClaudeArgs(launchConfig);
+      const cmdString = ["claude", ...claudeArgs].map(shellQuote).join(" ");
+      const resolved = buildShellCommand(cmdString);
+
+      command = resolved.command;
+      args = resolved.args;
       env.IARA_SESSION_ID = sessionId;
       console.log("[terminal] spawn claude", { cwd: config.workspaceDir, args });
     }
@@ -184,8 +185,8 @@ export class TerminalManager {
     this.destroyed.add(terminalId);
     this.terminals.delete(terminalId);
 
-    // Kill the entire process group with SIGTERM → SIGKILL escalation.
-    const cancelKill = killProcessGroup(terminal.pty.pid, {
+    // Kill the entire process tree with SIGTERM → SIGKILL escalation.
+    const cancelKill = killProcessTree(terminal.pty.pid, {
       graceMs: TERMINAL_KILL_GRACE_MS,
     });
     terminal.cancelKill = cancelKill;
@@ -215,29 +216,8 @@ export class TerminalManager {
     const terminal = this.terminals.get(terminalId);
     if (!terminal) return null;
 
-    const pid = terminal.pty.pid;
-    try {
-      if (process.platform === "linux") {
-        return await fs.readlink(`/proc/${pid}/cwd`);
-      }
-      if (process.platform === "darwin") {
-        const { stdout } = await promisify(execFile)("lsof", ["-p", String(pid), "-Fn"], {
-          timeout: 2000,
-        });
-        const cwdLine = stdout.split("\n").find((l) => l.startsWith("fcwd"));
-        if (cwdLine) {
-          // Next line is the path prefixed with "n"
-          const idx = stdout.indexOf(cwdLine);
-          const rest = stdout.slice(idx + cwdLine.length + 1);
-          const pathLine = rest.split("\n").find((l) => l.startsWith("n"));
-          if (pathLine) return pathLine.slice(1);
-        }
-      }
-    } catch {
-      // Process may have exited or command unavailable
-    }
-
-    return terminal.initialCwd;
+    const cwd = await getProcessCwd(terminal.pty.pid);
+    return cwd ?? terminal.initialCwd;
   }
 
   getByWorkspaceId(workspaceId: string, mode?: "claude" | "shell"): ManagedTerminal | undefined {

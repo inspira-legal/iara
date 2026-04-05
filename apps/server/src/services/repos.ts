@@ -1,12 +1,9 @@
-import { exec } from "node:child_process";
-import { promisify } from "node:util";
-
-const execAsync = promisify(exec);
 import * as fs from "node:fs";
 import * as path from "node:path";
 import type { AddRepoInput, CloneProgress, RepoInfo, SyncResult } from "@iara/contracts";
 import {
   GitOperationError,
+  execGitAsync,
   gitCloneWithProgress,
   gitFetch,
   gitLsRemote,
@@ -107,7 +104,7 @@ export async function addRepo(
         fs.cpSync(input.folderPath, dest, { recursive: true });
         if (!fs.existsSync(path.join(dest, ".git"))) {
           onProgress?.({ repo: input.name, status: "progress", message: "Initializing git..." });
-          await execAsync("git init", { cwd: dest });
+          await execGitAsync(["init"], { cwd: dest });
         }
         onProgress?.({ repo: input.name, status: "done" });
         break;
@@ -115,7 +112,7 @@ export async function addRepo(
       case "empty": {
         onProgress?.({ repo: input.name, status: "started", message: "Creating repo..." });
         fs.mkdirSync(dest, { recursive: true });
-        await execAsync("git init", { cwd: dest });
+        await execGitAsync(["init"], { cwd: dest });
         onProgress?.({ repo: input.name, status: "done" });
         break;
       }
@@ -201,14 +198,14 @@ export async function fetchRepos(
 export async function listLocalBranches(repoDir: string): Promise<string[]> {
   try {
     const [branchResult, worktreeResult, currentBranch] = await Promise.all([
-      execAsync("git branch --format='%(refname:short)'", { cwd: repoDir }),
-      execAsync("git worktree list --porcelain", { cwd: repoDir }),
+      execGitAsync(["branch", "--format=%(refname:short)"], { cwd: repoDir }),
+      execGitAsync(["worktree", "list", "--porcelain"], { cwd: repoDir }),
       getGitBranch(repoDir),
     ]);
 
     const output = branchResult.stdout.trim();
     if (!output) return [];
-    const allBranches = output.split("\n").map((b) => b.trim().replace(/^'|'$/g, ""));
+    const allBranches = output.split("\n").map((b) => b.trim());
 
     const checkedOut = new Set<string>();
     for (const line of worktreeResult.stdout.split("\n")) {
@@ -237,9 +234,7 @@ function resolveReposDir(appState: AppState, projectSlug: string, workspaceSlug?
 
 async function getGitBranch(repoPath: string): Promise<string> {
   try {
-    const { stdout } = await execAsync("git branch --show-current", {
-      cwd: repoPath,
-    });
+    const { stdout } = await execGitAsync(["branch", "--show-current"], { cwd: repoPath });
     return stdout.trim() || "HEAD";
   } catch {
     return "unknown";
@@ -248,9 +243,7 @@ async function getGitBranch(repoPath: string): Promise<string> {
 
 async function getGitDirtyCount(repoPath: string): Promise<number> {
   try {
-    const { stdout } = await execAsync("git status --porcelain", {
-      cwd: repoPath,
-    });
+    const { stdout } = await execGitAsync(["status", "--porcelain"], { cwd: repoPath });
     const trimmed = stdout.trim();
     return trimmed ? trimmed.split("\n").length : 0;
   } catch {
@@ -263,9 +256,10 @@ async function getGitAheadBehind(repoPath: string): Promise<{
   behind: number;
 }> {
   try {
-    const { stdout } = await execAsync("git rev-list --left-right --count HEAD...@{upstream}", {
-      cwd: repoPath,
-    });
+    const { stdout } = await execGitAsync(
+      ["rev-list", "--left-right", "--count", "HEAD...@{upstream}"],
+      { cwd: repoPath },
+    );
     const [ahead, behind] = stdout.trim().split("\t").map(Number);
     return { ahead: ahead || 0, behind: behind || 0 };
   } catch {

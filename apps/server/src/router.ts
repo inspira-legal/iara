@@ -39,9 +39,11 @@ export async function dispatch(raw: string): Promise<string> {
     return JSON.stringify(res);
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);
+    const code =
+      e instanceof Error && "code" in e && typeof e.code === "string" ? e.code : "INTERNAL_ERROR";
     const err: WsResponseError = {
       id,
-      error: { code: "INTERNAL_ERROR", message },
+      error: { code, message },
     };
     return JSON.stringify(err);
   }

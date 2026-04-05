@@ -9,6 +9,7 @@ interface TerminalEntry {
   sessionId: string | null;
   status: TerminalStatus;
   exitCode: number | null;
+  errorCode: string | null;
   hasData: boolean;
 }
 
@@ -30,6 +31,7 @@ const DEFAULT_ENTRY: TerminalEntry = {
   sessionId: null,
   status: "idle",
   exitCode: null,
+  errorCode: null,
   hasData: false,
 };
 
@@ -66,6 +68,7 @@ export const useTerminalStore = create<TerminalState & TerminalActions>((set, ge
           sessionId: result.sessionId,
           status: "active",
           exitCode: null,
+          errorCode: null,
           hasData: false,
         });
         return { entries: next };
@@ -74,9 +77,13 @@ export const useTerminalStore = create<TerminalState & TerminalActions>((set, ge
       invalidateSessions(workspaceId);
     } catch (err) {
       console.error("Failed to create terminal:", err);
+      const errorCode =
+        err instanceof Error && (err as any).code === "CLAUDE_NOT_AVAILABLE"
+          ? "CLAUDE_NOT_AVAILABLE"
+          : null;
       set((state) => {
         const next = new Map(state.entries);
-        next.set(workspaceId, { ...DEFAULT_ENTRY, status: "exited", exitCode: -1 });
+        next.set(workspaceId, { ...DEFAULT_ENTRY, status: "exited", exitCode: -1, errorCode });
         return { entries: next };
       });
     }

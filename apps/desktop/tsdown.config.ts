@@ -14,6 +14,7 @@ export default defineConfig([
     entry: ["src/main.ts"],
     clean: true,
     noExternal: (id) => id.startsWith("@iara/"),
+    inlineOnly: false,
   },
   {
     ...shared,

@@ -3,6 +3,7 @@ import { watch } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import waitOn from "wait-on";
+import { killProcessTree } from "@iara/shared/platform";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const desktopDir = resolve(__dirname, "..");
@@ -50,15 +51,12 @@ function scheduleRestart(source) {
     restarting = true;
 
     if (child) {
-      child.kill("SIGTERM");
-      const forceKill = setTimeout(() => {
-        try {
-          child?.kill("SIGKILL");
-        } catch {}
-      }, forcedShutdownTimeoutMs);
+      const cancel = child.pid
+        ? killProcessTree(child.pid, { graceMs: forcedShutdownTimeoutMs })
+        : () => {};
 
       child.once("exit", () => {
-        clearTimeout(forceKill);
+        cancel();
         restarting = false;
         startElectron();
       });

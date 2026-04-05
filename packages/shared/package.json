@@ -8,6 +8,10 @@
       "types": "./src/git.ts",
       "import": "./src/git.ts"
     },
+    "./fs": {
+      "types": "./src/fs.ts",
+      "import": "./src/fs.ts"
+    },
     "./env": {
       "types": "./src/env.ts",
       "import": "./src/env.ts"
@@ -16,10 +20,6 @@
       "types": "./src/json-file.ts",
       "import": "./src/json-file.ts"
     },
-    "./process": {
-      "types": "./src/process.ts",
-      "import": "./src/process.ts"
-    },
     "./paths": {
       "types": "./src/paths.ts",
       "import": "./src/paths.ts"
@@ -27,19 +27,26 @@
     "./names": {
       "types": "./src/names.ts",
       "import": "./src/names.ts"
+    },
+    "./platform": {
+      "types": "./src/platform.ts",
+      "import": "./src/platform.ts"
     }
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "test:coverage": "vitest run --coverage"
+    "test:coverage": "vitest run"
   },
   "dependencies": {
-    "simple-git": "^3.33.0",
+    "atomically": "^2.1.1",
+    "default-shell": "^2.2.0",
+    "which": "^6.0.1",
     "zod": "^4.3.6"
   },
   "devDependencies": {
     "@types/node": "catalog:",
+    "@types/which": "^3.0.4",
     "typescript": "catalog:",
     "vitest": "catalog:"
   }

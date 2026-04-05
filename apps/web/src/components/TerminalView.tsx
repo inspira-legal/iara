@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, type RefCallback } from "react";
 import "@xterm/xterm/css/xterm.css";
 import { ConnectedTerminal, destroyXTermInstance } from "~/components/ConnectedTerminal";
+import { ClaudeUnavailableOverlay } from "~/components/ClaudeUnavailableOverlay";
 import { useTerminalStore } from "~/stores/terminal";
 import { RotateCw } from "lucide-react";
 
@@ -13,7 +14,7 @@ export function TerminalView({ workspaceId, resumeSessionId }: TerminalViewProps
   const entry = useTerminalStore((s) => s.getEntry(workspaceId));
   const createTerminal = useTerminalStore((s) => s.create);
   const restartTerminal = useTerminalStore((s) => s.restart);
-  const { terminalId, status, exitCode, hasData } = entry;
+  const { terminalId, status, exitCode, errorCode, hasData } = entry;
   const [timedOut, setTimedOut] = useState(false);
 
   useEffect(() => {
@@ -46,11 +47,13 @@ export function TerminalView({ workspaceId, resumeSessionId }: TerminalViewProps
 
   const showLoading = !timedOut && (status === "connecting" || (status === "active" && !hasData));
   const showStartupError = timedOut && !hasData && status !== "exited";
+  const isClaudeUnavailable = errorCode === "CLAUDE_NOT_AVAILABLE";
 
   return (
     <div className="relative flex flex-1 flex-col overflow-hidden">
       <ConnectedTerminal terminalId={terminalId} instancePrefix="claude" className="p-3" />
-      {status === "exited" && (
+      {status === "exited" && isClaudeUnavailable && <ClaudeUnavailableOverlay />}
+      {status === "exited" && !isClaudeUnavailable && (
         <div className="absolute inset-0 flex items-center justify-center bg-zinc-950/80">
           <div className="flex flex-col items-center gap-3 text-zinc-400" role="alert">
             <p className="text-sm">Claude exited{exitCode != null ? ` (code ${exitCode})` : ""}</p>

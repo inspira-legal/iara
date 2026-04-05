@@ -4,6 +4,7 @@ import type { SessionWatcher } from "../services/session-watcher.js";
 import type { TerminalManager } from "../services/terminal.js";
 import type { AppState } from "../services/state.js";
 import type { EnvWatcher } from "../services/env-watcher.js";
+import type { GitWatcher } from "../services/git-watcher.js";
 import type { ProjectsWatcher } from "../services/watcher.js";
 import { registerAppHandlers } from "./app.js";
 import { registerScriptHandlers } from "./scripts.js";
@@ -27,6 +28,7 @@ export type { PushFn };
 export interface HandlerDeps {
   appState: AppState;
   watcher: ProjectsWatcher;
+  gitWatcher: GitWatcher;
   scriptSupervisor: ScriptSupervisor;
   notificationService: NotificationService;
   terminalManager: TerminalManager;
@@ -46,8 +48,26 @@ export function registerAllHandlers(deps: HandlerDeps): void {
   });
 
   registerAppHandlers(deps.appState);
-  registerProjectHandlers(deps.appState, deps.watcher, deps.pushFn);
-  registerWorkspaceHandlers(deps.appState, deps.watcher, deps.sessionWatcher, deps.pushFn);
+  registerProjectHandlers(
+    deps.appState,
+    deps.watcher,
+    deps.envWatcher,
+    deps.terminalManager,
+    deps.scriptSupervisor,
+    deps.gitWatcher,
+    deps.sessionWatcher,
+    deps.pushFn,
+  );
+  registerWorkspaceHandlers(
+    deps.appState,
+    deps.watcher,
+    deps.envWatcher,
+    deps.terminalManager,
+    deps.scriptSupervisor,
+    deps.gitWatcher,
+    deps.sessionWatcher,
+    deps.pushFn,
+  );
   registerSessionHandlers(deps.appState);
   registerPromptHandlers();
   registerScriptHandlers(deps.appState, deps.scriptSupervisor, deps.pushFn);

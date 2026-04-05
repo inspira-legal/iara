@@ -1,5 +1,6 @@
 import { execSync, spawn, type ChildProcess } from "node:child_process";
 import { resolve } from "node:path";
+import { killProcessTree } from "@iara/shared/platform";
 
 const root = resolve(import.meta.dirname, "..");
 const port = Number(process.env.PORT ?? 5173);
@@ -12,6 +13,7 @@ execSync("turbo run build --filter='./packages/*'", {
 
 const env = { ...process.env, PORT: String(port), ELECTRON_RENDERER_PORT: String(port) };
 const children: ChildProcess[] = [];
+const cancelFns: (() => void)[] = [];
 let shuttingDown = false;
 
 function prefix(name: string, data: Buffer) {
@@ -22,7 +24,11 @@ function prefix(name: string, data: Buffer) {
 }
 
 function spawnDev(name: string, cmd: string, args: string[], cwd: string): ChildProcess {
-  const child = spawn(cmd, args, { cwd, stdio: ["ignore", "pipe", "pipe"], env });
+  const child = spawn(cmd, args, {
+    cwd,
+    stdio: ["ignore", "pipe", "pipe"],
+    env,
+  });
   child.stdout?.on("data", (data: Buffer) => prefix(name, data));
   child.stderr?.on("data", (data: Buffer) => prefix(name, data));
   child.on("exit", (code) => {
@@ -37,19 +43,12 @@ function shutdown() {
   if (shuttingDown) return;
   shuttingDown = true;
   for (const child of children) {
-    try {
-      child.kill("SIGTERM");
-    } catch {}
+    if (child.pid) cancelFns.push(killProcessTree(child.pid, { graceMs: 2000 }));
   }
-  // Force kill after 2s
   setTimeout(() => {
-    for (const child of children) {
-      try {
-        child.kill("SIGKILL");
-      } catch {}
-    }
+    for (const cancel of cancelFns) cancel();
     process.exit(0);
-  }, 2000);
+  }, 2500);
 }
 
 process.on("SIGTERM", shutdown);

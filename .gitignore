@@ -14,5 +14,7 @@ packages/*/dist
 .idea/
 .vitest-*
 **/routeTree.gen.ts
-release/
+/release/
 coverage/
+.staging/
+apps/desktop/resources/wsl-runtime/

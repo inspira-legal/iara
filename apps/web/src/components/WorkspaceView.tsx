@@ -9,6 +9,7 @@ import { TerminalView } from "./TerminalView";
 import { SessionList } from "./SessionList";
 import { ClaudeMdView } from "./ClaudeMdView";
 import { GitSyncButton } from "./GitSyncButton";
+import { ClaudeUnavailableBanner } from "./ClaudeUnavailableBanner";
 import { Button } from "./ui/Button";
 
 const FETCH_INTERVAL_MS = 5 * 60 * 1000;
@@ -71,8 +72,11 @@ export function WorkspaceView({ project, workspace }: WorkspaceViewProps) {
     }));
   };
 
+  const claudeAvailable = useAppStore((s) => s.capabilities.claude);
+
   return (
     <div className="flex h-full flex-col">
+      {!claudeAvailable && <ClaudeUnavailableBanner />}
       <div className="flex h-12 items-center border-b border-zinc-800 px-4">
         <div className="flex items-center gap-3">
           {hasTerminal && (

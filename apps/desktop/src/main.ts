@@ -1,6 +1,4 @@
-import * as crypto from "node:crypto";
-import * as net from "node:net";
-import * as os from "node:os";
+import * as fs from "node:fs";
 import * as path from "node:path";
 import { spawn, type ChildProcess } from "node:child_process";
 import {
@@ -16,12 +14,30 @@ import {
 import WebSocket from "ws";
 import { syncShellEnvironment } from "./services/shell-env.js";
 import { BrowserPanel } from "./services/browser-panel.js";
+import {
+  isWslAvailable,
+  toWslPath,
+  loadWindowState,
+  saveWindowState,
+  reservePort,
+  generateToken,
+  getMimeType,
+} from "./utils.js";
+import { isWindows, getStateDir } from "@iara/shared/platform";
 
 syncShellEnvironment();
 
 const isDevelopment = Boolean(process.env.VITE_DEV_SERVER_URL);
 const APP_SCHEME = "iara";
-const stateDir = path.join(os.homedir(), ".config", "iara");
+
+if (isWindows) {
+  app.setAppUserModelId("com.iara.desktop");
+}
+
+/** Whether the server should run inside WSL. */
+const useWsl = isWindows && isWslAvailable();
+
+const stateDir = getStateDir("iara");
 
 let serverChild: ChildProcess | null = null;
 let serverPort = 0;
@@ -34,6 +50,15 @@ let osNotificationsEnabled = true;
 
 // Dev: listen for "restart-server" on stdin from dev-electron.mjs.
 // Kills only the server child — Electron window stays open.
+/** Kill a child process. When running via wsl.exe, killing the wsl.exe process also kills the child inside WSL. */
+function killChild(child: ChildProcess, signal: "SIGTERM" | "SIGKILL" = "SIGTERM"): void {
+  try {
+    child.kill(signal);
+  } catch {
+    // already dead
+  }
+}
+
 if (isDevelopment && process.stdin.readable) {
   process.stdin.setEncoding("utf-8");
   process.stdin.on("data", (data: string) => {
@@ -42,16 +67,12 @@ if (isDevelopment && process.stdin.readable) {
       const child = serverChild;
       serverChild = null;
       child.removeAllListeners("exit");
-      child.kill("SIGTERM");
+      killChild(child, "SIGTERM");
       child.once("exit", () => {
         restartAttempt = 0;
         spawnServer();
       });
-      setTimeout(() => {
-        try {
-          child.kill("SIGKILL");
-        } catch {}
-      }, 2000);
+      setTimeout(() => killChild(child, "SIGKILL"), 2000);
     }
   });
 }
@@ -79,69 +100,7 @@ protocol.registerSchemesAsPrivileged([
   },
 ]);
 
-// ---------------------------------------------------------------------------
-// Window state persistence (position, size, maximized)
-// ---------------------------------------------------------------------------
-
-const fs = require("node:fs") as typeof import("node:fs");
 const windowStatePath = path.join(stateDir, "window-state.json");
-
-interface WindowState {
-  x?: number;
-  y?: number;
-  width: number;
-  height: number;
-  maximized?: boolean;
-  zoomLevel?: number;
-}
-
-function loadWindowState(): WindowState {
-  try {
-    const data = fs.readFileSync(windowStatePath, "utf-8");
-    return JSON.parse(data) as WindowState;
-  } catch {
-    return { width: 1280, height: 800 };
-  }
-}
-
-function saveWindowState(win: BrowserWindow): void {
-  const maximized = win.isMaximized();
-  const bounds = maximized ? ((win as any).__restoreBounds ?? win.getBounds()) : win.getBounds();
-  const state: WindowState = {
-    x: bounds.x,
-    y: bounds.y,
-    width: bounds.width,
-    height: bounds.height,
-    maximized,
-    zoomLevel: win.webContents.getZoomLevel(),
-  };
-  try {
-    fs.mkdirSync(path.dirname(windowStatePath), { recursive: true });
-    fs.writeFileSync(windowStatePath, JSON.stringify(state));
-  } catch {
-    // best-effort
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Port & Token
-// ---------------------------------------------------------------------------
-
-function reservePort(): Promise<number> {
-  return new Promise((resolve, reject) => {
-    const srv = net.createServer();
-    srv.listen(0, "127.0.0.1", () => {
-      const addr = srv.address();
-      const port = typeof addr === "object" && addr ? addr.port : 0;
-      srv.close(() => resolve(port));
-    });
-    srv.on("error", reject);
-  });
-}
-
-function generateToken(): string {
-  return crypto.randomBytes(24).toString("hex");
-}
 
 // ---------------------------------------------------------------------------
 // Server child process
@@ -150,7 +109,7 @@ function generateToken(): string {
 function spawnServer(): void {
   const serverEntry = isDevelopment
     ? path.resolve(__dirname, "../../server/dist/main.mjs")
-    : path.join(process.resourcesPath, "apps", "server", "dist", "main.mjs");
+    : path.join(process.resourcesPath, "server", "dist", "main.mjs");
 
   const env: Record<string, string | undefined> = {
     ...process.env,
@@ -161,15 +120,41 @@ function spawnServer(): void {
   };
 
   if (!isDevelopment) {
-    env.IARA_WEB_DIR = path.join(process.resourcesPath, "web");
-    const serverModules = path.join(process.resourcesPath, "apps", "server", "node_modules");
-    env.NODE_PATH = serverModules;
+    env.IARA_WEB_DIR = useWsl
+      ? toWslPath(path.join(process.resourcesPath, "web"))
+      : path.join(process.resourcesPath, "web");
+    const serverModules = path.join(process.resourcesPath, "server", "node_modules");
+    env.NODE_PATH = useWsl ? toWslPath(serverModules) : serverModules;
   }
 
-  const child = spawn(process.execPath, [serverEntry], {
-    env,
-    stdio: isDevelopment ? "inherit" : ["ignore", "pipe", "pipe"],
-  });
+  let child: ChildProcess;
+
+  if (useWsl) {
+    // Spawn server inside WSL using the bundled Linux Node.js binary.
+    // wsl.exe doesn't inherit Windows env vars — pass them via `env KEY=VAL` prefix.
+    const wslNode = isDevelopment
+      ? toWslPath(path.resolve(__dirname, "../../desktop/resources/wsl-runtime/node/bin/node"))
+      : toWslPath(path.join(process.resourcesPath, "wsl-runtime", "node"));
+    const wslServerEntry = toWslPath(serverEntry);
+
+    const wslEnv: Record<string, string> = {
+      IARA_PORT: String(serverPort),
+      IARA_AUTH_TOKEN: authToken,
+      ...(env.NODE_PATH ? { NODE_PATH: env.NODE_PATH } : {}),
+    };
+    if (env.IARA_WEB_DIR) wslEnv.IARA_WEB_DIR = env.IARA_WEB_DIR;
+
+    // Build: wsl.exe -e env KEY1=VAL1 KEY2=VAL2 /path/to/node /path/to/server.mjs
+    const envArgs = Object.entries(wslEnv).map(([k, v]) => `${k}=${v}`);
+    child = spawn("wsl.exe", ["-e", "env", ...envArgs, wslNode, wslServerEntry], {
+      stdio: isDevelopment ? "inherit" : ["ignore", "pipe", "pipe"],
+    });
+  } else {
+    child = spawn(process.execPath, [serverEntry], {
+      env,
+      stdio: isDevelopment ? "inherit" : ["ignore", "pipe", "pipe"],
+    });
+  }
 
   serverChild = child;
 
@@ -288,7 +273,7 @@ function connectWs(): void {
 // ---------------------------------------------------------------------------
 
 function createWindow(): BrowserWindow {
-  const saved = loadWindowState();
+  const saved = loadWindowState(windowStatePath);
 
   const win = new BrowserWindow({
     ...(saved.x != null && saved.y != null ? { x: saved.x, y: saved.y } : {}),
@@ -319,7 +304,7 @@ function createWindow(): BrowserWindow {
   let saveTimer: ReturnType<typeof setTimeout> | null = null;
   const debouncedSave = () => {
     if (saveTimer) clearTimeout(saveTimer);
-    saveTimer = setTimeout(() => saveWindowState(win), 500);
+    saveTimer = setTimeout(() => saveWindowState(win, windowStatePath), 500);
   };
 
   (win as any).__restoreBounds = win.getBounds();
@@ -335,7 +320,7 @@ function createWindow(): BrowserWindow {
   win.on("unmaximize", debouncedSave);
   win.on("close", () => {
     if (saveTimer) clearTimeout(saveTimer);
-    saveWindowState(win);
+    saveWindowState(win, windowStatePath);
   });
 
   browserPanel.attach(win);
@@ -447,22 +432,6 @@ function registerCustomProtocol(): void {
   });
 }
 
-function getMimeType(filePath: string): string {
-  const ext = path.extname(filePath).toLowerCase();
-  const types: Record<string, string> = {
-    ".html": "text/html",
-    ".js": "application/javascript",
-    ".css": "text/css",
-    ".json": "application/json",
-    ".png": "image/png",
-    ".svg": "image/svg+xml",
-    ".ico": "image/x-icon",
-    ".woff": "font/woff",
-    ".woff2": "font/woff2",
-  };
-  return types[ext] ?? "application/octet-stream";
-}
-
 // ---------------------------------------------------------------------------
 // IPC handlers (browser panel + dialogs + ws url)
 // ---------------------------------------------------------------------------
@@ -529,6 +498,16 @@ function registerLocalIpcHandlers(): void {
 // ---------------------------------------------------------------------------
 
 app.whenReady().then(async () => {
+  // On Windows, WSL is required for the server
+  if (isWindows && !useWsl) {
+    dialog.showErrorBox(
+      "WSL Required",
+      "iara requires Windows Subsystem for Linux (WSL).\n\nInstall it by running:\n  wsl --install\n\nThen restart iara.",
+    );
+    app.quit();
+    return;
+  }
+
   if (!isDevelopment) {
     registerCustomProtocol();
   }
@@ -591,20 +570,16 @@ app.on("before-quit", (e) => {
   const child = serverChild;
   serverChild = null;
   child.removeAllListeners();
-  child.kill("SIGTERM");
+  killChild(child, "SIGTERM");
 
-  // Force kill the entire process tree if still alive after 2s
+  // Force kill if still alive after 2s
   setTimeout(() => {
     try {
       if (child.pid) process.kill(-child.pid, "SIGKILL");
     } catch {
       /* already dead */
     }
-    try {
-      child.kill("SIGKILL");
-    } catch {
-      /* already dead */
-    }
+    killChild(child, "SIGKILL");
     app.quit();
   }, 2000);
 });

@@ -24,29 +24,35 @@ const jsonlEntrySchema = z
   .passthrough();
 
 export function listSessions(repoDirs: string[]): SessionInfo[] {
-  const claudeDir = getClaudeProjectsDir();
-  if (!claudeDir || !fs.existsSync(claudeDir)) return [];
+  const claudeDirs = getClaudeProjectsDirs();
+  if (claudeDirs.length === 0) return [];
 
   const seen = new Set<string>();
   const sessions: SessionInfo[] = [];
 
   for (const dir of repoDirs) {
     const hash = computeProjectHash(dir);
-    const projectSessionDir = path.join(claudeDir, hash);
 
-    if (!fs.existsSync(projectSessionDir)) continue;
+    for (const claudeDir of claudeDirs) {
+      const projectSessionDir = path.join(claudeDir, hash);
 
-    const files = fs.readdirSync(projectSessionDir).filter((f) => f.endsWith(".jsonl"));
+      let files: string[];
+      try {
+        files = fs.readdirSync(projectSessionDir).filter((f) => f.endsWith(".jsonl"));
+      } catch {
+        continue;
+      }
 
-    for (const file of files) {
-      const id = path.basename(file, ".jsonl");
-      if (seen.has(id)) continue;
-      seen.add(id);
+      for (const file of files) {
+        const id = path.basename(file, ".jsonl");
+        if (seen.has(id)) continue;
+        seen.add(id);
 
-      const filePath = path.join(projectSessionDir, file);
-      const meta = getSessionMetadata(filePath);
-      if (meta) {
-        sessions.push({ id, filePath, cwd: dir, ...meta });
+        const filePath = path.join(projectSessionDir, file);
+        const meta = getSessionMetadata(filePath);
+        if (meta) {
+          sessions.push({ id, filePath, cwd: dir, ...meta });
+        }
       }
     }
   }
@@ -101,13 +107,17 @@ function getSessionMetadata(
 }
 
 export function computeProjectHash(dir: string): string {
-  // Claude Code uses the cwd path with "/" replaced by "-"
+  // Claude Code uses the cwd path with "/" replaced by "-".
   const resolved = path.resolve(dir);
-  return resolved.replaceAll("/", "-").replaceAll(".", "-");
+  return resolved
+    .replaceAll("\\", "-")
+    .replaceAll("/", "-")
+    .replaceAll(":", "-")
+    .replaceAll(".", "-");
 }
 
-function getClaudeProjectsDir(): string | null {
-  const home = os.homedir();
-  const claudeDir = path.join(home, ".claude", "projects");
-  return fs.existsSync(claudeDir) ? claudeDir : null;
+/** Returns Claude session directories to search. */
+function getClaudeProjectsDirs(): string[] {
+  const dir = path.join(os.homedir(), ".claude", "projects");
+  return fs.existsSync(dir) ? [dir] : [];
 }

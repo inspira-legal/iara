@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import { renderHook } from "@testing-library/react";
 import type { ScriptsConfig, ScriptStatus } from "@iara/contracts";
 
 // ---------------------------------------------------------------------------
@@ -17,7 +18,7 @@ vi.mock("~/lib/ws-transport", () => ({
   },
 }));
 
-import { useScriptsStore } from "./scripts";
+import { useScriptsStore, useIsDiscovering, useDiscoveryError } from "./scripts";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -52,6 +53,8 @@ const INITIAL_STATE = {
   currentWorkspaceId: null,
   loading: false,
   discoveringProjects: new Set<string>(),
+  discoveryErrors: new Map<string, string>(),
+  pendingStatuses: [] as ScriptStatus[],
   logs: new Map<string, string[]>(),
   selectedLog: null,
   activeTab: null,
@@ -280,6 +283,33 @@ describe("useScriptsStore", () => {
       expect(useScriptsStore.getState().discoveringProjects.has("proj1")).toBe(false);
     });
 
+    it("sets discoveryError with Error message on failure", async () => {
+      mockRequest.mockRejectedValueOnce(new Error("discovery failed"));
+
+      await useScriptsStore.getState().discover("proj1");
+
+      expect(useScriptsStore.getState().discoveryErrors.get("proj1")).toBe("discovery failed");
+    });
+
+    it("sets discoveryError with string coercion for non-Error rejection", async () => {
+      mockRequest.mockRejectedValueOnce("string error");
+
+      await useScriptsStore.getState().discover("proj1");
+
+      expect(useScriptsStore.getState().discoveryErrors.get("proj1")).toBe("string error");
+    });
+
+    it("clears previous discoveryError when re-discovering", async () => {
+      useScriptsStore.setState({
+        discoveryErrors: new Map([["proj1", "old error"]]),
+      });
+      mockRequest.mockResolvedValueOnce(undefined);
+
+      await useScriptsStore.getState().discover("proj1");
+
+      expect(useScriptsStore.getState().discoveryErrors.has("proj1")).toBe(false);
+    });
+
     it("clears config, logs, and selectedLog when discovering current project", async () => {
       const config = makeConfig({ statuses: [makeScriptStatus()] });
       const logs = new Map<string, string[]>();
@@ -502,6 +532,245 @@ describe("useScriptsStore", () => {
       useScriptsStore.getState().subscribePush();
 
       expect(useScriptsStore.getState().discoveringProjects.has("proj1")).toBe(false);
+    });
+
+    it("scripts:reload clears discoveryErrors for the project", () => {
+      useScriptsStore.setState({
+        discoveringProjects: new Set(["proj1"]),
+        discoveryErrors: new Map([["proj1", "some error"]]),
+        currentWorkspaceId: "proj1/default",
+      });
+
+      // biome-ignore lint: test mock
+      mockSubscribe.mockImplementation((event: string, cb: (...args: any[]) => void) => {
+        if (event === "scripts:reload") {
+          cb({ projectId: "proj1" });
+        }
+        return vi.fn();
+      });
+
+      useScriptsStore.getState().subscribePush();
+
+      expect(useScriptsStore.getState().discoveryErrors.has("proj1")).toBe(false);
+    });
+
+    it("scripts:discovering adds projectId to discoveringProjects", () => {
+      useScriptsStore.setState({ discoveringProjects: new Set() });
+
+      // biome-ignore lint: test mock
+      mockSubscribe.mockImplementation((event: string, cb: (...args: any[]) => void) => {
+        if (event === "scripts:discovering") {
+          cb({ projectId: "proj1" });
+        }
+        return vi.fn();
+      });
+
+      useScriptsStore.getState().subscribePush();
+
+      expect(useScriptsStore.getState().discoveringProjects.has("proj1")).toBe(true);
+    });
+
+    it("scripts:status queues as pending when config is null", () => {
+      useScriptsStore.setState({ config: null, currentWorkspaceId: "proj1/ws1" });
+
+      const status = makeScriptStatus({ projectId: "proj1", workspace: "ws1" });
+
+      // biome-ignore lint: test mock
+      mockSubscribe.mockImplementation((event: string, cb: (...args: any[]) => void) => {
+        if (event === "scripts:status") {
+          cb({ service: "api", script: "dev", status });
+        }
+        return vi.fn();
+      });
+
+      useScriptsStore.getState().subscribePush();
+
+      expect(useScriptsStore.getState().pendingStatuses).toHaveLength(1);
+      expect(useScriptsStore.getState().pendingStatuses[0]).toEqual(status);
+    });
+  });
+
+  // -----------------------------------------------------------------------
+  // fetchLogs
+  // -----------------------------------------------------------------------
+
+  describe("fetchLogs()", () => {
+    it("fetches and stores log lines", async () => {
+      mockRequest.mockResolvedValueOnce(["line1", "line2"]);
+
+      await useScriptsStore.getState().fetchLogs("8080:api:dev");
+
+      expect(mockRequest).toHaveBeenCalledWith("scripts.logs", {
+        scriptId: "8080:api:dev",
+        limit: 200,
+      });
+      expect(useScriptsStore.getState().logs.get("8080:api:dev")).toEqual(["line1", "line2"]);
+    });
+
+    it("silently ignores transport errors", async () => {
+      mockRequest.mockRejectedValueOnce(new Error("not ready"));
+
+      await useScriptsStore.getState().fetchLogs("8080:api:dev");
+
+      expect(useScriptsStore.getState().logs.has("8080:api:dev")).toBe(false);
+    });
+  });
+
+  // -----------------------------------------------------------------------
+  // Derived selectors (React hooks)
+  // -----------------------------------------------------------------------
+
+  describe("useIsDiscovering()", () => {
+    it("returns true when current project is being discovered", () => {
+      useScriptsStore.setState({
+        currentWorkspaceId: "proj1/ws1",
+        discoveringProjects: new Set(["proj1"]),
+      });
+
+      const { result } = renderHook(() => useIsDiscovering());
+      expect(result.current).toBe(true);
+    });
+
+    it("returns false when current project is not being discovered", () => {
+      useScriptsStore.setState({
+        currentWorkspaceId: "proj1/ws1",
+        discoveringProjects: new Set(["proj2"]),
+      });
+
+      const { result } = renderHook(() => useIsDiscovering());
+      expect(result.current).toBe(false);
+    });
+
+    it("returns false when no workspace is selected", () => {
+      useScriptsStore.setState({
+        currentWorkspaceId: null,
+        discoveringProjects: new Set(["proj1"]),
+      });
+
+      const { result } = renderHook(() => useIsDiscovering());
+      expect(result.current).toBe(false);
+    });
+
+    it("returns false when discovering set is empty", () => {
+      useScriptsStore.setState({
+        currentWorkspaceId: "proj1/ws1",
+        discoveringProjects: new Set(),
+      });
+
+      const { result } = renderHook(() => useIsDiscovering());
+      expect(result.current).toBe(false);
+    });
+  });
+
+  describe("useDiscoveryError()", () => {
+    it("returns error string for current project", () => {
+      useScriptsStore.setState({
+        currentWorkspaceId: "proj1/ws1",
+        discoveryErrors: new Map([["proj1", "something went wrong"]]),
+      });
+
+      const { result } = renderHook(() => useDiscoveryError());
+      expect(result.current).toBe("something went wrong");
+    });
+
+    it("returns null when no error exists for current project", () => {
+      useScriptsStore.setState({
+        currentWorkspaceId: "proj1/ws1",
+        discoveryErrors: new Map(),
+      });
+
+      const { result } = renderHook(() => useDiscoveryError());
+      expect(result.current).toBeNull();
+    });
+
+    it("returns null when no workspace is selected", () => {
+      useScriptsStore.setState({
+        currentWorkspaceId: null,
+        discoveryErrors: new Map([["proj1", "error"]]),
+      });
+
+      const { result } = renderHook(() => useDiscoveryError());
+      expect(result.current).toBeNull();
+    });
+
+    it("returns error only for the matching project", () => {
+      useScriptsStore.setState({
+        currentWorkspaceId: "proj1/ws1",
+        discoveryErrors: new Map([["proj2", "wrong project error"]]),
+      });
+
+      const { result } = renderHook(() => useDiscoveryError());
+      expect(result.current).toBeNull();
+    });
+  });
+
+  // -----------------------------------------------------------------------
+  // loadConfig — pending status application
+  // -----------------------------------------------------------------------
+
+  describe("loadConfig() with pending statuses", () => {
+    it("applies pending statuses that match the workspace on config load", async () => {
+      const pendingStatus = makeScriptStatus({
+        scriptId: "8080:api:dev",
+        projectId: "proj1",
+        workspace: "ws1",
+        health: "running",
+        pid: 1234,
+      });
+      useScriptsStore.setState({ pendingStatuses: [pendingStatus] });
+
+      const config = makeConfig({
+        statuses: [
+          makeScriptStatus({
+            scriptId: "8080:api:dev",
+            health: "stopped",
+          }),
+        ],
+      });
+      mockRequest.mockResolvedValueOnce(config);
+
+      await useScriptsStore.getState().loadConfig("proj1/ws1");
+
+      const statuses = useScriptsStore.getState().config!.statuses;
+      expect(statuses[0]!.health).toBe("running");
+      expect(statuses[0]!.pid).toBe(1234);
+      expect(useScriptsStore.getState().pendingStatuses).toHaveLength(0);
+    });
+
+    it("ignores pending statuses from a different workspace", async () => {
+      const pendingStatus = makeScriptStatus({
+        scriptId: "9090:web:dev",
+        projectId: "proj2",
+        workspace: "ws2",
+        health: "running",
+      });
+      useScriptsStore.setState({ pendingStatuses: [pendingStatus] });
+
+      const config = makeConfig({ statuses: [] });
+      mockRequest.mockResolvedValueOnce(config);
+
+      await useScriptsStore.getState().loadConfig("proj1/ws1");
+
+      expect(useScriptsStore.getState().config!.statuses).toHaveLength(0);
+      expect(useScriptsStore.getState().pendingStatuses).toHaveLength(0);
+    });
+
+    it("adds pending status as new entry if not found in config", async () => {
+      const pendingStatus = makeScriptStatus({
+        scriptId: "8080:api:dev",
+        projectId: "proj1",
+        workspace: "ws1",
+        health: "running",
+      });
+      useScriptsStore.setState({ pendingStatuses: [pendingStatus] });
+
+      const config = makeConfig({ statuses: [] });
+      mockRequest.mockResolvedValueOnce(config);
+
+      await useScriptsStore.getState().loadConfig("proj1/ws1");
+
+      expect(useScriptsStore.getState().config!.statuses).toHaveLength(1);
+      expect(useScriptsStore.getState().config!.statuses[0]!.scriptId).toBe("8080:api:dev");
     });
   });
 });

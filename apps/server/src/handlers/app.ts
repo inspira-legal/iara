@@ -1,4 +1,5 @@
 import type { RepoInfo, SessionInfo } from "@iara/contracts";
+import { commandExists } from "@iara/shared/platform";
 import type { AppState } from "../services/state.js";
 import { registerMethod } from "../router.js";
 import { getRepoInfo } from "../services/repos.js";
@@ -13,6 +14,11 @@ export function registerAppHandlers(appState: AppState): void {
       platform: process.platform,
       isDev,
     };
+  });
+
+  registerMethod("app.capabilities", async () => {
+    const claude = commandExists("claude");
+    return { claude, platform: process.platform };
   });
 
   registerMethod("state.init", async () => {

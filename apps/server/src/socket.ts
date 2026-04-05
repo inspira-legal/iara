@@ -119,7 +119,7 @@ export class SocketServer {
 
 function getDefaultSocketPath(): string {
   if (process.platform === "win32") {
-    return "\\\\.\\pipe\\iara-server";
+    return String.raw`\\.\pipe\iara-server-${process.pid}`;
   }
   return `/tmp/iara-server-${process.getuid?.() ?? process.pid}.sock`;
 }

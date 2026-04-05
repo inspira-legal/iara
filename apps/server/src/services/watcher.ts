@@ -129,9 +129,9 @@ export class ProjectsWatcher {
     }
   }
 
-  stop(): void {
+  async stop(): Promise<void> {
     if (this.debounceTimer) clearTimeout(this.debounceTimer);
-    void this.subscription?.unsubscribe();
+    await this.subscription?.unsubscribe();
     this.subscription = null;
   }
 }

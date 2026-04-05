@@ -27,8 +27,11 @@
     "test:coverage": "turbo run test:coverage",
     "fmt": "oxfmt",
     "fmt:check": "oxfmt --check",
-    "smoke-test": "turbo run smoke-test --filter=@iara/desktop",
-    "package": "bun build:desktop && cd apps/desktop && npx electron-builder --config electron-builder.yml",
+    "electron-smoke": "node scripts/electron-smoke.mjs",
+    "release-smoke": "bun scripts/release-smoke.ts",
+    "release:linux": "bun scripts/release/index.ts --platform linux",
+    "release:mac": "bun scripts/release/index.ts --platform mac",
+    "release:win": "bun scripts/release/index.ts --platform win",
     "package:server": "bun build:server",
     "postinstall": "npx electron-rebuild -v 40.6.0 -m apps/server -o node-pty",
     "knip": "knip",
@@ -40,7 +43,8 @@
     "@dnd-kit/sortable": "^10.0.0",
     "@dnd-kit/utilities": "^3.2.2",
     "@xterm/addon-webgl": "^0.19.0",
-    "class-variance-authority": "^0.7.1"
+    "class-variance-authority": "^0.7.1",
+    "tree-kill": "^1.2.2"
   },
   "devDependencies": {
     "@types/node": "catalog:",

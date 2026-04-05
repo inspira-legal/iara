@@ -18,6 +18,8 @@ interface CreationStore {
   addListener: (cb: (entry: CreationEntry) => void) => () => void;
 }
 
+const cleanupTimers = new Map<string, ReturnType<typeof setTimeout>>();
+
 export const useCreationStore = create<CreationStore>((set, get) => ({
   entries: new Map(),
   onProgressCallbacks: new Set(),
@@ -59,11 +61,17 @@ transport.subscribe("creation:progress", (params: CreationProgress) => {
 
   // Clean up completed/errored entries after a delay
   if (params.stage === "done" || params.stage === "error") {
-    setTimeout(() => {
-      const current = useCreationStore.getState();
-      const updated = new Map(current.entries);
-      updated.delete(requestId);
-      useCreationStore.setState({ entries: updated });
-    }, 15_000);
+    const prev = cleanupTimers.get(requestId);
+    if (prev) clearTimeout(prev);
+    cleanupTimers.set(
+      requestId,
+      setTimeout(() => {
+        cleanupTimers.delete(requestId);
+        const current = useCreationStore.getState();
+        const updated = new Map(current.entries);
+        updated.delete(requestId);
+        useCreationStore.setState({ entries: updated });
+      }, 15_000),
+    );
   }
 });

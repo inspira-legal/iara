@@ -42,13 +42,15 @@
 
 ```bash
 bun install              # Install all deps
-bun dev:desktop          # Launch Electron + Server + Vite dev (hot-reload + hot-restart)
-bun build:desktop        # Production build (contracts -> server -> web -> desktop)
-bun package              # Build + package AppImage/DMG/NSIS into release/
-bun typecheck            # TypeScript check all packages
-bun lint                 # oxlint
-bun fmt                  # oxfmt (auto-fix)
-bun fmt:check            # oxfmt (check only)
+bun run dev:desktop      # Launch Electron + Server + Vite dev (hot-reload + hot-restart)
+bun run build:desktop    # Production build (contracts -> server -> web -> desktop)
+bun run release:linux    # Build + package Linux AppImage into release/
+bun run release:mac      # Build + package macOS DMG into release/
+bun run release:win      # Build + package Windows NSIS into release/
+bun run typecheck        # TypeScript check all packages
+bun run lint             # oxlint
+bun run fmt              # oxfmt (auto-fix)
+bun run fmt:check        # oxfmt (check only)
 bun run test             # vitest all packages
 bun run test:coverage    # vitest with coverage
 bun run smoke-test       # Electron smoke test

@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import type {
+  AppCapabilities,
   CreateProjectInput,
   UpdateProjectInput,
   CreateWorkspaceInput,
@@ -42,6 +43,7 @@ interface AppState {
   settings: Record<string, string>;
   repoInfo: Record<string, RepoInfo[]>;
   sessions: Record<string, SessionInfo[]>;
+  capabilities: AppCapabilities;
   selectedWorkspaceId: string | null;
   initialized: boolean;
 }
@@ -132,6 +134,7 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
   settings: cached?.settings ?? {},
   repoInfo: {},
   sessions: {},
+  capabilities: { claude: true, platform: "linux" as NodeJS.Platform },
   selectedWorkspaceId: cached?.workspaceId ?? null,
   initialized: false,
 
@@ -140,7 +143,13 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
   // ---------------------------------------------------------------------------
 
   init: async () => {
-    const { projects, settings, repoInfo, sessions } = await transport.request("state.init", {});
+    const [stateResult, capabilities] = await Promise.all([
+      transport.request("state.init", {}),
+      transport
+        .request("app.capabilities", {})
+        .catch((): AppCapabilities => ({ claude: true, platform: "linux" })),
+    ]);
+    const { projects, settings, repoInfo, sessions } = stateResult;
 
     // Restore selection against fresh data (re-read cache in case it changed since module load)
     const freshCache = appCache.get();
@@ -151,6 +160,7 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
       settings,
       repoInfo,
       sessions,
+      capabilities,
       initialized: true,
       selectedWorkspaceId: workspaceId,
     });
@@ -183,9 +193,9 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
   },
 
   deleteProject: async (id) => {
-    const state = get();
-    const currentProjectId = state.selectedWorkspaceId
-      ? projectIdFromWorkspaceId(state.selectedWorkspaceId)
+    const prev = get();
+    const currentProjectId = prev.selectedWorkspaceId
+      ? projectIdFromWorkspaceId(prev.selectedWorkspaceId)
       : null;
     const wasSelected = currentProjectId === id;
 
@@ -197,7 +207,14 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
     if (wasSelected) {
       savePrefs(get().settings, null);
     }
-    await transport.request("projects.delete", { id });
+    try {
+      await transport.request("projects.delete", { id });
+    } catch (err) {
+      // Revert optimistic update
+      set({ projects: prev.projects, selectedWorkspaceId: prev.selectedWorkspaceId });
+      if (wasSelected) savePrefs(get().settings, prev.selectedWorkspaceId);
+      throw err;
+    }
   },
 
   // ---------------------------------------------------------------------------
@@ -216,12 +233,12 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
   },
 
   deleteWorkspace: async (workspaceId) => {
-    const wasSelected = get().selectedWorkspaceId === workspaceId;
-    // When deleting the selected workspace, fall back to main workspace of same project
+    const prev = get();
+    const wasSelected = prev.selectedWorkspaceId === workspaceId;
     let fallbackId: string | null = null;
     if (wasSelected) {
       const projectId = projectIdFromWorkspaceId(workspaceId);
-      const project = get().projects.find((p) => p.id === projectId);
+      const project = prev.projects.find((p) => p.id === projectId);
       const main = project?.workspaces.find((w) => w.slug === ROOT_WORKSPACE_SLUG);
       fallbackId = main?.id ?? null;
     }
@@ -237,7 +254,14 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
     if (wasSelected) {
       savePrefs(get().settings, fallbackId);
     }
-    await transport.request("workspaces.delete", { workspaceId });
+    try {
+      await transport.request("workspaces.delete", { workspaceId });
+    } catch (err) {
+      // Revert optimistic update
+      set({ projects: prev.projects, selectedWorkspaceId: prev.selectedWorkspaceId });
+      if (wasSelected) savePrefs(get().settings, prev.selectedWorkspaceId);
+      throw err;
+    }
   },
 
   // ---------------------------------------------------------------------------
@@ -341,7 +365,17 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
   },
 
   onStateResync: (payload) => {
-    set({ projects: payload.projects, settings: payload.settings });
+    const validWsIds = new Set(payload.projects.flatMap((p) => p.workspaces.map((w) => w.id)));
+    // Prune stale repoInfo/sessions for deleted workspaces
+    const repoInfo = { ...get().repoInfo };
+    const sessions = { ...get().sessions };
+    for (const key of Object.keys(repoInfo)) {
+      if (!validWsIds.has(key)) delete repoInfo[key];
+    }
+    for (const key of Object.keys(sessions)) {
+      if (!validWsIds.has(key)) delete sessions[key];
+    }
+    set({ projects: payload.projects, settings: payload.settings, repoInfo, sessions });
   },
 
   onSettingsChanged: (key, value) => {
@@ -400,8 +434,29 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
       transport.subscribe("workspace:changed", (params) => {
         get().onWorkspaceChanged(params.workspace);
       }),
-      transport.subscribe("state:resync", (params) => {
+      transport.subscribe("state:resync", async (params) => {
         get().onStateResync(params.state);
+
+        // Prune stale entries from other stores for deleted workspaces
+        const validWsIds = new Set(
+          params.state.projects.flatMap((p: any) => p.workspaces.map((w: any) => w.id)),
+        );
+        const { useTerminalStore } = await import("./terminal.js");
+        for (const wsId of useTerminalStore.getState().entries.keys()) {
+          if (!validWsIds.has(wsId)) {
+            void useTerminalStore.getState().destroy(wsId);
+          }
+        }
+        const { useScriptsStore } = await import("./scripts.js");
+        const scripts = useScriptsStore.getState();
+        if (scripts.currentWorkspaceId && !validWsIds.has(scripts.currentWorkspaceId)) {
+          useScriptsStore.setState({
+            config: null,
+            currentWorkspaceId: null,
+            logs: new Map(),
+            selectedLog: null,
+          });
+        }
       }),
       transport.subscribe("settings:changed", (params) => {
         get().onSettingsChanged(params.key, params.value);

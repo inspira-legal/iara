@@ -98,6 +98,10 @@ async function runQueryStream(
 ): Promise<{ subtype: string; errors?: string[] }> {
   const options: NonNullable<Parameters<typeof query>[0]["options"]> = {
     cwd: config.cwd,
+    // Use the current runtime (Electron-as-Node in packaged builds, node in dev).
+    // The SDK types only allow "bun"|"deno"|"node" but internally it's just a spawn arg.
+    executable: process.execPath as unknown as "node",
+    executableArgs: process.env.ELECTRON_RUN_AS_NODE ? [] : ["--no-warnings"],
     allowedTools: ["Read", "Glob", "Grep", "Write"],
     disallowedTools: ["Bash", "Edit"],
     maxTurns: config.maxTurns,

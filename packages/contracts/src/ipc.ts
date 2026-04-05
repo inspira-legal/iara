@@ -6,6 +6,11 @@ export interface AppInfo {
   isDev: boolean;
 }
 
+export interface AppCapabilities {
+  claude: boolean;
+  platform: NodeJS.Platform;
+}
+
 export interface GitStatusResult {
   branch: string;
   dirtyFiles: string[];

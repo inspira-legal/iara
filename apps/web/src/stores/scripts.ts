@@ -19,6 +19,8 @@ interface ScriptsState {
   selectedLog: { service: string; script: string } | null;
   /** Bottom panel UI state — collapsed is derived: activeTab === null */
   activeTab: PanelTab;
+  /** Statuses received before config was loaded — applied when config loads */
+  pendingStatuses: ScriptStatus[];
 }
 
 interface ScriptsActions {
@@ -48,6 +50,7 @@ export const useScriptsStore = create<ScriptsState & ScriptsActions>((set, get) 
   currentWorkspaceId: null as string | null,
   loading: false,
   discoveringProjects: new Set<string>(),
+  pendingStatuses: [],
   discoveryErrors: new Map<string, string>(),
   logs: new Map(),
   selectedLog: null,
@@ -64,9 +67,23 @@ export const useScriptsStore = create<ScriptsState & ScriptsActions>((set, get) 
     });
     try {
       const config = await transport.request("scripts.load", { workspaceId });
-      set({ config, loading: false });
+      // Apply any statuses that arrived before config loaded
+      const pending = get().pendingStatuses;
+      if (pending.length > 0) {
+        const statuses = [...config.statuses];
+        for (const status of pending) {
+          const wsId = `${status.projectId}/${status.workspace}`;
+          if (wsId !== workspaceId) continue;
+          const idx = statuses.findIndex((s) => s.scriptId === status.scriptId);
+          if (idx >= 0) statuses[idx] = status;
+          else statuses.push(status);
+        }
+        set({ config: { ...config, statuses }, loading: false, pendingStatuses: [] });
+      } else {
+        set({ config, loading: false });
+      }
     } catch {
-      set({ loading: false });
+      set({ loading: false, pendingStatuses: [] });
     }
   },
 
@@ -144,7 +161,11 @@ export const useScriptsStore = create<ScriptsState & ScriptsActions>((set, get) 
       "scripts:status",
       ({ status }: { service: string; script: string; status: ScriptStatus }) => {
         const { config, currentWorkspaceId } = get();
-        if (!config) return;
+        if (!config) {
+          // Queue for when config loads
+          set({ pendingStatuses: [...get().pendingStatuses, status] });
+          return;
+        }
         // Ignore statuses from other workspaces
         const statusWorkspaceId = `${status.projectId}/${status.workspace}`;
         if (statusWorkspaceId !== currentWorkspaceId) return;
@@ -191,6 +212,15 @@ export const useScriptsStore = create<ScriptsState & ScriptsActions>((set, get) 
       },
     );
 
+    const unsubDiscovering = transport.subscribe(
+      "scripts:discovering",
+      ({ projectId }: { projectId: string }) => {
+        const next = new Set(get().discoveringProjects);
+        next.add(projectId);
+        set({ discoveringProjects: next });
+      },
+    );
+
     const unsubReload = transport.subscribe("scripts:reload", ({ projectId }) => {
       const next = new Set(get().discoveringProjects);
       next.delete(projectId);
@@ -202,6 +232,7 @@ export const useScriptsStore = create<ScriptsState & ScriptsActions>((set, get) 
     return () => {
       unsubStatus();
       unsubLog();
+      unsubDiscovering();
       unsubReload();
     };
   },
