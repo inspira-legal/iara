@@ -1,4 +1,5 @@
-import { execSync, spawn, type ChildProcess } from "node:child_process";
+import { $ } from "zx";
+import { spawn, type ChildProcess } from "node:child_process";
 import { resolve } from "node:path";
 import { killProcessTree } from "@iara/shared/platform";
 
@@ -6,10 +7,7 @@ const root = resolve(import.meta.dirname, "..");
 const port = Number(process.env.PORT ?? 5173);
 
 // Build packages first (sync — fast, cached)
-execSync("turbo run build --filter='./packages/*'", {
-  cwd: root,
-  stdio: "inherit",
-});
+await $({ cwd: root })`turbo run build --filter=${"./packages/*"}`;
 
 const env = { ...process.env, PORT: String(port), ELECTRON_RENDERER_PORT: String(port) };
 const children: ChildProcess[] = [];

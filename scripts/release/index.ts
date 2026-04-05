@@ -14,7 +14,7 @@
  *   bun scripts/release/index.ts --platform linux --keep-stage
  */
 
-import { execSync } from "node:child_process";
+import { $ } from "zx";
 import { cpSync, existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 
@@ -27,11 +27,11 @@ import { prepareWslRuntime } from "./wsl-runtime.js";
 // Platform hooks — run between staging and packaging
 // ---------------------------------------------------------------------------
 
-type PlatformHook = () => void;
+type PlatformHook = () => Promise<void> | void;
 
 const prePackageHooks: Record<Platform, PlatformHook | undefined> = {
   linux: undefined,
-  mac: undefined, // Future: code signing, notarization, iconset generation
+  mac: undefined,
   win: () => prepareWslRuntime(),
 };
 
@@ -52,7 +52,7 @@ if (opts.skipBuild) {
   }
 } else {
   console.log("\n==> Building all packages...");
-  execSync("bun build:desktop", { cwd: ROOT, stdio: "inherit" });
+  await $({ cwd: ROOT })`bun build:desktop`;
 }
 
 // Step 2: Stage
@@ -79,7 +79,7 @@ mkdirSync(webDistStaged, { recursive: true });
 cpSync(resolve(ROOT, "apps/web/dist"), webDistStaged, { recursive: true });
 
 // Step 3: Platform-specific pre-package hook
-prePackageHooks[opts.platform]?.();
+await prePackageHooks[opts.platform]?.();
 
 // Step 4: Resolve deps & generate staged package.json
 const rootPkg = readJson(resolve(ROOT, "package.json")) as {
@@ -132,22 +132,19 @@ writeFileSync(
 
 // Step 5: Install deps
 console.log("\n==> Installing desktop dependencies...");
-execSync("bun install --production", { cwd: STAGING, stdio: "inherit" });
+await $({ cwd: STAGING })`bun install --production`;
 
 console.log("\n==> Installing server native dependencies...");
-execSync("bun install --production", { cwd: serverModulesDir, stdio: "inherit" });
+await $({ cwd: serverModulesDir })`bun install --production`;
 
 // Step 6: Rebuild native modules for Electron
 console.log("\n==> Rebuilding native modules for Electron...");
-execSync(
-  `bunx electron-rebuild -v ${electronVersion.replace(/^\^/, "")} -m ${serverModulesDir} -o node-pty`,
-  { cwd: STAGING, stdio: "inherit" },
-);
+const ebVersion = electronVersion.replace(/^\^/, "");
+await $({ cwd: STAGING })`bunx electron-rebuild -v ${ebVersion} -m ${serverModulesDir} -o node-pty`;
 
 // Step 7: Package
 console.log("\n==> Packaging with electron-builder...");
-const ebArgs = ["bunx", "electron-builder", `--${opts.platform}`];
-execSync(ebArgs.join(" "), { cwd: STAGING, stdio: "inherit" });
+await $({ cwd: STAGING })`bunx electron-builder --${opts.platform}`;
 
 // Cleanup
 if (opts.keepStage) {

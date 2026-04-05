@@ -1,9 +1,7 @@
 import { spawn } from "node:child_process";
-import { dirname, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { resolve } from "node:path";
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const root = resolve(__dirname, "..");
+const root = resolve(import.meta.dirname, "..");
 const electronBin = resolve(root, "apps/desktop/node_modules/.bin/electron");
 const mainJs = resolve(root, "apps/desktop/dist-electron/main.js");
 
@@ -19,10 +17,10 @@ const child = spawn(electronBin, [mainJs], {
 });
 
 let output = "";
-child.stdout.on("data", (chunk) => {
+child.stdout.on("data", (chunk: Buffer) => {
   output += chunk.toString();
 });
-child.stderr.on("data", (chunk) => {
+child.stderr.on("data", (chunk: Buffer) => {
   output += chunk.toString();
 });
 

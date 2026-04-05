@@ -1,4 +1,4 @@
-import { execSync } from "node:child_process";
+import { $ } from "zx";
 import { existsSync, mkdirSync, rmSync, statSync } from "node:fs";
 import { resolve } from "node:path";
 import { STAGING } from "./config.js";
@@ -8,9 +8,9 @@ const ARCH = "x64";
 /**
  * Prepare Linux runtime for WSL server execution directly into the staging dir.
  * Downloads a Node.js Linux binary so the server can run inside WSL.
- * Works on any platform — streams download to disk, extracts with tar.
+ * Works on any platform — uses curl + tar (available on all CI runners).
  */
-export function prepareWslRuntime(): void {
+export async function prepareWslRuntime(): Promise<void> {
   const wslDir = resolve(STAGING, "extraResources/wsl-runtime");
   mkdirSync(wslDir, { recursive: true });
 
@@ -31,8 +31,8 @@ export function prepareWslRuntime(): void {
   const url = `https://nodejs.org/dist/${nodeVersion}/node-${nodeVersion}-linux-${ARCH}.tar.gz`;
   const tarball = resolve(wslDir, "node.tar.gz");
 
-  execSync(`curl -fsSL -o "${tarball}" "${url}"`, { stdio: "inherit" });
-  execSync(`tar xzf "${tarball}" --strip-components=1 -C "${nodeDir}"`, { stdio: "inherit" });
+  await $`curl -fsSL -o ${tarball} ${url}`;
+  await $`tar xzf ${tarball} --strip-components=1 -C ${nodeDir}`;
   rmSync(tarball);
 
   // Remove unnecessary files

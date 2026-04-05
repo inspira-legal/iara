@@ -27,7 +27,7 @@
     "test:coverage": "turbo run test:coverage",
     "fmt": "oxfmt",
     "fmt:check": "oxfmt --check",
-    "electron-smoke": "node scripts/electron-smoke.mjs",
+    "electron-smoke": "bun scripts/electron-smoke.ts",
     "release-smoke": "bun scripts/release-smoke.ts",
     "release:linux": "bun scripts/release/index.ts --platform linux",
     "release:mac": "bun scripts/release/index.ts --platform mac",
