@@ -6,17 +6,52 @@ on:
   merge_group:
 
 jobs:
-  quality:
+  lint:
     runs-on: ubuntu-latest
-    name: Quality
+    name: Lint
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup
+      - run: bun run lint
+
+  fmt:
+    runs-on: ubuntu-latest
+    name: Format
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/setup
       - run: bun run fmt:check
-      - run: bun run lint
+
+  typecheck:
+    runs-on: ubuntu-latest
+    name: Typecheck
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup
       - run: bun run typecheck
+
+  knip:
+    runs-on: ubuntu-latest
+    name: Knip
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup
       - run: bunx knip --no-progress
+
+  test:
+    runs-on: ubuntu-latest
+    name: Test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup
       - run: bun run test:coverage
+
+  smoke_test:
+    runs-on: ubuntu-latest
+    name: Smoke Test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup
       - run: xvfb-run bun run smoke-test
 
   release_smoke:
