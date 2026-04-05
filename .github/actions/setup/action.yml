@@ -21,6 +21,10 @@ runs:
         restore-keys: |
           ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}-
 
+    - name: Install setuptools for node-gyp
+      shell: bash
+      run: python3 -m pip install setuptools --break-system-packages || python3 -m pip install setuptools
+
     - shell: bash
       run: bun install --frozen-lockfile
 
