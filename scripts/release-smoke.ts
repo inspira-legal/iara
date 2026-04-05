@@ -47,6 +47,7 @@ const platforms: [Platform, Arch[]][] = [
   ["mac", ["arm64"]],
   ["mac", ["x64"]],
   ["win", ["x64"]],
+  ["win", ["arm64"]],
 ];
 
 for (const [platform, arch] of platforms) {

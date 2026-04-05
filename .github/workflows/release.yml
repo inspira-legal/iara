@@ -68,6 +68,10 @@ jobs:
             runner: windows-2022
             platform: win
             arch: x64
+          - label: Windows arm64
+            runner: windows-2022
+            platform: win
+            arch: arm64
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/setup
