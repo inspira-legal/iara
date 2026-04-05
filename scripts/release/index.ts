@@ -23,6 +23,9 @@ import { readJson, resolveProductionDeps } from "./deps.js";
 import { createBuildConfig } from "./electron-builder.js";
 import { prepareWslRuntime } from "./wsl-runtime.js";
 
+/** Convert Windows backslashes to forward slashes for Git Bash compatibility. */
+const posix = (p: string) => p.replaceAll("\\", "/");
+
 // ---------------------------------------------------------------------------
 // Platform hooks — run between staging and packaging
 // ---------------------------------------------------------------------------
@@ -52,7 +55,7 @@ if (opts.skipBuild) {
   }
 } else {
   console.log("\n==> Building all packages...");
-  await $({ cwd: ROOT })`bun build:desktop`;
+  await $({ cwd: posix(ROOT) })`bun build:desktop`;
 }
 
 // Step 2: Stage
@@ -132,19 +135,21 @@ writeFileSync(
 
 // Step 5: Install deps
 console.log("\n==> Installing desktop dependencies...");
-await $({ cwd: STAGING })`bun install --production`;
+await $({ cwd: posix(STAGING) })`bun install --production`;
 
 console.log("\n==> Installing server native dependencies...");
-await $({ cwd: serverModulesDir })`bun install --production`;
+await $({ cwd: posix(serverModulesDir) })`bun install --production`;
 
 // Step 6: Rebuild native modules for Electron
 console.log("\n==> Rebuilding native modules for Electron...");
 const ebVersion = electronVersion.replace(/^\^/, "");
-await $({ cwd: STAGING })`bunx electron-rebuild -v ${ebVersion} -m ${serverModulesDir} -o node-pty`;
+await $({
+  cwd: posix(STAGING),
+})`bunx electron-rebuild -v ${ebVersion} -m ${posix(serverModulesDir)} -o node-pty`;
 
 // Step 7: Package
 console.log("\n==> Packaging with electron-builder...");
-await $({ cwd: STAGING })`bunx electron-builder --${opts.platform}`;
+await $({ cwd: posix(STAGING) })`bunx electron-builder --${opts.platform}`;
 
 // Cleanup
 if (opts.keepStage) {
