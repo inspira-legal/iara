@@ -52,10 +52,6 @@ jobs:
             runner: ubuntu-24.04
             platform: linux
             arch: x64
-          - label: Linux arm64
-            runner: ubuntu-24.04
-            platform: linux
-            arch: arm64
           - label: macOS arm64
             runner: macos-14
             platform: mac
@@ -68,10 +64,6 @@ jobs:
             runner: windows-2022
             platform: win
             arch: x64
-          - label: Windows arm64
-            runner: windows-2022
-            platform: win
-            arch: arm64
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/setup

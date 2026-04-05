@@ -8,7 +8,7 @@ export type Platform = "linux" | "mac" | "win";
 export type Arch = "x64" | "arm64";
 
 const DEFAULT_ARCHS: Record<Platform, Arch[]> = {
-  linux: ["x64", "arm64"],
+  linux: ["x64"],
   mac: ["x64", "arm64"],
   win: ["x64"],
 };

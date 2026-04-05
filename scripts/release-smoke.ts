@@ -43,11 +43,9 @@ assert(Object.keys(serverDeps).length > 0, "Server should have production deps")
 
 const platforms: [Platform, Arch[]][] = [
   ["linux", ["x64"]],
-  ["linux", ["arm64"]],
   ["mac", ["arm64"]],
   ["mac", ["x64"]],
   ["win", ["x64"]],
-  ["win", ["arm64"]],
 ];
 
 for (const [platform, arch] of platforms) {
