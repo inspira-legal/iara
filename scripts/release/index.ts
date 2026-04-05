@@ -147,6 +147,16 @@ await $({
   cwd: posix(STAGING),
 })`bunx electron-rebuild -v ${ebVersion} -m ${posix(serverModulesDir)} -o node-pty`;
 
+// Step 6b: Copy Linux native modules for WSL (Windows builds only)
+if (opts.platform === "win") {
+  console.log("\n==> Copying Linux native modules for WSL...");
+  const nativeSrc = resolve(ROOT, "apps/desktop/resources/wsl-runtime/native_modules");
+  const ptyLinuxSrc = resolve(nativeSrc, "node-pty/build/Release/pty.node");
+  const ptyLinuxDest = resolve(serverModulesDir, "node_modules/node-pty/prebuilds/linux-x64");
+  mkdirSync(ptyLinuxDest, { recursive: true });
+  cpSync(ptyLinuxSrc, resolve(ptyLinuxDest, "pty.node"));
+}
+
 // Step 7: Package
 console.log("\n==> Packaging with electron-builder...");
 await $({ cwd: posix(STAGING) })`bunx electron-builder --${opts.platform}`;
