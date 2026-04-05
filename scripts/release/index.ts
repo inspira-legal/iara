@@ -27,7 +27,7 @@ import { prepareWslRuntime } from "./wsl-runtime.js";
 // Platform hooks — run between staging and packaging
 // ---------------------------------------------------------------------------
 
-type PlatformHook = () => void | Promise<void>;
+type PlatformHook = () => void;
 
 const prePackageHooks: Record<Platform, PlatformHook | undefined> = {
   linux: undefined,
@@ -79,7 +79,7 @@ mkdirSync(webDistStaged, { recursive: true });
 cpSync(resolve(ROOT, "apps/web/dist"), webDistStaged, { recursive: true });
 
 // Step 3: Platform-specific pre-package hook
-await prePackageHooks[opts.platform]?.();
+prePackageHooks[opts.platform]?.();
 
 // Step 4: Resolve deps & generate staged package.json
 const rootPkg = readJson(resolve(ROOT, "package.json")) as {

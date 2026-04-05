@@ -1,7 +1,5 @@
 import { execSync } from "node:child_process";
-import { createWriteStream, existsSync, mkdirSync, rmSync, statSync } from "node:fs";
-import { pipeline } from "node:stream/promises";
-import { Readable } from "node:stream";
+import { existsSync, mkdirSync, rmSync, statSync } from "node:fs";
 import { resolve } from "node:path";
 import { STAGING } from "./config.js";
 
@@ -12,7 +10,7 @@ const ARCH = "x64";
  * Downloads a Node.js Linux binary so the server can run inside WSL.
  * Works on any platform — streams download to disk, extracts with tar.
  */
-export async function prepareWslRuntime(): Promise<void> {
+export function prepareWslRuntime(): void {
   const wslDir = resolve(STAGING, "extraResources/wsl-runtime");
   mkdirSync(wslDir, { recursive: true });
 
@@ -33,10 +31,7 @@ export async function prepareWslRuntime(): Promise<void> {
   const url = `https://nodejs.org/dist/${nodeVersion}/node-${nodeVersion}-linux-${ARCH}.tar.gz`;
   const tarball = resolve(wslDir, "node.tar.gz");
 
-  const res = await fetch(url);
-  if (!res.ok || !res.body) throw new Error(`Failed to download ${url}: ${res.status}`);
-  await pipeline(Readable.fromWeb(res.body), createWriteStream(tarball));
-
+  execSync(`curl -fsSL -o "${tarball}" "${url}"`, { stdio: "inherit" });
   execSync(`tar xzf "${tarball}" --strip-components=1 -C "${nodeDir}"`, { stdio: "inherit" });
   rmSync(tarball);
 
