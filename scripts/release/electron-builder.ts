@@ -25,7 +25,10 @@ function linuxConfig(arch: Arch[]): PlatformBuildConfig {
     },
     formatConfigs: {
       appImage: { artifactName: "iara-${version}-linux-${arch}.AppImage" },
-      deb: { artifactName: "iara-${version}-linux-${arch}.deb" },
+      deb: {
+        artifactName: "iara-${version}-linux-${arch}.deb",
+        maintainer: "Inspira Legal <tech-support@inspira.legal>",
+      },
     },
   };
 }

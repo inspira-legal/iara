@@ -159,6 +159,8 @@ writeFileSync(
       private: true,
       main: "dist-electron/main.js",
       productName: "iara",
+      homepage: "https://github.com/inspira-legal/iara",
+      author: { name: "Inspira Legal", email: "tech-support@inspira.legal" },
       dependencies: desktopDeps,
       devDependencies: { electron: electronVersion },
       build: createBuildConfig(opts.platform, opts.arch),
