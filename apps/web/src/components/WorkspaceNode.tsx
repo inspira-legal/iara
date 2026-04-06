@@ -1,7 +1,5 @@
-import { Pencil, Trash2, Circle } from "lucide-react";
+import { Pencil, Trash2 } from "lucide-react";
 import type { Workspace } from "@iara/contracts";
-import { isScriptActive, isScriptUnhealthy } from "~/lib/script-status";
-import { useScriptsStore } from "~/stores/scripts";
 import { TreeNode } from "./ui/TreeNode";
 
 interface WorkspaceNodeProps {
@@ -22,17 +20,6 @@ export function WorkspaceNode({
   onDelete,
   onRename,
 }: WorkspaceNodeProps) {
-  const runningInWorkspace = useScriptsStore(
-    (s) =>
-      s.config?.statuses.filter((st) => st.workspace === workspace.slug && isScriptActive(st))
-        .length ?? 0,
-  );
-  const hasUnhealthy = useScriptsStore(
-    (s) =>
-      s.config?.statuses.some((st) => st.workspace === workspace.slug && isScriptUnhealthy(st)) ??
-      false,
-  );
-
   return (
     <TreeNode
       name={workspace.name}
@@ -55,14 +42,6 @@ export function WorkspaceNode({
                 variant: "danger" as const,
               },
             ]
-      }
-      icon={
-        runningInWorkspace > 0 ? (
-          <Circle
-            size={6}
-            className={`shrink-0 fill-current ${hasUnhealthy ? "text-red-500" : "text-green-500"}`}
-          />
-        ) : undefined
       }
     />
   );
