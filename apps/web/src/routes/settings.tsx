@@ -1,6 +1,7 @@
 import { useState, useCallback, useId } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { ArrowLeft } from "lucide-react";
+import { NumericFormat } from "react-number-format";
 import { useNavigate } from "@tanstack/react-router";
 import { useAppStore } from "~/stores/app";
 
@@ -13,7 +14,9 @@ function SettingsPage() {
   const { settings, updateSetting } = useAppStore();
 
   const osNotificationsEnabled = settings["notifications.os_enabled"] !== "false";
+  const autocompactMode = (settings["claude.autocompact_mode"] || "pct") as AutocompactMode;
   const autocompactPct = settings["claude.autocompact_pct"] ?? "";
+  const autocompactTokens = settings["claude.autocompact_tokens"] ?? "";
   const guardrailsEnabled = settings["guardrails.enabled"] !== "false";
 
   const handleToggleNotifications = useCallback(() => {
@@ -50,7 +53,12 @@ function SettingsPage() {
 
         {/* Claude Code */}
         <SettingsSection title="Claude Code">
-          <AutocompactInput value={autocompactPct} onSave={updateSetting} />
+          <AutocompactInput
+            mode={autocompactMode}
+            pct={autocompactPct}
+            tokens={autocompactTokens}
+            onSave={updateSetting}
+          />
           <div className="mt-3 border-t border-zinc-800 pt-3">
             <ToggleRow
               label="Workspace guardrails"
@@ -126,39 +134,45 @@ function ToggleRow({
   );
 }
 
+type AutocompactMode = "pct" | "tokens";
+
 function AutocompactInput({
-  value,
+  mode: extMode,
+  pct: extPct,
+  tokens: extTokens,
   onSave,
 }: {
-  value: string;
+  mode: AutocompactMode;
+  pct: string;
+  tokens: string;
   onSave: (key: string, value: string) => Promise<void>;
 }) {
-  const [draft, setDraft] = useState(value);
+  const [mode, setMode] = useState(extMode);
+  const [draftPct, setDraftPct] = useState(extPct);
+  const [draftTokens, setDraftTokens] = useState(extTokens);
   const [dirty, setDirty] = useState(false);
   const inputId = useId();
 
-  // Sync draft with external value when it changes (and user hasn't edited)
-  if (!dirty && draft !== value) {
-    setDraft(value);
+  // Sync with external values when user hasn't edited
+  if (!dirty) {
+    if (extMode !== mode) setMode(extMode);
+    if (extPct !== draftPct) setDraftPct(extPct);
+    if (extTokens !== draftTokens) setDraftTokens(extTokens);
   }
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const raw = e.target.value.replace(/\D/g, "");
-    const num = raw ? Math.min(Number(raw), 100) : 0;
-    const newValue = raw ? String(num) : "";
-    setDraft(newValue);
-    setDirty(true);
+  const draft = mode === "pct" ? draftPct : draftTokens;
+  const setDraft = mode === "pct" ? setDraftPct : setDraftTokens;
+
+  const handleModeChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const newMode = e.target.value as AutocompactMode;
+    setMode(newMode);
+    void onSave("claude.autocompact_mode", newMode);
   };
 
   const handleSave = () => {
-    void onSave("claude.autocompact_pct", draft);
+    const key = mode === "pct" ? "claude.autocompact_pct" : "claude.autocompact_tokens";
+    void onSave(key, draft);
     setDirty(false);
-  };
-
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter" && dirty) {
-      handleSave();
-    }
   };
 
   return (
@@ -166,29 +180,42 @@ function AutocompactInput({
       <div className="flex items-center gap-3">
         <div className="flex-1">
           <label htmlFor={inputId} className="text-sm text-zinc-200">
-            Auto-compact threshold %
+            Auto-compact threshold
           </label>
           <p className="text-xs text-zinc-500">
-            Sets CLAUDE_AUTOCOMPACT_PCT_OVERRIDE when launching sessions
+            Context window compaction trigger for new sessions
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <input
+          <NumericFormat
             id={inputId}
-            type="text"
-            inputMode="numeric"
             value={draft}
-            onChange={handleChange}
-            onKeyDown={handleKeyDown}
+            thousandSeparator={mode === "tokens" ? "." : false}
+            decimalSeparator=","
+            decimalScale={0}
+            allowNegative={false}
+            isAllowed={({ floatValue }) => mode !== "pct" || !floatValue || floatValue <= 100}
+            onValueChange={({ value }) => {
+              setDraft(value);
+              setDirty(true);
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && dirty) handleSave();
+            }}
             onBlur={() => {
               if (dirty) handleSave();
             }}
             placeholder="—"
-            className="w-16 rounded border border-zinc-700 bg-zinc-800 px-2 py-1 text-right text-sm text-zinc-200 placeholder-zinc-600 focus:border-blue-500 focus:outline-none"
+            className="w-24 rounded border border-zinc-700 bg-zinc-800 px-2 py-1 text-right text-sm text-zinc-200 placeholder-zinc-600 focus:border-blue-500 focus:outline-none"
           />
-          <span className="text-xs text-zinc-500" aria-hidden="true">
-            %
-          </span>
+          <select
+            value={mode}
+            onChange={handleModeChange}
+            className="rounded border border-zinc-700 bg-zinc-800 px-2 py-1 text-xs text-zinc-400 focus:border-blue-500 focus:outline-none"
+          >
+            <option value="pct">%</option>
+            <option value="tokens">tokens</option>
+          </select>
         </div>
       </div>
     </div>

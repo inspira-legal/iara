@@ -8,11 +8,13 @@ import type { AppState } from "../services/state.js";
 import type { TerminalManager } from "../services/terminal.js";
 
 function getAutocompactEnv(appState: AppState): Record<string, string> {
-  const pct = appState.getSetting("claude.autocompact_pct");
-  if (pct) {
-    return { CLAUDE_AUTOCOMPACT_PCT_OVERRIDE: pct };
+  const mode = appState.getSetting("claude.autocompact_mode") || "pct";
+  if (mode === "tokens") {
+    const tokens = appState.getSetting("claude.autocompact_tokens");
+    return tokens ? { CLAUDE_CODE_AUTO_COMPACT_WINDOW: tokens } : {};
   }
-  return {};
+  const pct = appState.getSetting("claude.autocompact_pct");
+  return pct ? { CLAUDE_AUTOCOMPACT_PCT_OVERRIDE: pct } : {};
 }
 
 function getGuardrailsEnv(appState: AppState): Record<string, string> {
