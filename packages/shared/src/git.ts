@@ -100,6 +100,15 @@ export async function gitLsRemote(url: string): Promise<void> {
   }
 }
 
+export async function gitInit(dest: string): Promise<void> {
+  fs.mkdirSync(dest, { recursive: true });
+  try {
+    await execGitAsync(["init", dest]);
+  } catch (err) {
+    wrapGitError(err, `init ${dest}`);
+  }
+}
+
 export async function gitClone(url: string, dest: string): Promise<void> {
   const parentDir = path.dirname(dest);
   fs.mkdirSync(parentDir, { recursive: true });

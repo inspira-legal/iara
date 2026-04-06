@@ -29,7 +29,7 @@ const METHOD_ICONS: Record<string, typeof GitBranch> = {
 const METHOD_LABELS: Record<string, string> = {
   "git-url": "Git URL",
   "local-folder": "Local Folder",
-  empty: "Empty",
+  empty: "New Repo",
 };
 
 export function CreateProjectDialog({ open, onClose }: CreateProjectDialogProps) {

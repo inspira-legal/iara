@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { FolderOpen } from "lucide-react";
 import type { AddRepoInput } from "@iara/contracts";
 import { isElectron } from "~/env";
+import { toSlug } from "~/lib/utils";
 import { useToast } from "./Toast";
 import { DialogShell } from "./ui/DialogShell";
 import { Button } from "./ui/Button";
@@ -21,7 +22,7 @@ type Method = "git-url" | "local-folder" | "empty";
 const METHOD_OPTIONS: { key: Method; label: string }[] = [
   { key: "git-url", label: "Git URL" },
   { key: "local-folder", label: "Local Folder" },
-  { key: "empty", label: "Empty Repo" },
+  { key: "empty", label: "New Repo" },
 ];
 
 function repoNameFromUrl(url: string): string {
@@ -111,14 +112,14 @@ export function AddRepoDialog({ open, onClose, onAdd }: AddRepoDialogProps) {
   };
 
   const handleSubmit = async () => {
-    const trimmedName = name.trim();
-    if (!trimmedName) return;
+    const normalizedName = toSlug(name);
+    if (!normalizedName) return;
 
     setError("");
     setSubmitting(true);
 
     try {
-      const input: AddRepoInput = { method, name: trimmedName };
+      const input: AddRepoInput = { method, name: normalizedName };
       if (method === "git-url") {
         input.url = url.trim();
       } else if (method === "local-folder") {
@@ -140,7 +141,7 @@ export function AddRepoDialog({ open, onClose, onAdd }: AddRepoDialogProps) {
   const urlInvalid = method === "git-url" && url.trim() !== "" && !isValidGitUrl(url);
 
   const canSubmit = (() => {
-    if (!name.trim()) return false;
+    if (!toSlug(name)) return false;
     if (method === "git-url" && (!url.trim() || urlInvalid)) return false;
     if (method === "local-folder" && !folderPath) return false;
     return true;

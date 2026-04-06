@@ -2,7 +2,7 @@ import * as crypto from "node:crypto";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import type { CreationStage } from "@iara/contracts";
-import { gitClone } from "@iara/shared/git";
+import { gitClone, gitInit } from "@iara/shared/git";
 import { projectPaths } from "@iara/shared/paths";
 import { rmGraceful } from "@iara/shared/fs";
 import { z } from "zod";
@@ -44,6 +44,32 @@ function extractWorkspaceSlug(workspaceId?: string): string | undefined {
   return workspaceId.split("/")[1];
 }
 
+/** Check if a source is a remote git URL (not a local path or plain name). */
+function isRemoteGitUrl(source: string): boolean {
+  const s = source.trim();
+  return s.startsWith("git@") || /^(https?|ssh|git):\/\//.test(s);
+}
+
+/** Check if a source is a local filesystem path. */
+function isLocalPath(source: string): boolean {
+  const s = source.trim();
+  return s.startsWith("/") || s.startsWith("~") || s.startsWith(".");
+}
+
+/** Clone a remote URL, copy a local folder, or init an empty repo. */
+async function resolveRepoSource(source: string, dest: string): Promise<void> {
+  if (isRemoteGitUrl(source)) {
+    await gitClone(source, dest);
+  } else if (isLocalPath(source)) {
+    fs.cpSync(source, dest, { recursive: true });
+    if (!fs.existsSync(path.join(dest, ".git"))) {
+      await gitInit(dest);
+    }
+  } else {
+    await gitInit(dest);
+  }
+}
+
 /** Extract repo name from a source URL or path. */
 function repoNameFromSource(source: string): string {
   const cleaned = source.replace(/\.git\/?$/, "").replace(/\/+$/, "");
@@ -71,12 +97,12 @@ export function registerProjectHandlers(
     const paths = projectPaths(appState.getProjectsDir(), slug);
     fs.mkdirSync(paths.root, { recursive: true });
 
-    // Clone repos into project root
+    // Clone or init repos into project root
     for (const source of repoSources) {
       const repoName = repoNameFromSource(source);
       const dest = paths.repo(repoName);
       if (!fs.existsSync(dest)) {
-        await gitClone(source, dest);
+        await resolveRepoSource(source, dest);
       }
     }
 
@@ -302,7 +328,7 @@ export function registerProjectHandlers(
           repoNames.push(repoName);
           const dest = paths.repo(repoName);
           if (!fs.existsSync(dest)) {
-            await gitClone(source, dest);
+            await resolveRepoSource(source, dest);
           }
         }
 
