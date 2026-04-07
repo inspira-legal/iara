@@ -38,9 +38,28 @@ export class SessionWatcher {
       for (const workspace of project.workspaces) {
         const wsDir = this.appState.getWorkspaceDir(workspace.id);
 
+        // Watch the workspace dir itself
         const hash = computeProjectHash(wsDir);
         if (!newHashes.has(hash)) newHashes.set(hash, new Set());
         newHashes.get(hash)!.add(workspace.id);
+
+        // Also watch the parent dir — Claude CLI may hash the parent as cwd
+        const parentHash = computeProjectHash(path.dirname(wsDir));
+        if (parentHash !== hash) {
+          if (!newHashes.has(parentHash)) newHashes.set(parentHash, new Set());
+          newHashes.get(parentHash)!.add(workspace.id);
+        }
+
+        // Also watch repo subdirs within the workspace
+        const repoNames = this.appState.discoverRepos(project.id);
+        for (const name of repoNames) {
+          const repoDir = path.join(wsDir, name);
+          const repoHash = computeProjectHash(repoDir);
+          if (repoHash !== hash) {
+            if (!newHashes.has(repoHash)) newHashes.set(repoHash, new Set());
+            newHashes.get(repoHash)!.add(workspace.id);
+          }
+        }
       }
     }
 

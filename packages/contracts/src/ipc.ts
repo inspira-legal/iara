@@ -9,6 +9,7 @@ export interface AppInfo {
 export interface AppCapabilities {
   claude: boolean;
   platform: NodeJS.Platform;
+  userName?: string | undefined;
 }
 
 export interface GitStatusResult {
@@ -180,6 +181,7 @@ export interface DesktopBridge {
   terminalCreate(
     workspaceId: string,
     resumeSessionId?: string,
+    initialPrompt?: string,
   ): Promise<{ terminalId: string; sessionId: string }>;
   terminalWrite(terminalId: string, data: string): Promise<void>;
   terminalResize(terminalId: string, cols: number, rows: number): Promise<void>;

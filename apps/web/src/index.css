@@ -1,5 +1,23 @@
 @import "tailwindcss";
 
+/* ── Scrollbar ────────────────────────────────────── */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: oklch(0.336 0.007 285.775) transparent;
+}
+
+/* ── Disable text selection app-wide, re-enable for inputs/terminals ── */
+body {
+  user-select: none;
+}
+
+input,
+textarea,
+[contenteditable="true"],
+.xterm-screen {
+  user-select: text;
+}
+
 @theme {
   /* ── Surface ─────────────────────────────────────── */
   --color-surface-base: oklch(0.141 0.005 285.823); /* zinc-950 */

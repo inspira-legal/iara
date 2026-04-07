@@ -2,12 +2,13 @@ import { useEffect } from "react";
 import { createRootRoute, Outlet } from "@tanstack/react-router";
 import { AppShell } from "~/components/AppShell";
 import { ErrorBoundary } from "~/components/ErrorBoundary";
-import { SplashScreen } from "~/components/SplashScreen";
 import { ToastProvider } from "~/components/Toast";
 import { useNotificationStore } from "~/stores/notifications";
 import { useAppStore } from "~/stores/app";
 // Import stores to register global WS listeners
+import { useActiveSessionStore } from "~/stores/activeSession";
 import "~/stores/terminal";
+import { SplashScreen } from "~/components/SplashScreen";
 
 function RootComponent() {
   const initialized = useAppStore((s) => s.initialized);
@@ -23,7 +24,9 @@ function RootComponent() {
   }, [loadNotifications, subscribePush]);
 
   useEffect(() => {
-    void init();
+    void init().then(() => {
+      useActiveSessionStore.getState().restore();
+    });
     const unsub = subscribeAppPush();
     return unsub;
   }, [init, subscribeAppPush]);

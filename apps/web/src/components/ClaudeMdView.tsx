@@ -142,7 +142,7 @@ export function ClaudeMdView({ filePath, refreshKey = 0, onEditProject }: Claude
               void handleSave();
             }
           }}
-          className="w-full resize-none rounded-lg border border-zinc-700 bg-zinc-900 px-4 py-3 font-mono text-xs leading-relaxed text-zinc-300 outline-none focus:border-blue-500/50"
+          className="w-full resize-none rounded-lg border border-zinc-700 bg-zinc-900 px-4 py-3 font-mono text-xs leading-relaxed text-zinc-300 outline-none focus:border-accent-ring/50"
           spellCheck={false}
         />
       </div>

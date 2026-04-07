@@ -13,8 +13,6 @@ import type {
 import { transport } from "~/lib/ws-transport";
 import { LocalCache } from "~/lib/local-cache";
 import { AppCacheSchema } from "~/lib/cache-schemas";
-import { usePanelsStore } from "./panels";
-
 const ROOT_WORKSPACE_SLUG = "main";
 
 const appCache = new LocalCache({
@@ -94,10 +92,6 @@ interface AppActions {
   getProject(id: string): Project | undefined;
   getWorkspace(workspaceId: string): Workspace | undefined;
   getWorkspacesForProject(projectId: string): Workspace[];
-  selectedProject(): Project | undefined;
-  selectedProjectId(): string | null;
-  selectedWorkspace(): Workspace | undefined;
-
   // Push subscription
   subscribePush(): () => void;
 }
@@ -174,7 +168,6 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
   selectWorkspace: (id) => {
     set({ selectedWorkspaceId: id });
     savePrefs(get().settings, id);
-    usePanelsStore.getState().setEditingProjectId(null);
   },
 
   // ---------------------------------------------------------------------------
@@ -404,24 +397,6 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
     return project?.workspaces ?? [];
   },
 
-  selectedProjectId: () => {
-    const { selectedWorkspaceId } = get();
-    if (!selectedWorkspaceId) return null;
-    return projectIdFromWorkspaceId(selectedWorkspaceId);
-  },
-
-  selectedProject: () => {
-    const projectId = get().selectedProjectId();
-    if (!projectId) return undefined;
-    return get().projects.find((p) => p.id === projectId);
-  },
-
-  selectedWorkspace: () => {
-    const { selectedWorkspaceId } = get();
-    if (!selectedWorkspaceId) return undefined;
-    return get().getWorkspace(selectedWorkspaceId);
-  },
-
   // ---------------------------------------------------------------------------
   // Push subscription
   // ---------------------------------------------------------------------------
@@ -441,10 +416,10 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
         const validWsIds = new Set(
           params.state.projects.flatMap((p: any) => p.workspaces.map((w: any) => w.id)),
         );
-        const { useTerminalStore } = await import("./terminal.js");
-        for (const wsId of useTerminalStore.getState().entries.keys()) {
-          if (!validWsIds.has(wsId)) {
-            void useTerminalStore.getState().destroy(wsId);
+        const { useActiveSessionStore } = await import("./activeSession.js");
+        for (const [entryId, entry] of useActiveSessionStore.getState().entries) {
+          if (!validWsIds.has(entry.workspaceId)) {
+            void useActiveSessionStore.getState().destroy(entryId);
           }
         }
         const { useScriptsStore } = await import("./scripts.js");

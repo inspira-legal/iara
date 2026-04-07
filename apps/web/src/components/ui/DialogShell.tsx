@@ -109,7 +109,7 @@ export function DialogShell({
                 type="button"
                 onClick={backButton}
                 aria-label="Go back"
-                className="rounded text-zinc-500 hover:text-zinc-300 focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:outline-none"
+                className="rounded text-zinc-500 hover:text-zinc-300 focus-visible:ring-2 focus-visible:ring-accent-ring focus-visible:outline-none"
               >
                 <ArrowLeft size={18} />
               </button>
@@ -123,7 +123,7 @@ export function DialogShell({
             onClick={onClose}
             disabled={disabled}
             aria-label="Close dialog"
-            className="rounded text-zinc-500 hover:text-zinc-300 focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:outline-none disabled:opacity-30"
+            className="rounded text-zinc-500 hover:text-zinc-300 focus-visible:ring-2 focus-visible:ring-accent-ring focus-visible:outline-none disabled:opacity-30"
           >
             <X size={18} />
           </button>

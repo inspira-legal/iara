@@ -141,7 +141,7 @@ export function RepoCard({
             }}
             disabled={renaming}
             autoFocus
-            className="w-32 rounded border border-zinc-600 bg-zinc-900 px-1 py-0.5 text-xs text-zinc-300 outline-none focus:border-blue-500"
+            className="w-32 rounded border border-zinc-600 bg-zinc-900 px-1 py-0.5 text-xs text-zinc-300 outline-none focus:border-accent-ring"
           />
         ) : (
           <span className="flex items-center gap-0.5">

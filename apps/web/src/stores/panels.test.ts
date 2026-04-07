@@ -35,7 +35,6 @@ import { usePanelsStore } from "./panels";
 const INITIAL_STATE = {
   rightPanelOpen: false,
   rightPanelWidth: 360, // DEFAULT_WIDTH
-  editingProjectId: null,
 };
 
 // ---------------------------------------------------------------------------
@@ -120,33 +119,6 @@ describe("usePanelsStore", () => {
     it("persists clamped width to cache", () => {
       usePanelsStore.getState().setRightPanelWidth(400);
       expect(localStorageMock.setItem).toHaveBeenCalled();
-    });
-  });
-
-  // -----------------------------------------------------------------------
-  // setEditingProjectId — closes right panel when id is set
-  // -----------------------------------------------------------------------
-
-  describe("setEditingProjectId()", () => {
-    it("sets editingProjectId and closes right panel when id is non-null", () => {
-      usePanelsStore.setState({ rightPanelOpen: true });
-      usePanelsStore.getState().setEditingProjectId("proj1");
-      expect(usePanelsStore.getState().editingProjectId).toBe("proj1");
-      expect(usePanelsStore.getState().rightPanelOpen).toBe(false);
-    });
-
-    it("sets editingProjectId to null and preserves right panel state (open)", () => {
-      usePanelsStore.setState({ rightPanelOpen: true });
-      usePanelsStore.getState().setEditingProjectId(null);
-      expect(usePanelsStore.getState().editingProjectId).toBeNull();
-      expect(usePanelsStore.getState().rightPanelOpen).toBe(true);
-    });
-
-    it("sets editingProjectId to null and preserves right panel state (closed)", () => {
-      usePanelsStore.setState({ rightPanelOpen: false });
-      usePanelsStore.getState().setEditingProjectId(null);
-      expect(usePanelsStore.getState().editingProjectId).toBeNull();
-      expect(usePanelsStore.getState().rightPanelOpen).toBe(false);
     });
   });
 });

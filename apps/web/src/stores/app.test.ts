@@ -28,8 +28,8 @@ vi.mock("~/lib/ws-transport", () => ({
   },
 }));
 
-vi.mock("./terminal.js", () => ({
-  useTerminalStore: {
+vi.mock("./activeSession.js", () => ({
+  useActiveSessionStore: {
     getState: () => ({
       entries: mockTerminalEntries.current,
       destroy: mockTerminalDestroy,
@@ -175,33 +175,6 @@ describe("useAppStore", () => {
   });
 
   // -----------------------------------------------------------------------
-  // selectedProjectId / selectedProject (selectors)
-  // -----------------------------------------------------------------------
-
-  describe("selectedProjectId()", () => {
-    it("derives projectId from selectedWorkspaceId", () => {
-      useAppStore.setState({ selectedWorkspaceId: "proj1/ws1" });
-      expect(useAppStore.getState().selectedProjectId()).toBe("proj1");
-    });
-
-    it("returns null when no workspace selected", () => {
-      useAppStore.setState({ selectedWorkspaceId: null });
-      expect(useAppStore.getState().selectedProjectId()).toBeNull();
-    });
-  });
-
-  describe("selectedProject()", () => {
-    it("returns selected project", () => {
-      const proj = makeProject({ id: "proj1" });
-      useAppStore.setState({ projects: [proj], selectedWorkspaceId: "proj1/ws1" });
-      expect(useAppStore.getState().selectedProject()).toEqual(proj);
-    });
-
-    it("returns undefined when nothing selected", () => {
-      expect(useAppStore.getState().selectedProject()).toBeUndefined();
-    });
-  });
-
   // -----------------------------------------------------------------------
   // createProject
   // -----------------------------------------------------------------------
@@ -252,7 +225,6 @@ describe("useAppStore", () => {
 
       await useAppStore.getState().deleteProject("proj1");
 
-      expect(useAppStore.getState().selectedProjectId()).toBeNull();
       expect(useAppStore.getState().selectedWorkspaceId).toBeNull();
     });
 
@@ -267,7 +239,6 @@ describe("useAppStore", () => {
 
       await useAppStore.getState().deleteProject("proj2");
 
-      expect(useAppStore.getState().selectedProjectId()).toBe("proj1");
       expect(useAppStore.getState().selectedWorkspaceId).toBe("proj1/ws1");
       expect(useAppStore.getState().projects).toHaveLength(1);
     });
@@ -536,19 +507,6 @@ describe("useAppStore", () => {
     });
   });
 
-  describe("selectedWorkspace()", () => {
-    it("returns selected workspace", () => {
-      const ws = makeWorkspace({ id: "proj1/ws1" });
-      const proj = makeProject({ id: "proj1", workspaces: [ws] });
-      useAppStore.setState({ projects: [proj], selectedWorkspaceId: "proj1/ws1" });
-      expect(useAppStore.getState().selectedWorkspace()).toEqual(ws);
-    });
-
-    it("returns undefined when nothing selected", () => {
-      expect(useAppStore.getState().selectedWorkspace()).toBeUndefined();
-    });
-  });
-
   // -----------------------------------------------------------------------
   // subscribePush
   // -----------------------------------------------------------------------
@@ -623,8 +581,8 @@ describe("useAppStore", () => {
 
     it("state:resync prunes terminal entries for deleted workspaces", async () => {
       mockTerminalEntries.current = new Map([
-        ["proj1/ws1", {}],
-        ["proj1/ws-stale", {}],
+        ["id-1", { workspaceId: "proj1/ws1" }],
+        ["id-stale", { workspaceId: "proj1/ws-stale" }],
       ]);
       mockScriptsGetState.mockReturnValue({ currentWorkspaceId: null });
 
@@ -640,8 +598,8 @@ describe("useAppStore", () => {
       const proj = makeProject({ id: "proj1", workspaces: [ws] });
       await resyncCb!({ state: { projects: [proj], settings: {} } });
 
-      expect(mockTerminalDestroy).toHaveBeenCalledWith("proj1/ws-stale");
-      expect(mockTerminalDestroy).not.toHaveBeenCalledWith("proj1/ws1");
+      expect(mockTerminalDestroy).toHaveBeenCalledWith("id-stale");
+      expect(mockTerminalDestroy).not.toHaveBeenCalledWith("id-1");
     });
 
     it("state:resync prunes scripts store when currentWorkspaceId is stale", async () => {

@@ -1,3 +1,4 @@
+import os from "node:os";
 import type { RepoInfo, SessionInfo } from "@iara/contracts";
 import { commandExists } from "@iara/shared/platform";
 import type { AppState } from "../services/state.js";
@@ -18,7 +19,8 @@ export function registerAppHandlers(appState: AppState): void {
 
   registerMethod("app.capabilities", async () => {
     const claude = commandExists("claude");
-    return { claude, platform: process.platform };
+    const userName = os.userInfo().username;
+    return { claude, platform: process.platform, userName };
   });
 
   registerMethod("state.init", async () => {

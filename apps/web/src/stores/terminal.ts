@@ -2,7 +2,7 @@ import { create } from "zustand";
 import { transport } from "../lib/ws-transport.js";
 import { useAppStore } from "./app.js";
 
-export type TerminalStatus = "idle" | "connecting" | "active" | "exited";
+type TerminalStatus = "idle" | "connecting" | "active" | "exited";
 
 interface TerminalEntry {
   terminalId: string | null;
@@ -39,7 +39,7 @@ function invalidateSessions(workspaceId: string): void {
   void useAppStore.getState().refreshSessions(workspaceId);
 }
 
-export const useTerminalStore = create<TerminalState & TerminalActions>((set, get) => ({
+const useTerminalStore = create<TerminalState & TerminalActions>((set, get) => ({
   entries: new Map(),
 
   getEntry: (workspaceId) => get().entries.get(workspaceId) ?? DEFAULT_ENTRY,

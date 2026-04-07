@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import { ChevronDown, GitBranch } from "lucide-react";
+import { ChevronDown, FolderOpen, GitBranch } from "lucide-react";
 import { useAppStore } from "~/stores/app";
 import { toSlug } from "~/lib/utils";
 import { useToast } from "./Toast";
@@ -19,10 +19,12 @@ const BRANCH_PREFIXES = [
 interface CreateWorkspaceDialogProps {
   open: boolean;
   onClose: () => void;
-  projectId: string;
+  projectId?: string | undefined;
 }
 
 export function CreateWorkspaceDialog({ open, onClose, projectId }: CreateWorkspaceDialogProps) {
+  const projects = useAppStore((s) => s.projects);
+  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(projectId ?? null);
   const [name, setName] = useState("");
   const [prefix, setPrefix] = useState("feat");
   const [suffixes, setSuffixes] = useState<Record<string, string>>({});
@@ -31,7 +33,8 @@ export function CreateWorkspaceDialog({ open, onClose, projectId }: CreateWorksp
   const { toast } = useToast();
   const createWorkspace = useAppStore((s) => s.createWorkspace);
 
-  const project = useAppStore((s) => s.projects.find((p) => p.id === projectId));
+  const resolvedProjectId = projectId ?? selectedProjectId;
+  const project = useAppStore((s) => s.projects.find((p) => p.id === resolvedProjectId));
   const mainWsId = project ? `${project.slug}/main` : "";
   const repoInfo = useAppStore((s) => s.getRepoInfo(mainWsId));
 
@@ -46,6 +49,7 @@ export function CreateWorkspaceDialog({ open, onClose, projectId }: CreateWorksp
     setName("");
     setPrefix("feat");
     setSuffixes({});
+    if (!projectId) setSelectedProjectId(null);
   };
 
   if (!open) return null;
@@ -55,8 +59,15 @@ export function CreateWorkspaceDialog({ open, onClose, projectId }: CreateWorksp
     onClose();
   };
 
+  const handleBack = () => {
+    setSelectedProjectId(null);
+    setName("");
+    setPrefix("feat");
+    setSuffixes({});
+  };
+
   const handleSubmit = async () => {
-    if (!name.trim() || !computedSlug) return;
+    if (!name.trim() || !computedSlug || !resolvedProjectId) return;
 
     const branches: Record<string, string> = {};
     for (const repo of repoInfo) {
@@ -64,7 +75,7 @@ export function CreateWorkspaceDialog({ open, onClose, projectId }: CreateWorksp
     }
 
     try {
-      await createWorkspace(projectId, {
+      await createWorkspace(resolvedProjectId, {
         name: name.trim(),
         slug: computedSlug,
         branches,
@@ -79,8 +90,37 @@ export function CreateWorkspaceDialog({ open, onClose, projectId }: CreateWorksp
 
   const canSubmit = name.trim() && computedSlug;
 
+  // Step 1: Pick project (only when projectId not provided)
+  if (!resolvedProjectId) {
+    return (
+      <DialogShell open={open} title="New Workspace" maxWidth="max-w-lg" onClose={handleClose}>
+        <p className="mb-3 text-sm text-zinc-400">Select a project</p>
+        <div className="space-y-1">
+          {projects.map((p) => (
+            <button
+              key={p.id}
+              type="button"
+              onClick={() => setSelectedProjectId(p.id)}
+              className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm text-zinc-300 hover:bg-zinc-800"
+            >
+              <FolderOpen size={14} className="shrink-0 text-zinc-600" />
+              <span>{p.name}</span>
+            </button>
+          ))}
+        </div>
+      </DialogShell>
+    );
+  }
+
+  // Step 2: Name + branches
   return (
-    <DialogShell open={open} title="New Workspace" onClose={handleClose}>
+    <DialogShell
+      open={open}
+      title="New Workspace"
+      maxWidth="max-w-lg"
+      onClose={handleClose}
+      backButton={!projectId ? handleBack : undefined}
+    >
       <div className="space-y-4">
         <div>
           <Label>Name</Label>

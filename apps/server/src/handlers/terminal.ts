@@ -125,6 +125,7 @@ export function registerTerminalHandlers(appState: AppState, manager: TerminalMa
       ...(workspaceContext ? { workspaceContext } : {}),
       appendSystemPrompt: systemPrompt,
       ...(params.resumeSessionId != null ? { resumeSessionId: params.resumeSessionId } : {}),
+      ...(params.initialPrompt != null ? { initialPrompt: params.initialPrompt } : {}),
       env: {
         ...getAutocompactEnv(appState),
         ...getGuardrailsEnv(appState),

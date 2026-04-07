@@ -85,6 +85,10 @@ export type WsMethods = {
   // Sessions
   "sessions.list": { params: { workspaceId: string }; result: SessionInfo[] };
   "sessions.listByProject": { params: { projectId: string }; result: SessionInfo[] };
+  "sessions.rename": {
+    params: { workspaceId: string; sessionId: string; title: string };
+    result: void;
+  };
 
   // Claude
   "claude.cancel": { params: { requestId: string }; result: void };
@@ -153,6 +157,7 @@ export type WsMethods = {
       mode?: "claude" | "shell";
       resumeSessionId?: string;
       sessionCwd?: string;
+      initialPrompt?: string;
       cols?: number;
       rows?: number;
     };

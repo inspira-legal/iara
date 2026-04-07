@@ -1,56 +1,31 @@
-import { useMemo, useCallback, type ReactNode } from "react";
-import { Group, Panel, Separator, useDefaultLayout } from "react-resizable-panels";
+import { useMemo, useCallback, useState, type ReactNode } from "react";
+import { useNavigate } from "@tanstack/react-router";
+import { Group, Panel, Separator, useDefaultLayout, usePanelRef } from "react-resizable-panels";
 import { Sidebar } from "./Sidebar";
 import { MainPanel } from "./MainPanel";
+import { ShortcutsOverlay } from "./ShortcutsOverlay";
+import { CommandPalette } from "./CommandPalette";
 import { useKeyboardShortcuts } from "~/hooks/useKeyboardShortcuts";
-import { useAppStore } from "~/stores/app";
-import { useSidebarStore } from "~/stores/sidebar";
+import { useActiveSessionStore } from "~/stores/activeSession";
 import { isElectron } from "~/env";
 
-interface NavigableItem {
-  projectId: string;
-  workspaceId: string;
-}
-
 export function AppShell({ children }: { children: ReactNode }) {
-  const projects = useAppStore((s) => s.projects);
-  const selectWorkspace = useAppStore((s) => s.selectWorkspace);
-  const getWorkspacesForProject = useAppStore((s) => s.getWorkspacesForProject);
-  const { expandedProjectIds, projectOrder } = useSidebarStore();
-
-  // Build flat list of navigable items from expanded projects (same order as sidebar)
-  const navigableItems = useMemo(() => {
-    const sorted =
-      projectOrder.length > 0
-        ? [...projects].toSorted((a, b) => {
-            const orderMap = new Map(projectOrder.map((id, i) => [id, i]));
-            const ai = orderMap.get(a.id) ?? Number.MAX_SAFE_INTEGER;
-            const bi = orderMap.get(b.id) ?? Number.MAX_SAFE_INTEGER;
-            return ai - bi;
-          })
-        : projects;
-
-    const items: NavigableItem[] = [];
-    for (const project of sorted) {
-      if (!expandedProjectIds.has(project.id)) continue;
-      // All workspaces (including "main") are navigable — no separate root item
-      const workspaces = getWorkspacesForProject(project.id);
-      for (const ws of workspaces) {
-        items.push({ projectId: project.id, workspaceId: ws.id });
-      }
-    }
-    return items;
-  }, [projects, projectOrder, expandedProjectIds, getWorkspacesForProject]);
+  const navigate = useNavigate();
+  const [showShortcuts, setShowShortcuts] = useState(false);
+  const [showCommand, setShowCommand] = useState(false);
+  const sidebarPanelRef = usePanelRef();
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
   const selectByIndex = useCallback(
     (index: number) => {
       // Alt+1 = first item, Alt+0 = 10th item
       const idx = index === 0 ? 9 : index - 1;
-      const item = navigableItems[idx];
-      if (!item) return;
-      selectWorkspace(item.workspaceId);
+      const entries = [...useActiveSessionStore.getState().entries.values()];
+      const entry = entries[idx];
+      if (!entry) return;
+      void navigate({ to: "/session/$id", params: { id: entry.id } });
     },
-    [navigableItems, selectWorkspace],
+    [navigate],
   );
 
   const shortcuts = useMemo(
@@ -69,7 +44,6 @@ export function AppShell({ children }: { children: ReactNode }) {
       "alt+7": () => selectByIndex(7),
       "alt+8": () => selectByIndex(8),
       "alt+9": () => selectByIndex(9),
-      "alt+0": () => selectByIndex(0),
       "mod+1": () => selectByIndex(1),
       "mod+2": () => selectByIndex(2),
       "mod+3": () => selectByIndex(3),
@@ -79,30 +53,38 @@ export function AppShell({ children }: { children: ReactNode }) {
       "mod+7": () => selectByIndex(7),
       "mod+8": () => selectByIndex(8),
       "mod+9": () => selectByIndex(9),
+      "mod+p": () => setShowCommand((v) => !v),
+      f1: () => setShowShortcuts((v) => !v),
     }),
     [selectByIndex],
   );
 
   useKeyboardShortcuts(shortcuts);
 
-  const mainLayout = useDefaultLayout({ id: "iara:main-layout:v3", storage: localStorage });
+  const mainLayout = useDefaultLayout({ id: "iara:main-layout:v4", storage: localStorage });
 
   return (
     <div className="h-screen w-screen overflow-hidden bg-zinc-950 text-zinc-100">
+      <ShortcutsOverlay open={showShortcuts} onClose={() => setShowShortcuts(false)} />
+      <CommandPalette open={showCommand} onClose={() => setShowCommand(false)} />
       <Group
         orientation="horizontal"
         defaultLayout={mainLayout.defaultLayout}
         onLayoutChanged={mainLayout.onLayoutChanged}
       >
         <Panel
+          panelRef={sidebarPanelRef}
           id="sidebar"
           defaultSize="280px"
-          minSize="200px"
+          minSize="220px"
           maxSize="480px"
           collapsible
-          collapsedSize={0}
+          collapsedSize="48px"
+          onResize={() => {
+            setSidebarCollapsed(sidebarPanelRef.current?.isCollapsed() ?? false);
+          }}
         >
-          <Sidebar />
+          <Sidebar panelRef={sidebarPanelRef} panelCollapsed={sidebarCollapsed} />
         </Panel>
         <Separator className="relative z-10 -mx-1.5 w-3 bg-transparent outline-none after:absolute after:inset-y-0 after:left-1/2 after:w-1 after:-translate-x-1/2 after:bg-transparent after:transition-colors hover:after:bg-blue-500/50 data-[resize-handle-active]:after:bg-blue-500/70" />
         <Panel id="main" minSize="40%">

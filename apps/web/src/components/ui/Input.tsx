@@ -4,7 +4,7 @@ import { cn } from "~/lib/utils";
 
 /** Shared base styles for text inputs (Input + Textarea). */
 export const inputBase =
-  "rounded border bg-zinc-800 text-zinc-100 placeholder-zinc-600 outline-none transition-colors focus:border-blue-500";
+  "rounded border bg-zinc-800 text-zinc-100 placeholder-zinc-600 outline-none transition-colors focus:border-accent-ring";
 
 const inputVariants = cva(inputBase, {
   variants: {

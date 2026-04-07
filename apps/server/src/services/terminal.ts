@@ -27,6 +27,7 @@ interface TerminalCreateConfig {
   resumeSessionId?: string;
   pluginDir?: string;
   env?: Record<string, string>;
+  initialPrompt?: string;
   cols?: number;
   rows?: number;
 }
@@ -98,6 +99,7 @@ export class TerminalManager {
         appendSystemPrompt: systemPrompt,
         pluginDir: config.pluginDir || process.env.IARA_PLUGIN_DIR || undefined,
         env: config.env,
+        initialPrompt: config.initialPrompt,
       };
 
       const claudeArgs = buildClaudeArgs(launchConfig);

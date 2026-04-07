@@ -11,6 +11,7 @@ export interface LaunchConfig {
   workspaceContext?: WorkspaceContext | undefined;
   pluginDir?: string | undefined;
   env?: Record<string, string> | undefined;
+  initialPrompt?: string | undefined;
 }
 
 /** Context about the workspace environment, used to build a richer system prompt. */
@@ -54,6 +55,11 @@ export function buildClaudeArgs(config: LaunchConfig): string[] {
   // System prompt
   if (config.appendSystemPrompt) {
     args.push("--append-system-prompt", config.appendSystemPrompt);
+  }
+
+  // Initial prompt (positional arg — must be last)
+  if (config.initialPrompt) {
+    args.push(config.initialPrompt);
   }
 
   return args;
