@@ -10,6 +10,7 @@ import {
   Menu,
   Notification,
   protocol,
+  shell,
 } from "electron";
 import WebSocket from "ws";
 import { syncShellEnvironment } from "./services/shell-env.js";
@@ -411,6 +412,14 @@ function createWindow(): BrowserWindow {
       });
       redispatching = false;
     }
+  });
+
+  // Open external links in the system browser instead of creating new Electron windows
+  win.webContents.setWindowOpenHandler(({ url }) => {
+    if (url.startsWith("http:") || url.startsWith("https:")) {
+      void shell.openExternal(url);
+    }
+    return { action: "deny" };
   });
 
   // Forward renderer console to terminal
