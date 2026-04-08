@@ -37,20 +37,36 @@ export function commandExists(cmd: string): boolean {
 // Shell resolution
 // ---------------------------------------------------------------------------
 
+function isPowerShell(shell: string): boolean {
+  return /powershell|pwsh/i.test(shell);
+}
+
 /** Escape a single argument for embedding in a shell command string. */
 export function shellQuote(arg: string): string {
-  if (arg === "") return "''";
+  if (arg === "") return isWindows ? '""' : "''";
   if (/^[a-zA-Z0-9_./:=@,+-]+$/.test(arg)) return arg;
+  if (isWindows) {
+    return `"${arg.replace(/"/g, '\\"')}"`;
+  }
   return `'${arg.replace(/'/g, "'\\''")}'`;
 }
 
 /** Build an interactive login shell as `{ command, args }` — for PTY sessions. */
 export function buildInteractiveShell(): { command: string; args: string[] } {
+  if (isWindows) {
+    return { command: defaultShell, args: [] };
+  }
   return { command: defaultShell, args: ["--login"] };
 }
 
 /** Build a shell command wrapped in the user's login shell (`$SHELL -lc "cmd"`) as `{ command, args }`. */
 export function buildShellCommand(cmd: string): { command: string; args: string[] } {
+  if (isWindows) {
+    if (isPowerShell(defaultShell)) {
+      return { command: defaultShell, args: ["-NoProfile", "-Command", cmd] };
+    }
+    return { command: defaultShell, args: ["/C", cmd] };
+  }
   return { command: defaultShell, args: ["-lc", cmd] };
 }
 
@@ -62,7 +78,7 @@ export function spawnWithLoginShell(
   const { command, args } = buildShellCommand(cmd);
   return spawn(command, args, {
     ...opts,
-    detached: true,
+    detached: !isWindows,
   });
 }
 
@@ -72,14 +88,21 @@ export function spawnWithLoginShell(
 
 /** Build platform-appropriate base environment variables for terminal processes. */
 export function buildTerminalEnv(overrides?: Record<string, string>): Record<string, string> {
+  if (isWindows) {
+    return {
+      ...(process.env as Record<string, string>),
+      ...overrides,
+      TERM: "xterm-256color",
+      COLORTERM: "truecolor",
+    };
+  }
+
   const base: Record<string, string> = {
     HOME: process.env.HOME ?? "",
     USER: process.env.USER ?? "",
     SHELL: defaultShell,
     PATH: process.env.PATH ?? "/usr/local/bin:/usr/bin:/bin",
   };
-  // Only set locale vars if they exist in the environment — avoid setting
-  // en_US.UTF-8 when the locale isn't installed (common in minimal WSL setups).
   if (process.env.LANG) base.LANG = process.env.LANG;
   if (process.env.LC_ALL) base.LC_ALL = process.env.LC_ALL;
 
@@ -93,6 +116,7 @@ export function buildTerminalEnv(overrides?: Record<string, string>): Record<str
 /** Get the current working directory of a process by PID. Returns null if unavailable. */
 export async function getProcessCwd(pid: number): Promise<string | null> {
   try {
+    if (isWindows) return null;
     if (process.platform === "linux") {
       const fs = await import("node:fs/promises");
       return await fs.readlink(`/proc/${pid}/cwd`);

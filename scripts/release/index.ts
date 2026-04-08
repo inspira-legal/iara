@@ -33,21 +33,7 @@ const opts = parseArgs(process.argv);
 const isWin = opts.platform === "win";
 
 // Step 1: Build
-if (isWin) {
-  // Windows with pre-built WSL server: only build desktop + web
-  if (opts.skipBuild) {
-    console.log("\n==> Skipping build (--skip-build)");
-    for (const dir of ["apps/desktop/dist-electron", "apps/web/dist"]) {
-      if (!existsSync(resolve(ROOT, dir))) {
-        console.error(`ERROR: ${dir} does not exist. Run without --skip-build first.`);
-        process.exit(1);
-      }
-    }
-  } else {
-    console.log("\n==> Building desktop + web (server provided by wsl-server artifact)...");
-    await $({ cwd: posix(ROOT) })`bun build:desktop`;
-  }
-} else if (opts.skipBuild) {
+if (opts.skipBuild) {
   console.log("\n==> Skipping build (--skip-build)");
   for (const dir of ["apps/desktop/dist-electron", "apps/server/dist", "apps/web/dist"]) {
     if (!existsSync(resolve(ROOT, dir))) {
@@ -91,8 +77,11 @@ if (existsSync(desktopResources)) {
   cpSync(desktopResources, resolve(STAGING, "resources"), { recursive: true });
 }
 
+const serverDistStaged = resolve(STAGING, "extraResources/server/dist");
+mkdirSync(serverDistStaged, { recursive: true });
+cpSync(resolve(ROOT, "apps/server/dist"), serverDistStaged, { recursive: true });
+
 if (isWin) {
-  // Validate pre-built WSL server bundle (placed by CI or bun run release:wsl-server)
   for (const required of ["node", "dist", "node_modules"]) {
     if (!existsSync(resolve(wslServerDir, required))) {
       console.error(
@@ -102,10 +91,6 @@ if (isWin) {
     }
   }
   console.log("    WSL server bundle found at:", wslServerDir);
-} else {
-  const serverDistStaged = resolve(STAGING, "extraResources/server/dist");
-  mkdirSync(serverDistStaged, { recursive: true });
-  cpSync(resolve(ROOT, "apps/server/dist"), serverDistStaged, { recursive: true });
 }
 
 const webDistStaged = resolve(STAGING, "extraResources/web");
@@ -128,27 +113,25 @@ const desktopDeps = resolveProductionDeps(desktopPkg.dependencies, catalog, "des
 
 console.log(`    Desktop deps: ${Object.keys(desktopDeps).join(", ") || "(none)"}`);
 
-if (!isWin) {
-  const serverPkg = readJson(resolve(ROOT, "apps/server/package.json")) as {
-    dependencies: Record<string, string>;
-  };
-  const serverDeps = resolveProductionDeps(serverPkg.dependencies, catalog, "server");
+const serverPkg = readJson(resolve(ROOT, "apps/server/package.json")) as {
+  dependencies: Record<string, string>;
+};
+const serverDeps = resolveProductionDeps(serverPkg.dependencies, catalog, "server");
 
-  console.log(`    Server deps:  ${Object.keys(serverDeps).join(", ") || "(none)"}`);
+console.log(`    Server deps:  ${Object.keys(serverDeps).join(", ") || "(none)"}`);
 
-  const serverModulesDir = resolve(STAGING, "extraResources/server");
-  writeFileSync(
-    resolve(serverModulesDir, "package.json"),
-    JSON.stringify(
-      { name: "@iara/server-runtime", version: "0.0.1", private: true, dependencies: serverDeps },
-      null,
-      2,
-    ),
-  );
+const serverModulesDir = resolve(STAGING, "extraResources/server");
+writeFileSync(
+  resolve(serverModulesDir, "package.json"),
+  JSON.stringify(
+    { name: "@iara/server-runtime", version: "0.0.1", private: true, dependencies: serverDeps },
+    null,
+    2,
+  ),
+);
 
-  console.log("\n==> Installing server native dependencies...");
-  await $({ cwd: posix(serverModulesDir) })`bun install --production`;
-}
+console.log("\n==> Installing server native dependencies...");
+await $({ cwd: posix(serverModulesDir) })`bun install --production`;
 
 writeFileSync(
   resolve(STAGING, "package.json"),

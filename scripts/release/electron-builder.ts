@@ -61,6 +61,11 @@ function winConfig(arch: Arch[]): PlatformBuildConfig {
         artifactName: "iara-${version}-win-${arch}.${ext}",
       },
     },
+    formatConfigs: {
+      nsis: {
+        include: "resources/installer.nsh",
+      },
+    },
   };
 }
 
@@ -71,19 +76,19 @@ const PLATFORM_CONFIGS: Record<Platform, (arch: Arch[]) => PlatformBuildConfig> 
 };
 
 function getExtraResources(platform: Platform): ExtraResource[] {
-  if (platform === "win") {
-    return [
-      { from: "extraResources/wsl-server/node", to: "wsl-server/node" },
-      { from: "extraResources/wsl-server/dist", to: "wsl-server/dist" },
-      { from: "extraResources/wsl-server/node_modules", to: "wsl-server/node_modules" },
-      { from: "extraResources/web", to: "web" },
-    ];
-  }
-  return [
+  const resources: ExtraResource[] = [
     { from: "extraResources/server/dist", to: "server/dist" },
     { from: "extraResources/server/node_modules", to: "server/node_modules" },
     { from: "extraResources/web", to: "web" },
   ];
+  if (platform === "win") {
+    resources.push(
+      { from: "extraResources/wsl-server/node", to: "wsl-server/node" },
+      { from: "extraResources/wsl-server/dist", to: "wsl-server/dist" },
+      { from: "extraResources/wsl-server/node_modules", to: "wsl-server/node_modules" },
+    );
+  }
+  return resources;
 }
 
 export function createBuildConfig(platform: Platform, arch: Arch[]): Record<string, unknown> {

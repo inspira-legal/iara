@@ -12,7 +12,7 @@ import type {
   WsPushEvents,
 } from "@iara/contracts";
 import { cleanEnv } from "@iara/shared/env";
-import { spawnWithLoginShell, killProcessTree } from "@iara/shared/platform";
+import { isWindows, spawnWithLoginShell, killProcessTree } from "@iara/shared/platform";
 import { interpolate } from "./interpolation.js";
 import type { InterpolationContext } from "./interpolation.js";
 
@@ -598,17 +598,32 @@ export class ScriptSupervisor {
 /** Kill process(es) listening on a port (async to avoid blocking event loop). */
 async function killByPort(port: number): Promise<void> {
   try {
-    const { stdout } = await execAsync(`lsof -ti:${port}`, { encoding: "utf-8" });
-    for (const pid of stdout.trim().split("\n").filter(Boolean)) {
-      try {
-        process.kill(Number(pid), "SIGTERM");
-      } catch {
-        // Already dead
+    if (isWindows) {
+      const { stdout } = await execAsync(`netstat -ano | findstr :${port} | findstr LISTENING`, {
+        encoding: "utf-8",
+      });
+      const pids = new Set(
+        stdout
+          .trim()
+          .split("\n")
+          .filter(Boolean)
+          .map((line) => line.trim().split(/\s+/).pop())
+          .filter(Boolean),
+      );
+      for (const pid of pids) {
+        try {
+          process.kill(Number(pid), "SIGTERM");
+        } catch {}
+      }
+    } else {
+      const { stdout } = await execAsync(`lsof -ti:${port}`, { encoding: "utf-8" });
+      for (const pid of stdout.trim().split("\n").filter(Boolean)) {
+        try {
+          process.kill(Number(pid), "SIGTERM");
+        } catch {}
       }
     }
-  } catch {
-    // No process found on port
-  }
+  } catch {}
 }
 
 /** TCP port check — resolves true if port is accepting connections. */

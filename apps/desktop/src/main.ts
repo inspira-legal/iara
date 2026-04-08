@@ -36,10 +36,28 @@ if (isWindows) {
   app.setAppUserModelId("com.iara.desktop");
 }
 
-/** Whether the server should run inside WSL. */
-const useWsl = isWindows && isWslAvailable();
+type WindowsMode = "native" | "wsl" | null;
 
-const stateDir = getStateDir("iara");
+function resolveWindowsMode(): WindowsMode {
+  if (!isWindows) return null;
+  const modeArg = process.argv.find((a) => a.startsWith("--windows-mode="));
+  return modeArg?.split("=")[1] === "wsl" ? "wsl" : "native";
+}
+
+const windowsMode = resolveWindowsMode();
+const useWsl = windowsMode === "wsl";
+
+const stateAppName = windowsMode === "wsl" ? "iara-wsl" : "iara";
+if (windowsMode) {
+  app.setPath("userData", getStateDir(stateAppName));
+}
+
+const gotLock = app.requestSingleInstanceLock();
+if (!gotLock) {
+  app.quit();
+}
+
+const stateDir = getStateDir(stateAppName);
 const logDir = path.join(stateDir, "logs");
 const desktopLog = isDevelopment ? null : new RotatingFileSink(logDir, "desktop");
 const serverLog = isDevelopment ? null : new RotatingFileSink(logDir, "server");
@@ -308,7 +326,7 @@ function createWindow(): BrowserWindow {
       sandbox: true,
       devTools: isDevelopment,
     },
-    title: isDevelopment ? "iara (Dev)" : "iara",
+    title: isDevelopment ? "iara (Dev)" : windowsMode === "wsl" ? "iara (WSL)" : "iara",
     autoHideMenuBar: true,
   });
 
@@ -526,11 +544,10 @@ function registerLocalIpcHandlers(): void {
 // ---------------------------------------------------------------------------
 
 app.whenReady().then(async () => {
-  // On Windows, WSL is required for the server
-  if (isWindows && !useWsl) {
+  if (windowsMode === "wsl" && !isWslAvailable()) {
     dialog.showErrorBox(
       "WSL Required",
-      "iara requires Windows Subsystem for Linux (WSL).\n\nInstall it by running:\n  wsl --install\n\nThen restart iara.",
+      "iara (WSL) requires Windows Subsystem for Linux.\n\nInstall it by running:\n  wsl --install\n\nThen restart iara.",
     );
     app.quit();
     return;
