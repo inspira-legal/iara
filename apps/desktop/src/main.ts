@@ -324,7 +324,7 @@ function createWindow(): BrowserWindow {
       preload: path.join(__dirname, "preload.js"),
       contextIsolation: true,
       sandbox: true,
-      devTools: isDevelopment,
+      devTools: true,
     },
     title: isDevelopment ? "iara (Dev)" : windowsMode === "wsl" ? "iara (WSL)" : "iara",
     autoHideMenuBar: true,
@@ -366,18 +366,7 @@ function createWindow(): BrowserWindow {
 
   // Remove default menu to prevent Electron accelerators (Ctrl+C, Ctrl+V, Ctrl+A, etc.)
   // from intercepting terminal control keys. DevTools is still accessible via F12 / Ctrl+Shift+I.
-  if (isDevelopment) {
-    Menu.setApplicationMenu(
-      Menu.buildFromTemplate([
-        {
-          label: "View",
-          submenu: [{ role: "toggleDevTools" }, { role: "reload" }, { role: "forceReload" }],
-        },
-      ]),
-    );
-  } else {
-    Menu.setApplicationMenu(null);
-  }
+  Menu.setApplicationMenu(null);
 
   // Keyboard shortcuts handled at the Electron level (before Chromium processes them).
   // Chromium steals Ctrl+Shift+C/I/J even with devTools:false — we must intercept and
