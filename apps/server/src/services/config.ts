@@ -2,7 +2,7 @@ import * as path from "node:path";
 import * as os from "node:os";
 import { z } from "zod";
 import { createJsonFile } from "@iara/shared/json-file";
-import { getStateDir } from "@iara/shared/platform";
+import { stateDir } from "../env.js";
 
 const AppConfigSchema = z.object({
   projectsDir: z.string(),
@@ -32,5 +32,5 @@ export function getProjectsDir(): string {
 }
 
 function getConfigPath(): string {
-  return path.join(getStateDir("iara"), "config.json");
+  return path.join(stateDir, "config.json");
 }

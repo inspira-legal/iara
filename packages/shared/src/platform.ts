@@ -1,12 +1,34 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import * as os from "node:os";
 import * as path from "node:path";
-import defaultShell from "default-shell";
 import treeKill from "tree-kill";
 import which from "which";
 
 export const isWindows = process.platform === "win32";
 const isMacOS = process.platform === "darwin";
+
+// ---------------------------------------------------------------------------
+// Default shell detection
+// ---------------------------------------------------------------------------
+
+function detectDefaultShell(): string {
+  if (isWindows) {
+    // Favor PowerShell: pwsh (PS7) > powershell (PS5) > COMSPEC > cmd.exe
+    if (which.sync("pwsh", { nothrow: true })) return "pwsh";
+    if (which.sync("powershell", { nothrow: true })) return "powershell";
+    return process.env.COMSPEC || "cmd.exe";
+  }
+
+  try {
+    const { shell } = os.userInfo();
+    if (shell) return shell;
+  } catch {}
+
+  if (isMacOS) return process.env.SHELL || "/bin/zsh";
+  return process.env.SHELL || "/bin/sh";
+}
+
+const defaultShell = detectDefaultShell();
 
 // ---------------------------------------------------------------------------
 // State directory

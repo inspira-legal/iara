@@ -3,10 +3,10 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import * as os from "node:os";
 
-// We need to reset the cached config between tests, so we re-import each time
 let tmpHome: string;
+let mockStateDir: string;
 
-// Mock os.homedir to return our temp dir
+// Mock os.homedir for defaultProjectsDir()
 vi.mock("node:os", async () => {
   const actual = await vi.importActual<typeof import("node:os")>("node:os");
   return {
@@ -15,22 +15,28 @@ vi.mock("node:os", async () => {
   };
 });
 
+// Mock stateDir from env.ts so config.ts reads/writes from our temp dir
+vi.mock("../env.js", () => ({
+  get stateDir() {
+    return mockStateDir;
+  },
+}));
+
 beforeEach(() => {
   tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "config-test-"));
+  mockStateDir = path.join(tmpHome, ".config", "iara");
 });
 
 afterEach(() => {
   fs.rmSync(tmpHome, { recursive: true, force: true });
-  // Reset module cache so cachedConfig is cleared
   vi.resetModules();
 });
 
 describe("getConfig()", () => {
-  it("reads config from ~/.config/iara/config.json", async () => {
-    const configDir = path.join(tmpHome, ".config", "iara");
-    fs.mkdirSync(configDir, { recursive: true });
+  it("reads config from stateDir/config.json", async () => {
+    fs.mkdirSync(mockStateDir, { recursive: true });
     fs.writeFileSync(
-      path.join(configDir, "config.json"),
+      path.join(mockStateDir, "config.json"),
       JSON.stringify({ projectsDir: "/custom/projects" }),
     );
 
@@ -48,7 +54,7 @@ describe("getConfig()", () => {
   it("writes default config file when missing", async () => {
     const { getConfig } = await import("./config.js");
     getConfig();
-    const configPath = path.join(tmpHome, ".config", "iara", "config.json");
+    const configPath = path.join(mockStateDir, "config.json");
     expect(fs.existsSync(configPath)).toBe(true);
     const written = JSON.parse(fs.readFileSync(configPath, "utf-8"));
     expect(written.projectsDir).toBe(path.join(tmpHome, "iara"));
@@ -58,16 +64,15 @@ describe("getConfig()", () => {
     const { getConfig } = await import("./config.js");
     const first = getConfig();
     const second = getConfig();
-    expect(first).toBe(second); // Same object reference
+    expect(first).toBe(second);
   });
 });
 
 describe("getProjectsDir()", () => {
   it("returns the projectsDir from config", async () => {
-    const configDir = path.join(tmpHome, ".config", "iara");
-    fs.mkdirSync(configDir, { recursive: true });
+    fs.mkdirSync(mockStateDir, { recursive: true });
     fs.writeFileSync(
-      path.join(configDir, "config.json"),
+      path.join(mockStateDir, "config.json"),
       JSON.stringify({ projectsDir: "/my/projects" }),
     );
 
