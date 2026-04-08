@@ -100,6 +100,7 @@ export function spawnWithLoginShell(
   return spawn(command, args, {
     ...opts,
     detached: !isWindows,
+    windowsHide: true,
   });
 }
 

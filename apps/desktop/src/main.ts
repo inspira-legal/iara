@@ -184,11 +184,13 @@ function spawnServer(): void {
     const envArgs = Object.entries(wslEnv).map(([k, v]) => `${k}=${v}`);
     child = spawn("wsl.exe", ["-e", "env", ...envArgs, wslNode, wslServerEntry], {
       stdio: isDevelopment ? "inherit" : ["ignore", "pipe", "pipe"],
+      windowsHide: true,
     });
   } else {
     child = spawn(process.execPath, [serverEntry], {
       env,
       stdio: isDevelopment ? "inherit" : ["ignore", "pipe", "pipe"],
+      windowsHide: true,
     });
   }
 
