@@ -64,7 +64,7 @@ function winConfig(arch: Arch[]): PlatformBuildConfig {
     formatConfigs: {
       nsis: {
         include: "resources/installer.nsh",
-        menuCategory: true,
+        menuCategory: "Iara",
         createDesktopShortcut: true,
       },
     },
