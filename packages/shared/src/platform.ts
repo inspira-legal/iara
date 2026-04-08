@@ -63,10 +63,6 @@ export function commandExists(cmd: string): boolean {
 // Shell resolution
 // ---------------------------------------------------------------------------
 
-function isPowerShell(shell: string): boolean {
-  return /powershell|pwsh/i.test(shell);
-}
-
 /** Escape a single argument for embedding in a shell command string. */
 export function shellQuote(arg: string): string {
   if (arg === "") return isWindows ? '""' : "''";
@@ -85,13 +81,12 @@ export function buildInteractiveShell(): { command: string; args: string[] } {
   return { command: defaultShell, args: ["--login"] };
 }
 
-/** Build a shell command wrapped in the user's login shell (`$SHELL -lc "cmd"`) as `{ command, args }`. */
+/** Build a shell command wrapped in a shell as `{ command, args }`.
+ *  Windows: always cmd.exe /C — reliable quoting, no special char interpretation.
+ *  Unix: $SHELL -lc (login shell). */
 export function buildShellCommand(cmd: string): { command: string; args: string[] } {
   if (isWindows) {
-    if (isPowerShell(defaultShell)) {
-      return { command: defaultShell, args: ["-Command", cmd] };
-    }
-    return { command: defaultShell, args: ["/C", cmd] };
+    return { command: process.env.COMSPEC ?? "cmd.exe", args: ["/C", cmd] };
   }
   return { command: defaultShell, args: ["-lc", cmd] };
 }
