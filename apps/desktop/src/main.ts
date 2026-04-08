@@ -529,6 +529,37 @@ function registerLocalIpcHandlers(): void {
 }
 
 // ---------------------------------------------------------------------------
+// WSL shortcut sync
+// ---------------------------------------------------------------------------
+
+function syncWslShortcut(): void {
+  if (!isWindows || isDevelopment) return;
+  const shortcutDir = path.join(
+    app.getPath("appData"),
+    "Microsoft",
+    "Windows",
+    "Start Menu",
+    "Programs",
+    "Iara",
+  );
+  const shortcutPath = path.join(shortcutDir, "Iara (WSL).lnk");
+  const wslAvailable = isWslAvailable();
+  const shortcutExists = fs.existsSync(shortcutPath);
+
+  if (wslAvailable && !shortcutExists) {
+    fs.mkdirSync(shortcutDir, { recursive: true });
+    shell.writeShortcutLink(shortcutPath, {
+      target: process.execPath,
+      args: "--windows-mode=wsl",
+    });
+  } else if (!wslAvailable && shortcutExists) {
+    try {
+      fs.unlinkSync(shortcutPath);
+    } catch {}
+  }
+}
+
+// ---------------------------------------------------------------------------
 // App lifecycle
 // ---------------------------------------------------------------------------
 
@@ -541,6 +572,8 @@ app.whenReady().then(async () => {
     app.quit();
     return;
   }
+
+  syncWslShortcut();
 
   if (!isDevelopment) {
     registerCustomProtocol();
