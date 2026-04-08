@@ -13,7 +13,7 @@ import { EnvWatcher } from "./services/env-watcher.js";
 import { AppState } from "./services/state.js";
 import { ProjectsWatcher } from "./services/watcher.js";
 import { GitWatcher } from "./services/git-watcher.js";
-import { getProjectsDir } from "./services/config.js";
+import * as os from "node:os";
 import { stateDir } from "./env.js";
 
 // Shell env must complete before anything that depends on PATH (git, etc.)
@@ -30,7 +30,8 @@ const webDir =
   process.env.IARA_WEB_DIR ?? process.argv.find((_, i, a) => a[i - 1] === "--web-dir") ?? undefined;
 
 // Core state
-const appState = new AppState(getProjectsDir(), stateDir);
+const projectsDir = path.join(os.homedir(), "iara");
+const appState = new AppState(projectsDir, stateDir);
 
 // Services
 const scriptSupervisor = new ScriptSupervisor(pushAll);
@@ -41,11 +42,11 @@ registerSocketHandlers(socketServer, pushAll);
 const sessionWatcher = new SessionWatcher(pushAll, appState);
 
 // FS watchers
-const watcher = new ProjectsWatcher(getProjectsDir(), appState, pushAll);
+const watcher = new ProjectsWatcher(projectsDir, appState, pushAll);
 await watcher.start();
 const gitWatcher = new GitWatcher(appState, pushAll);
 gitWatcher.start();
-const envWatcher = new EnvWatcher(getProjectsDir(), appState);
+const envWatcher = new EnvWatcher(projectsDir, appState);
 await envWatcher.start();
 
 // Register all WS handlers

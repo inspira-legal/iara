@@ -69,7 +69,7 @@ export function registerAllHandlers(deps: HandlerDeps): void {
     deps.pushFn,
   );
   registerSessionHandlers(deps.appState);
-  registerPromptHandlers();
+  registerPromptHandlers(deps.appState);
   registerScriptHandlers(deps.appState, deps.scriptSupervisor, deps.pushFn);
   registerEnvHandlers(deps.appState, deps.envWatcher);
   registerGitHandlers();

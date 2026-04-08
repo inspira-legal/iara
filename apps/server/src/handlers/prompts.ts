@@ -1,14 +1,14 @@
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
+import type { AppState } from "../services/state.js";
 import { registerMethod } from "../router.js";
-import { getProjectsDir } from "../services/config.js";
 
-function resolvePath(filePath: string): string {
-  if (path.isAbsolute(filePath)) return filePath;
-  return path.join(getProjectsDir(), filePath);
-}
+export function registerPromptHandlers(appState: AppState): void {
+  function resolvePath(filePath: string): string {
+    if (path.isAbsolute(filePath)) return filePath;
+    return path.join(appState.getProjectsDir(), filePath);
+  }
 
-export function registerPromptHandlers(): void {
   registerMethod("prompts.read", async (params) => {
     return fs.readFile(resolvePath(params.filePath), "utf-8");
   });

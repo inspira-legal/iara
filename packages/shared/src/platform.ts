@@ -85,7 +85,7 @@ export function buildInteractiveShell(): { command: string; args: string[] } {
 export function buildShellCommand(cmd: string): { command: string; args: string[] } {
   if (isWindows) {
     if (isPowerShell(defaultShell)) {
-      return { command: defaultShell, args: ["-NoProfile", "-Command", cmd] };
+      return { command: defaultShell, args: ["-Command", cmd] };
     }
     return { command: defaultShell, args: ["/C", cmd] };
   }
