@@ -64,6 +64,8 @@ function winConfig(arch: Arch[]): PlatformBuildConfig {
     formatConfigs: {
       nsis: {
         include: "resources/installer.nsh",
+        menuCategory: true,
+        createDesktopShortcut: true,
       },
     },
   };
@@ -96,7 +98,7 @@ export function createBuildConfig(platform: Platform, arch: Arch[]): Record<stri
 
   return {
     appId: "com.iara.desktop",
-    productName: "iara",
+    productName: "Iara",
     copyright: "Copyright © 2026",
     directories: { output: RELEASE, buildResources: "resources" },
     files: ["dist-electron/**/*"],
