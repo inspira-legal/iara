@@ -107,7 +107,7 @@ export class TerminalManager {
       command = resolved.command;
       args = resolved.args;
       env.IARA_SESSION_ID = sessionId;
-      console.log("[terminal] spawn claude", { cwd: config.workspaceDir, args });
+      console.log("[terminal] spawn claude", { cwd: config.workspaceDir, command, args });
     }
 
     const ptyProcess = pty.spawn(command, args, {

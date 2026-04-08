@@ -14,9 +14,13 @@ const isMacOS = process.platform === "darwin";
 function detectDefaultShell(): string {
   if (isWindows) {
     // Favor PowerShell: pwsh (PS7) > powershell (PS5) > COMSPEC > cmd.exe
-    if (which.sync("pwsh", { nothrow: true })) return "pwsh";
-    if (which.sync("powershell", { nothrow: true })) return "powershell";
-    return process.env.COMSPEC || "cmd.exe";
+    // Return full path so node-pty can find the binary via CreateProcess
+    return (
+      which.sync("pwsh", { nothrow: true }) ??
+      which.sync("powershell", { nothrow: true }) ??
+      process.env.COMSPEC ??
+      "cmd.exe"
+    );
   }
 
   try {
