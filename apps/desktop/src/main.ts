@@ -328,7 +328,7 @@ function createWindow(): BrowserWindow {
       sandbox: true,
       devTools: true,
     },
-    title: isDevelopment ? "iara (Dev)" : windowsMode === "wsl" ? "iara (WSL)" : "iara",
+    title: isDevelopment ? "Iara (Dev)" : windowsMode === "wsl" ? "Iara (WSL)" : "Iara",
     autoHideMenuBar: true,
   });
 
