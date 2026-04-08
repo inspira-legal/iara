@@ -8,14 +8,6 @@ import { useNotificationStore } from "~/stores/notifications";
 import { useAppStore } from "~/stores/app";
 // Import stores to register global WS listeners
 import "~/stores/terminal";
-import "~/stores/creation";
-import { useCreationToasts } from "~/hooks/useCreationToasts";
-import { FallbackCreationDialog } from "~/components/FallbackCreationDialog";
-
-function CreationToastBridge() {
-  useCreationToasts();
-  return null;
-}
 
 function RootComponent() {
   const initialized = useAppStore((s) => s.initialized);
@@ -41,8 +33,6 @@ function RootComponent() {
   return (
     <ErrorBoundary>
       <ToastProvider>
-        <CreationToastBridge />
-        <FallbackCreationDialog />
         <AppShell>
           <Outlet />
         </AppShell>

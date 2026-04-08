@@ -2,7 +2,6 @@ import type {
   AddRepoInput,
   AppCapabilities,
   AppInfo,
-  CreationProgress,
   CreateProjectInput,
   CreateWorkspaceInput,
   EssencialKey,
@@ -47,16 +46,8 @@ export type WsMethods = {
   "projects.create": { params: CreateProjectInput; result: Project };
   "projects.update": { params: { id: string } & UpdateProjectInput; result: void };
   "projects.delete": { params: { id: string }; result: void };
-  "projects.suggest": {
-    params: { userGoal: string };
-    result: { requestId: string };
-  };
   "projects.analyze": {
     params: { projectId: string; description: string };
-    result: { requestId: string };
-  };
-  "projects.createFromPrompt": {
-    params: { repoSources: string[]; prompt: string };
     result: { requestId: string };
   };
 
@@ -78,16 +69,8 @@ export type WsMethods = {
   };
   "workspaces.update": { params: { workspaceId: string }; result: void };
   "workspaces.delete": { params: { workspaceId: string }; result: void };
-  "workspaces.suggest": {
-    params: { projectId: string; userGoal: string };
-    result: { requestId: string };
-  };
   "workspaces.regenerate": {
     params: { workspaceId: string };
-    result: { requestId: string };
-  };
-  "workspaces.createFromPrompt": {
-    params: { projectId: string; prompt: string };
     result: { requestId: string };
   };
   "workspaces.renameBranch": {
@@ -204,7 +187,6 @@ export type WsPushEvents = {
   "workspace:changed": { workspace: Workspace };
   "state:resync": { state: { projects: Project[]; settings: Record<string, string> } };
   "repos:changed": { projectId: string; workspaceId?: string; repoInfo: RepoInfo[] };
-  "creation:progress": CreationProgress;
 };
 
 // ---------------------------------------------------------------------------

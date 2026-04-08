@@ -2,19 +2,19 @@ import { useState } from "react";
 import { Plus, GitBranch, FolderOpen, FileText, X } from "lucide-react";
 import type { AddRepoInput } from "@iara/contracts";
 import { transport } from "~/lib/ws-transport.js";
+import { useAppStore } from "~/stores/app";
+import { toSlug } from "~/lib/utils";
 import { useToast } from "./Toast";
 import { AddRepoDialog } from "./AddRepoDialog";
 import { DialogShell } from "./ui/DialogShell";
 import { Button } from "./ui/Button";
-import { Textarea } from "./ui/Textarea";
+import { Input } from "./ui/Input";
 import { Label } from "./ui/Label";
 
 interface CreateProjectDialogProps {
   open: boolean;
   onClose: () => void;
 }
-
-type Step = "repos" | "prompt";
 
 interface PendingRepo {
   input: AddRepoInput;
@@ -33,17 +33,18 @@ const METHOD_LABELS: Record<string, string> = {
 };
 
 export function CreateProjectDialog({ open, onClose }: CreateProjectDialogProps) {
-  const [step, setStep] = useState<Step>("repos");
   const [pendingRepos, setPendingRepos] = useState<PendingRepo[]>([]);
   const [showAddRepo, setShowAddRepo] = useState(false);
-  const [userGoal, setUserGoal] = useState("");
+  const [name, setName] = useState("");
   const { toast } = useToast();
+  const createProject = useAppStore((s) => s.createProject);
+
+  const computedSlug = toSlug(name);
 
   const resetForm = () => {
-    setStep("repos");
     setPendingRepos([]);
     setShowAddRepo(false);
-    setUserGoal("");
+    setName("");
   };
 
   if (!open) return null;
@@ -68,7 +69,7 @@ export function CreateProjectDialog({ open, onClose }: CreateProjectDialogProps)
   };
 
   const handleSubmit = async () => {
-    if (!userGoal.trim()) return;
+    if (!name.trim() || !computedSlug || pendingRepos.length === 0) return;
 
     const repoSources = pendingRepos.map((r) => {
       if (r.input.method === "git-url" && r.input.url) return r.input.url;
@@ -77,11 +78,8 @@ export function CreateProjectDialog({ open, onClose }: CreateProjectDialogProps)
     });
 
     try {
-      await transport.request("projects.createFromPrompt", {
-        repoSources,
-        prompt: userGoal.trim(),
-      });
-      // Dialog closes immediately — toast tracks progress
+      await createProject({ name: name.trim(), slug: computedSlug, repoSources });
+      toast("Project created", "success");
       resetForm();
       onClose();
     } catch (err) {
@@ -89,24 +87,31 @@ export function CreateProjectDialog({ open, onClose }: CreateProjectDialogProps)
     }
   };
 
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter" && !e.shiftKey && userGoal.trim()) {
-      e.preventDefault();
-      void handleSubmit();
-    }
-  };
-
-  const backButton = step === "prompt" ? () => setStep("repos") : undefined;
+  const canSubmit = name.trim() && computedSlug && pendingRepos.length > 0;
 
   return (
-    <DialogShell open={open} title="New Project" onClose={handleClose} backButton={backButton}>
-      {/* Step 1: Add Repos */}
-      {step === "repos" && (
-        <div className="space-y-4">
-          {pendingRepos.length === 0 ? (
-            <p className="text-sm text-zinc-500">Add at least one repo to get started.</p>
-          ) : (
-            <ul className="space-y-2">
+    <DialogShell open={open} title="New Project" onClose={handleClose}>
+      <div className="space-y-4">
+        <div>
+          <Label>Project Name</Label>
+          <Input
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && canSubmit) {
+                e.preventDefault();
+                void handleSubmit();
+              }
+            }}
+            placeholder="My Project"
+            autoFocus
+          />
+        </div>
+
+        <div>
+          <Label>Repositories</Label>
+          {pendingRepos.length > 0 && (
+            <ul className="mb-2 space-y-2">
               {pendingRepos.map((repo) => {
                 const Icon = METHOD_ICONS[repo.input.method] ?? GitBranch;
                 return (
@@ -138,45 +143,18 @@ export function CreateProjectDialog({ open, onClose }: CreateProjectDialogProps)
             <Plus size={14} />
             Add Repo
           </Button>
-
-          <Button
-            variant="primary"
-            fullWidth
-            onClick={() => setStep("prompt")}
-            disabled={pendingRepos.length === 0}
-          >
-            Next
-          </Button>
         </div>
-      )}
 
-      {/* Step 2: Prompt */}
-      {step === "prompt" && (
-        <div className="space-y-4">
-          <div>
-            <Label>What&apos;s this project about?</Label>
-            <Textarea
-              value={userGoal}
-              onChange={(e) => setUserGoal(e.target.value)}
-              onKeyDown={handleKeyDown}
-              placeholder="ex: workspace manager for Claude Code users"
-              rows={3}
-              autoFocus
-            />
-          </div>
+        <Button
+          variant="primary"
+          fullWidth
+          onClick={() => void handleSubmit()}
+          disabled={!canSubmit}
+        >
+          Create Project
+        </Button>
+      </div>
 
-          <Button
-            variant="primary"
-            fullWidth
-            onClick={() => void handleSubmit()}
-            disabled={!userGoal.trim()}
-          >
-            Create Project
-          </Button>
-        </div>
-      )}
-
-      {/* Add Repo Dialog */}
       {showAddRepo && (
         <AddRepoDialog
           open={showAddRepo}

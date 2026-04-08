@@ -45,28 +45,6 @@ export interface UpdateWorkspaceInput {
   name?: string;
 }
 
-// ---------------------------------------------------------------------------
-// Creation Pipeline
-// ---------------------------------------------------------------------------
-
-export type CreationStage =
-  | "suggesting"
-  | "suggested"
-  | "creating"
-  | "created"
-  | "analyzing"
-  | "done"
-  | "error";
-
-export interface CreationProgress {
-  requestId: string;
-  type: "project" | "workspace";
-  stage: CreationStage;
-  name?: string;
-  entityId?: string;
-  error?: string;
-}
-
 export interface SessionInfo {
   id: string;
   filePath: string;

@@ -1,9 +1,10 @@
 import { useState } from "react";
-import { transport } from "~/lib/ws-transport.js";
+import { useAppStore } from "~/stores/app";
+import { toSlug } from "~/lib/utils";
 import { useToast } from "./Toast";
 import { DialogShell } from "./ui/DialogShell";
 import { Button } from "./ui/Button";
-import { Textarea } from "./ui/Textarea";
+import { Input } from "./ui/Input";
 import { Label } from "./ui/Label";
 
 interface CreateWorkspaceDialogProps {
@@ -13,11 +14,14 @@ interface CreateWorkspaceDialogProps {
 }
 
 export function CreateWorkspaceDialog({ open, onClose, projectId }: CreateWorkspaceDialogProps) {
-  const [userGoal, setUserGoal] = useState("");
+  const [name, setName] = useState("");
   const { toast } = useToast();
+  const createWorkspace = useAppStore((s) => s.createWorkspace);
+
+  const computedSlug = toSlug(name);
 
   const resetForm = () => {
-    setUserGoal("");
+    setName("");
   };
 
   if (!open) return null;
@@ -28,14 +32,11 @@ export function CreateWorkspaceDialog({ open, onClose, projectId }: CreateWorksp
   };
 
   const handleSubmit = async () => {
-    if (!userGoal.trim()) return;
+    if (!name.trim() || !computedSlug) return;
 
     try {
-      await transport.request("workspaces.createFromPrompt", {
-        projectId,
-        prompt: userGoal.trim(),
-      });
-      // Dialog closes immediately — toast tracks progress
+      await createWorkspace(projectId, { name: name.trim(), slug: computedSlug });
+      toast("Workspace created", "success");
       resetForm();
       onClose();
     } catch (err) {
@@ -43,33 +44,33 @@ export function CreateWorkspaceDialog({ open, onClose, projectId }: CreateWorksp
     }
   };
 
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter" && !e.shiftKey && userGoal.trim()) {
-      e.preventDefault();
-      void handleSubmit();
-    }
-  };
-
   return (
     <DialogShell open={open} title="New Workspace" maxWidth="max-w-lg" onClose={handleClose}>
       <div className="space-y-4">
         <div>
-          <Label>What are you working on?</Label>
-          <Textarea
-            value={userGoal}
-            onChange={(e) => setUserGoal(e.target.value)}
-            onKeyDown={handleKeyDown}
-            placeholder="ex: implementar autenticacao OAuth com Google"
-            rows={3}
+          <Label>Workspace Name</Label>
+          <Input
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && name.trim() && computedSlug) {
+                e.preventDefault();
+                void handleSubmit();
+              }
+            }}
+            placeholder="Add authentication"
             autoFocus
           />
+          {computedSlug && (
+            <p className="mt-1 text-xs text-zinc-500">branch: feat/{computedSlug}</p>
+          )}
         </div>
 
         <Button
           variant="primary"
           fullWidth
           onClick={() => void handleSubmit()}
-          disabled={!userGoal.trim()}
+          disabled={!name.trim() || !computedSlug}
         >
           Create Workspace
         </Button>

@@ -1,13 +1,10 @@
-import * as crypto from "node:crypto";
 import * as fs from "node:fs";
 import * as path from "node:path";
-import type { CreationStage } from "@iara/contracts";
 import { gitClone, gitInit } from "@iara/shared/git";
 import { projectPaths } from "@iara/shared/paths";
 import { rmGraceful } from "@iara/shared/fs";
-import { z } from "zod";
 import { registerMethod } from "../router.js";
-import { runClaude, activeRuns, streamClaudeRun } from "../services/claude-runner.js";
+import { activeRuns, streamClaudeRun, runClaude } from "../services/claude-runner.js";
 import { loadPrompt } from "../prompts/index.js";
 import {
   getRepoInfo,
@@ -26,17 +23,6 @@ import type { EnvWatcher } from "../services/env-watcher.js";
 import type { ProjectsWatcher } from "../services/watcher.js";
 import type { PushFn } from "./index.js";
 import { triggerDiscovery, cancelDiscovery } from "./scripts.js";
-
-const ProjectMetadataSchema = z.object({
-  name: z.string().min(1).describe("nome curto e descritivo do projeto"),
-});
-
-function toSlug(s: string): string {
-  return s
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-|-$/g, "");
-}
 
 /** Extract workspace slug from a workspaceId like "project/ws-slug". */
 function extractWorkspaceSlug(workspaceId?: string): string | undefined {
@@ -234,16 +220,6 @@ export function registerProjectHandlers(
     return listLocalBranches(repoDir);
   });
 
-  registerMethod("projects.suggest", async (params) => {
-    const { userGoal } = params;
-    const prompt = loadPrompt("suggest-project", { userGoal });
-    const requestId = crypto.randomUUID();
-    const run = runClaude({ cwd: process.cwd(), prompt, maxTurns: 3 }, ProjectMetadataSchema);
-    activeRuns.set(requestId, run);
-    streamClaudeRun(run, requestId, null, pushFn);
-    return { requestId };
-  });
-
   registerMethod("projects.analyze", async (params) => {
     const { projectId, description } = params;
     const project = appState.getProject(projectId);
@@ -269,121 +245,6 @@ export function registerProjectHandlers(
     const run = runClaude({ cwd: projectDir, prompt, systemPrompt });
     activeRuns.set(requestId, run);
     streamClaudeRun(run, requestId, claudeMdPath, pushFn);
-
-    return { requestId };
-  });
-
-  // ---------------------------------------------------------------------------
-  // Background creation orchestration
-  // ---------------------------------------------------------------------------
-
-  registerMethod("projects.createFromPrompt", async (params) => {
-    const { repoSources, prompt: userGoal } = params;
-    const requestId = crypto.randomUUID();
-
-    const pushProgress = (
-      stage: CreationStage,
-      extra?: { name?: string; entityId?: string; error?: string },
-    ) => {
-      pushFn("creation:progress", { requestId, type: "project", stage, ...extra });
-    };
-
-    // Run the full pipeline asynchronously
-    void (async () => {
-      try {
-        // Stage 1: Suggest metadata via Claude
-        pushProgress("suggesting");
-        const suggestPrompt = loadPrompt("suggest-project", { userGoal });
-        const suggestRun = runClaude(
-          { cwd: process.cwd(), prompt: suggestPrompt, maxTurns: 3 },
-          ProjectMetadataSchema,
-        );
-        let suggested: { name: string };
-        try {
-          suggested = await suggestRun.result;
-        } catch {
-          pushProgress("error", { error: "Claude suggestion failed" });
-          return;
-        }
-
-        const slug = toSlug(suggested.name);
-        if (!slug) {
-          pushProgress("error", { error: "Could not derive slug from name" });
-          return;
-        }
-        if (appState.getProject(slug)) {
-          pushProgress("error", { error: `Project "${slug}" already exists` });
-          return;
-        }
-        pushProgress("suggested", { name: suggested.name });
-
-        // Stage 2: Create project (clone repos to project root)
-        pushProgress("creating", { name: suggested.name });
-        const paths = projectPaths(appState.getProjectsDir(), slug);
-        fs.mkdirSync(paths.root, { recursive: true });
-
-        const repoNames: string[] = [];
-        for (const source of repoSources) {
-          const repoName = repoNameFromSource(source);
-          repoNames.push(repoName);
-          const dest = paths.repo(repoName);
-          if (!fs.existsSync(dest)) {
-            await resolveRepoSource(source, dest);
-          }
-        }
-
-        // Write CLAUDE.md and iara-scripts.yaml
-        if (!fs.existsSync(paths.claudeMd)) {
-          fs.writeFileSync(paths.claudeMd, "");
-        }
-        if (!fs.existsSync(paths.scriptsYaml)) {
-          fs.writeFileSync(paths.scriptsYaml, "");
-        }
-
-        const project =
-          repoSources.length > 0 ? appState.rescanProject(slug) : appState.createEmptyProject(slug);
-
-        if (project) pushFn("project:changed", { project });
-
-        const entityId = slug;
-        pushProgress("created", { name: suggested.name, entityId });
-
-        // Stage 3: Analyze (CLAUDE.md generation) — non-blocking for "created" state
-        if (repoNames.length > 0) {
-          pushProgress("analyzing", { name: suggested.name, entityId });
-          try {
-            const repoPaths = repoNames.map((name) => path.join(paths.root, name));
-            const analyzeSystemPrompt = [
-              `The repositories are at: ${repoPaths.join(", ")}`,
-              "Analyze ONLY these directories. Do not navigate outside of them.",
-            ].join("\n");
-            const analyzePrompt = loadPrompt("analyze-repos");
-            const analyzeRun = runClaude({
-              cwd: paths.root,
-              prompt: analyzePrompt,
-              systemPrompt: analyzeSystemPrompt,
-            });
-            const analyzeResult = await analyzeRun.result;
-            const content =
-              typeof analyzeResult === "string" ? analyzeResult : JSON.stringify(analyzeResult);
-            await fs.promises.writeFile(paths.claudeMd, content, "utf-8");
-          } catch {
-            // Analysis failure is non-fatal — project is already created
-          }
-        }
-
-        // Auto-discover scripts
-        try {
-          triggerDiscovery(appState, slug, pushFn);
-        } catch {
-          // Best effort
-        }
-
-        pushProgress("done", { name: suggested.name, entityId });
-      } catch (err) {
-        pushProgress("error", { error: err instanceof Error ? err.message : String(err) });
-      }
-    })();
 
     return { requestId };
   });

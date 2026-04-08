@@ -398,6 +398,14 @@ function createWindow(): BrowserWindow {
   let redispatching = false;
   win.webContents.on("before-input-event", (event, input) => {
     if (input.type !== "keyDown") return;
+
+    // F12 toggles DevTools (menu removal disables the built-in accelerator)
+    if (input.key === "F12") {
+      win.webContents.toggleDevTools();
+      event.preventDefault();
+      return;
+    }
+
     if (!(input.control || input.meta)) return;
     if (redispatching) return;
 

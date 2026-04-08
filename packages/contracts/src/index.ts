@@ -3,8 +3,6 @@ export type {
   AppCapabilities,
   AppInfo,
   AppNotification,
-  CreationProgress,
-  CreationStage,
   CreateProjectInput,
   CreateWorkspaceInput,
   DesktopBridge,
