@@ -332,6 +332,8 @@ function createWindow(): BrowserWindow {
     autoHideMenuBar: true,
   });
 
+  win.on("page-title-updated", (e) => e.preventDefault());
+
   if (saved.maximized) {
     win.maximize();
   }
