@@ -29,8 +29,8 @@ export function registerWorkspaceHandlers(
   pushFn: PushFn,
 ): void {
   registerMethod("workspaces.create", async (params) => {
-    const { projectId, branch, ...input } = params;
-    const workspace = await createWorkspace(appState, projectId, input, pushFn, branch);
+    const { projectId, ...input } = params;
+    const workspace = await createWorkspace(appState, projectId, input, pushFn);
     sessionWatcher.refresh();
     return workspace;
   });
@@ -123,8 +123,6 @@ async function createWorkspace(
   projectId: string,
   input: CreateWorkspaceInput,
   pushFn: PushFn,
-  /** Transient branch name for git worktree creation */
-  branch?: string,
 ): Promise<Workspace> {
   const project = appState.getProject(projectId);
   if (!project) throw new Error(`Project not found: ${projectId}`);
@@ -137,7 +135,7 @@ async function createWorkspace(
     throw new Error(`Workspace "${input.slug}" already exists in project "${projectId}"`);
   }
 
-  const worktreeBranch = branch ?? `feat/${input.slug}`;
+  const defaultBranch = input.branch ?? `feat/${input.slug}`;
 
   const pp = projectPaths(appState.getProjectsDir(), project.slug);
   const wp = workspacePaths(appState.getProjectsDir(), project.slug, input.slug);
@@ -159,7 +157,8 @@ async function createWorkspace(
       repoNames.map((repo: string) => {
         const repoDir = pp.repo(repo);
         const wtDir = wp.repo(repo);
-        return gitWorktreeAdd(repoDir, wtDir, worktreeBranch);
+        const branchName = input.branches?.[repo] ?? defaultBranch;
+        return gitWorktreeAdd(repoDir, wtDir, branchName);
       }),
     );
 
