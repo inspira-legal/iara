@@ -22,6 +22,7 @@ interface RepoCardProps {
   onRepoInfoUpdate?: (updated: RepoInfo[]) => void;
   workspaceId?: string;
   projectId?: string;
+  showStatus?: boolean;
 }
 
 export function RepoCard({
@@ -30,6 +31,7 @@ export function RepoCard({
   onRepoInfoUpdate,
   workspaceId,
   projectId,
+  showStatus = true,
 }: RepoCardProps) {
   const isClean = repo.dirtyCount === 0;
   const showAheadBehind = repo.ahead > 0 || repo.behind > 0;
@@ -192,17 +194,18 @@ export function RepoCard({
         )}
       </div>
 
-      {isClean ? (
-        <StatusBadge variant="success" icon={<CheckCircle2 size={13} />}>
-          clean
-        </StatusBadge>
-      ) : (
-        <StatusBadge variant="error" icon={<AlertCircle size={13} />}>
-          {repo.dirtyCount} modified
-        </StatusBadge>
-      )}
+      {showStatus &&
+        (isClean ? (
+          <StatusBadge variant="success" icon={<CheckCircle2 size={13} />}>
+            clean
+          </StatusBadge>
+        ) : (
+          <StatusBadge variant="error" icon={<AlertCircle size={13} />}>
+            {repo.dirtyCount} modified
+          </StatusBadge>
+        ))}
 
-      {showAheadBehind && (
+      {showStatus && showAheadBehind && (
         <span className="flex shrink-0 items-center gap-1.5 text-xs">
           {repo.ahead > 0 && (
             <span className="flex items-center gap-0.5 text-green-400">

@@ -1,8 +1,10 @@
 import { useCallback, useEffect } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { GitBranch, GitFork } from "lucide-react";
+import { GitFork } from "lucide-react";
+import type { RepoInfo } from "@iara/contracts";
 import { useAppStore } from "~/stores/app";
 import { useActiveSessionStore } from "~/stores/activeSession";
+import { RepoCard } from "~/components/RepoCard";
 import { SessionList } from "~/components/SessionList";
 import { WorkspacePicker } from "~/components/WorkspacePicker";
 import { SectionHeader } from "~/components/ui/SectionHeader";
@@ -37,6 +39,15 @@ function WorkspaceDetailPage() {
       void refreshRepoInfo(project.id, workspaceId, workspaceId);
     }
   }, [project, workspaceId, refreshRepoInfo]);
+
+  const handleRepoInfoUpdate = useCallback(
+    (updated: RepoInfo[]) => {
+      useAppStore.setState((s) => ({
+        repoInfo: { ...s.repoInfo, [workspaceId!]: updated },
+      }));
+    },
+    [workspaceId],
+  );
 
   const handleLaunch = useCallback(
     async (resumeSessionId?: string, sessionCwd?: string) => {
@@ -74,16 +85,15 @@ function WorkspaceDetailPage() {
             {repoInfo.length === 0 ? (
               <EmptyState icon={GitFork} message="No repos in this workspace." />
             ) : (
-              <div className="space-y-1.5">
+              <div className="space-y-2">
                 {repoInfo.map((repo) => (
-                  <div
+                  <RepoCard
                     key={repo.name}
-                    className="flex items-center gap-2 rounded-md border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm"
-                  >
-                    <GitBranch size={14} className="shrink-0 text-zinc-500" />
-                    <span className="text-zinc-200">{repo.name}</span>
-                    <span className="text-xs text-zinc-500">({repo.branch})</span>
-                  </div>
+                    repo={repo}
+                    workspaceId={workspaceId}
+                    projectId={project.id}
+                    onRepoInfoUpdate={handleRepoInfoUpdate}
+                  />
                 ))}
               </div>
             )}

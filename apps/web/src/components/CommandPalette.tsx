@@ -1,10 +1,9 @@
 import { useCallback, useMemo, useState } from "react";
 import { Command } from "cmdk";
-import { GitBranch, Plus } from "lucide-react";
-import { useNavigate, useRouterState } from "@tanstack/react-router";
+import { FolderOpen, FolderPlus, GitBranch } from "lucide-react";
+import { useNavigate } from "@tanstack/react-router";
 import { useAppStore } from "~/stores/app";
 import { useActiveSessionStore } from "~/stores/activeSession";
-import { CreateWorkspaceDialog } from "~/components/CreateWorkspaceDialog";
 import "~/styles/command.css";
 
 export type CommandPaletteMode = "workspaces" | "new-session";
@@ -12,26 +11,25 @@ export type CommandPaletteMode = "workspaces" | "new-session";
 interface CommandPaletteProps {
   open: boolean;
   onClose: () => void;
+  onCreateProject?: () => void;
   mode?: CommandPaletteMode;
 }
 
 const MODES: CommandPaletteMode[] = ["workspaces", "new-session"];
 const MODE_LABELS: Record<CommandPaletteMode, string> = {
   workspaces: "Go to",
-  "new-session": "New Session",
+  "new-session": "New Chat",
 };
 
 export function CommandPalette({
   open,
   onClose,
+  onCreateProject,
   mode: initialMode = "workspaces",
 }: CommandPaletteProps) {
   const projects = useAppStore((s) => s.projects);
-  const sessions = useAppStore((s) => s.sessions);
   const navigate = useNavigate();
-  const pathname = useRouterState({ select: (s) => s.location.pathname });
   const [mode, setMode] = useState<CommandPaletteMode>(initialMode);
-  const [showCreateWorkspace, setShowCreateWorkspace] = useState(false);
 
   // Reset mode when palette opens with a new initialMode
   const [prevOpen, setPrevOpen] = useState(false);
@@ -40,39 +38,55 @@ export function CommandPalette({
     if (open) setMode(initialMode);
   }
 
-  // Derive current page context from pathname
-  const currentWorkspacePath = pathname.startsWith("/workspace/")
-    ? pathname.slice("/workspace/".length)
-    : null;
-  const sortedWorkspaces = useMemo(() => {
-    const all = projects.flatMap((project) =>
-      project.workspaces.map((ws) => {
-        const wsSessions = sessions[ws.id] ?? [];
-        const projectSessions = sessions[`project:${project.id}`] ?? [];
-        let latest = 0;
-        for (const s of [...wsSessions, ...projectSessions]) {
-          const t = new Date(s.lastMessageAt).getTime();
-          if (t > latest) latest = t;
-        }
-        return {
+  const sortedItems = useMemo(() => {
+    type Item = {
+      kind: "project" | "workspace";
+      id: string;
+      label: string;
+      value: string;
+    };
+    const items: Item[] = [];
+    const sorted = projects.toSorted((a, b) => a.name.localeCompare(b.name));
+
+    for (const project of sorted) {
+      items.push({
+        kind: "project",
+        id: project.id,
+        label: project.name,
+        value: project.name,
+      });
+
+      // Main workspace first, then others alphabetically
+      const main = project.workspaces.find((ws) => ws.slug === "main");
+      const others = project.workspaces
+        .filter((ws) => ws.slug !== "main")
+        .toSorted((a, b) => a.name.localeCompare(b.name));
+
+      for (const ws of main ? [main, ...others] : others) {
+        items.push({
+          kind: "workspace",
           id: ws.id,
           label: `${project.name} / ${ws.name}`,
           value: `${project.name} ${ws.name}`,
-          isCurrent: ws.id === currentWorkspacePath,
-          lastActivity: latest,
-        };
-      }),
-    );
-    return all.toSorted((a, b) => {
-      if (a.isCurrent !== b.isCurrent) return a.isCurrent ? -1 : 1;
-      return b.lastActivity - a.lastActivity;
-    });
-  }, [projects, sessions, currentWorkspacePath]);
+        });
+      }
+    }
+
+    return items;
+  }, [projects]);
 
   const handleSelectWorkspace = useCallback(
     (workspaceId: string) => {
       useAppStore.getState().selectWorkspace(workspaceId);
       void navigate({ to: `/workspace/${workspaceId}` } as any);
+      onClose();
+    },
+    [navigate, onClose],
+  );
+
+  const handleSelectProject = useCallback(
+    (projectId: string) => {
+      void navigate({ to: `/project/${projectId}` } as any);
       onClose();
     },
     [navigate, onClose],
@@ -89,14 +103,16 @@ export function CommandPalette({
   );
 
   const handleSelect = useCallback(
-    (workspaceId: string) => {
-      if (mode === "new-session") {
-        void handleNewSession(workspaceId);
+    (item: { kind: "project" | "workspace"; id: string }) => {
+      if (item.kind === "project") {
+        handleSelectProject(item.id);
+      } else if (mode === "new-session") {
+        void handleNewSession(item.id);
       } else {
-        handleSelectWorkspace(workspaceId);
+        handleSelectWorkspace(item.id);
       }
     },
-    [mode, handleNewSession, handleSelectWorkspace],
+    [mode, handleNewSession, handleSelectWorkspace, handleSelectProject],
   );
 
   const cycleMode = useCallback((direction: 1 | -1) => {
@@ -107,33 +123,37 @@ export function CommandPalette({
     });
   }, []);
 
-  if (!open && !showCreateWorkspace) return null;
+  if (!open) return null;
+
+  const hasProjects = projects.length > 0;
+  const visibleItems =
+    mode === "new-session" ? sortedItems.filter((i) => i.kind === "workspace") : sortedItems;
 
   return (
-    <>
-      {open && (
-        // biome-ignore lint/a11y/useKeyWithClickEvents: backdrop click to close
-        <div
-          className="fixed inset-0 z-50 flex items-start justify-center bg-black/50 pt-[20vh]"
-          onClick={(e) => {
-            if (e.target === e.currentTarget) onClose();
-          }}
-        >
-          <Command
-            className="w-full max-w-xl rounded-lg border border-zinc-800 bg-zinc-950 shadow-2xl"
-            label="Command palette"
-            onKeyDown={(e) => {
-              if (e.key === "Escape") onClose();
-              if (e.key === "ArrowLeft") {
-                e.preventDefault();
-                cycleMode(-1);
-              }
-              if (e.key === "ArrowRight") {
-                e.preventDefault();
-                cycleMode(1);
-              }
-            }}
-          >
+    // biome-ignore lint/a11y/useKeyWithClickEvents: backdrop click to close
+    <div
+      className="fixed inset-0 z-50 flex items-start justify-center bg-black/50 pt-[20vh]"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
+      <Command
+        className="w-full max-w-xl rounded-lg border border-zinc-800 bg-zinc-950 shadow-2xl"
+        label="Command palette"
+        onKeyDown={(e) => {
+          if (e.key === "Escape") onClose();
+          if (hasProjects && e.key === "ArrowLeft") {
+            e.preventDefault();
+            cycleMode(-1);
+          }
+          if (hasProjects && e.key === "ArrowRight") {
+            e.preventDefault();
+            cycleMode(1);
+          }
+        }}
+      >
+        {hasProjects ? (
+          <>
             {/* Mode toggle */}
             <div className="flex items-center gap-1 border-b border-zinc-800 px-3 py-1.5">
               {MODES.map((m) => (
@@ -160,9 +180,7 @@ export function CommandPalette({
             </div>
 
             <Command.Input
-              placeholder={
-                mode === "new-session" ? "Select workspace for new session..." : "Search..."
-              }
+              placeholder={mode === "new-session" ? "Select workspace..." : "Search..."}
               className="h-11 w-full border-b border-zinc-800 bg-transparent px-4 text-sm text-zinc-200 placeholder-zinc-500 outline-none"
               autoFocus
             />
@@ -171,37 +189,42 @@ export function CommandPalette({
                 No results found.
               </Command.Empty>
 
-              <Command.Item
-                value="New Workspace create"
-                onSelect={() => {
-                  onClose();
-                  setShowCreateWorkspace(true);
-                }}
-                className="flex items-center gap-2 rounded-md px-3 py-1.5 text-sm text-zinc-300 cursor-default"
-              >
-                <Plus size={14} className="shrink-0 text-zinc-600" />
-                <span>New Workspace</span>
-              </Command.Item>
-
-              {sortedWorkspaces.map((ws) => (
+              {visibleItems.map((item) => (
                 <Command.Item
-                  key={ws.id}
-                  value={ws.value}
-                  onSelect={() => handleSelect(ws.id)}
+                  key={`${item.kind}:${item.id}`}
+                  value={item.value}
+                  onSelect={() => handleSelect(item)}
                   className="flex items-center gap-2 rounded-md px-3 py-1.5 text-sm text-zinc-300 cursor-default"
                 >
-                  <GitBranch size={14} className="shrink-0 text-zinc-600" />
-                  <span>{ws.label}</span>
+                  {item.kind === "project" ? (
+                    <FolderOpen size={14} className="shrink-0 text-zinc-600" />
+                  ) : (
+                    <GitBranch size={14} className="shrink-0 text-zinc-600" />
+                  )}
+                  <span>{item.label}</span>
                 </Command.Item>
               ))}
             </Command.List>
-          </Command>
-        </div>
-      )}
-      <CreateWorkspaceDialog
-        open={showCreateWorkspace}
-        onClose={() => setShowCreateWorkspace(false)}
-      />
-    </>
+          </>
+        ) : (
+          <div className="flex flex-col items-center gap-3 px-6 py-10">
+            <FolderPlus size={24} className="text-zinc-600" />
+            <p className="text-sm text-zinc-400">No projects yet</p>
+            {onCreateProject && (
+              <button
+                type="button"
+                onClick={() => {
+                  onClose();
+                  onCreateProject();
+                }}
+                className="rounded-md bg-zinc-800 px-3 py-1.5 text-sm font-medium text-zinc-200 transition-colors hover:bg-zinc-700"
+              >
+                Create Project
+              </button>
+            )}
+          </div>
+        )}
+      </Command>
+    </div>
   );
 }

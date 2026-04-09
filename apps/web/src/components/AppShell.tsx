@@ -5,6 +5,7 @@ import { Sidebar } from "./Sidebar";
 import { MainPanel } from "./MainPanel";
 import { ShortcutsOverlay } from "./ShortcutsOverlay";
 import { CommandPalette } from "./CommandPalette";
+import { CreateProjectDialog } from "./CreateProjectDialog";
 import { useKeyboardShortcuts } from "~/hooks/useKeyboardShortcuts";
 import { useActiveSessionStore } from "~/stores/activeSession";
 import { isElectron } from "~/env";
@@ -12,7 +13,10 @@ import { isElectron } from "~/env";
 export function AppShell({ children }: { children: ReactNode }) {
   const navigate = useNavigate();
   const [showShortcuts, setShowShortcuts] = useState(false);
-  const [showCommand, setShowCommand] = useState(false);
+  const [showCreateProject, setShowCreateProject] = useState(false);
+  const [paletteMode, setPaletteMode] = useState<
+    import("./CommandPalette").CommandPaletteMode | null
+  >(null);
   const sidebarPanelRef = usePanelRef();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
@@ -53,7 +57,8 @@ export function AppShell({ children }: { children: ReactNode }) {
       "mod+7": () => selectByIndex(7),
       "mod+8": () => selectByIndex(8),
       "mod+9": () => selectByIndex(9),
-      "mod+p": () => setShowCommand((v) => !v),
+      "mod+k": () => setPaletteMode((v) => (v ? null : "workspaces")),
+      "mod+n": () => setPaletteMode((v) => (v ? null : "new-session")),
       f1: () => setShowShortcuts((v) => !v),
     }),
     [selectByIndex],
@@ -66,7 +71,13 @@ export function AppShell({ children }: { children: ReactNode }) {
   return (
     <div className="h-screen w-screen overflow-hidden bg-zinc-950 text-zinc-100">
       <ShortcutsOverlay open={showShortcuts} onClose={() => setShowShortcuts(false)} />
-      <CommandPalette open={showCommand} onClose={() => setShowCommand(false)} />
+      <CommandPalette
+        open={paletteMode !== null}
+        onClose={() => setPaletteMode(null)}
+        onCreateProject={() => setShowCreateProject(true)}
+        mode={paletteMode ?? "workspaces"}
+      />
+      <CreateProjectDialog open={showCreateProject} onClose={() => setShowCreateProject(false)} />
       <Group
         orientation="horizontal"
         defaultLayout={mainLayout.defaultLayout}
@@ -84,7 +95,11 @@ export function AppShell({ children }: { children: ReactNode }) {
             setSidebarCollapsed(sidebarPanelRef.current?.isCollapsed() ?? false);
           }}
         >
-          <Sidebar panelRef={sidebarPanelRef} panelCollapsed={sidebarCollapsed} />
+          <Sidebar
+            panelRef={sidebarPanelRef}
+            panelCollapsed={sidebarCollapsed}
+            onOpenPalette={setPaletteMode}
+          />
         </Panel>
         <Separator className="relative z-10 -mx-1.5 w-3 bg-transparent outline-none after:absolute after:inset-y-0 after:left-1/2 after:w-1 after:-translate-x-1/2 after:bg-transparent after:transition-colors hover:after:bg-blue-500/50 data-[resize-handle-active]:after:bg-blue-500/70" />
         <Panel id="main" minSize="40%">

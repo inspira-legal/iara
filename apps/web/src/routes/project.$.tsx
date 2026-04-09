@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { GitFork, Plus, Sparkles, Trash2 } from "lucide-react";
+import { GitBranch, GitFork, Plus, Sparkles, Trash2 } from "lucide-react";
 import type { RepoInfo } from "@iara/contracts";
 import { useAppStore } from "~/stores/app";
 import { useRegenerate } from "~/hooks/useRegenerate";
@@ -77,6 +77,7 @@ function ProjectManagement({
   const repoInfo = useAppStore((s) => s.getRepoInfo(cacheKey));
   const refreshRepoInfo = useAppStore((s) => s.refreshRepoInfo);
   const deleteProject = useAppStore((s) => s.deleteProject);
+  const deleteWorkspace = useAppStore((s) => s.deleteWorkspace);
 
   const [showAddRepo, setShowAddRepo] = useState(false);
   const [repoToDelete, setRepoToDelete] = useState<string | null>(null);
@@ -84,6 +85,11 @@ function ProjectManagement({
   const [deletingProject, setDeletingProject] = useState(false);
   const [deletingRepo, setDeletingRepo] = useState(false);
   const [createWorkspaceOpen, setCreateWorkspaceOpen] = useState(false);
+  const [workspaceToDelete, setWorkspaceToDelete] = useState<{
+    id: string;
+    name: string;
+  } | null>(null);
+  const [deletingWorkspace, setDeletingWorkspace] = useState(false);
 
   const { isRegenerating, showEmptyBanner, messages, error, handleStartRegenerate, cancel } =
     useRegenerate({
@@ -145,7 +151,12 @@ function ProjectManagement({
             <EmptyState icon={GitFork} message="No repos yet. Add a repo to get started." />
           ) : (
             repoInfo.map((repo) => (
-              <RepoCard key={repo.name} repo={repo} onRemove={() => setRepoToDelete(repo.name)} />
+              <RepoCard
+                key={repo.name}
+                repo={repo}
+                showStatus={false}
+                onRemove={() => setRepoToDelete(repo.name)}
+              />
             ))
           )}
         </div>
@@ -158,7 +169,21 @@ function ProjectManagement({
       {/* Workspaces */}
       <div>
         <SectionHeader title="Workspaces" />
-        <Button variant="dashed" size="sm" onClick={() => setCreateWorkspaceOpen(true)}>
+        <div className="space-y-1">
+          {project.workspaces.map((ws) => (
+            <WorkspaceRow
+              key={ws.id}
+              workspace={ws}
+              onDelete={ws.slug !== "main" ? () => setWorkspaceToDelete(ws) : undefined}
+            />
+          ))}
+        </div>
+        <Button
+          variant="dashed"
+          size="sm"
+          className="mt-3"
+          onClick={() => setCreateWorkspaceOpen(true)}
+        >
           <Plus size={14} />
           Create Workspace
         </Button>
@@ -246,11 +271,79 @@ function ProjectManagement({
         onCancel={() => setShowDeleteProject(false)}
       />
 
+      <ConfirmDialog
+        open={workspaceToDelete !== null}
+        title="Delete Workspace"
+        description={`Delete "${workspaceToDelete?.name}"?`}
+        details={
+          <div className="mt-2 text-xs text-zinc-500">
+            <p>All worktrees and workspace files will be permanently deleted.</p>
+          </div>
+        }
+        confirmText="Delete Workspace"
+        confirmVariant="danger"
+        loading={deletingWorkspace}
+        onConfirm={async () => {
+          if (!workspaceToDelete) return;
+          setDeletingWorkspace(true);
+          try {
+            await deleteWorkspace(workspaceToDelete.id);
+          } finally {
+            setDeletingWorkspace(false);
+          }
+          setWorkspaceToDelete(null);
+        }}
+        onCancel={() => setWorkspaceToDelete(null)}
+      />
+
       <CreateWorkspaceDialog
         open={createWorkspaceOpen}
         onClose={() => setCreateWorkspaceOpen(false)}
         projectId={project.id}
       />
     </>
+  );
+}
+
+function WorkspaceRow({
+  workspace,
+  onDelete,
+}: {
+  workspace: { id: string; slug: string; name: string; branch?: string };
+  onDelete?: (() => void) | undefined;
+}) {
+  const navigate = useNavigate();
+  const isMain = workspace.slug === "main";
+
+  return (
+    <button
+      type="button"
+      onClick={() => void navigate({ to: `/workspace/${workspace.id}` } as any)}
+      className="group flex w-full items-center gap-3 rounded-lg border border-zinc-800 px-4 py-3 text-left transition-colors hover:border-zinc-700 hover:bg-zinc-800/40"
+    >
+      <GitBranch size={14} className="shrink-0 text-zinc-500" />
+      <div className="min-w-0 flex-1">
+        <span className="text-sm text-zinc-200">{workspace.name}</span>
+        {workspace.branch && <span className="ml-2 text-xs text-zinc-500">{workspace.branch}</span>}
+      </div>
+      {isMain && (
+        <span className="rounded bg-zinc-800 px-1.5 py-0.5 text-[10px] font-medium text-zinc-400">
+          default
+        </span>
+      )}
+      {onDelete && (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onDelete();
+          }}
+          className="shrink-0 rounded p-1 text-zinc-600 opacity-0 transition-opacity hover:bg-zinc-700 hover:text-red-400 group-hover:opacity-100"
+          aria-label={`Delete ${workspace.name}`}
+        >
+          <Trash2 size={13} />
+        </button>
+      )}
+    </button>
   );
 }

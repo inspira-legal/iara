@@ -20,7 +20,8 @@ function getShortcutGroups(mod: string) {
     {
       title: "General",
       shortcuts: [
-        { keys: [`${mod}+P`], label: "Open command palette" },
+        { keys: [`${mod}+K`], label: "Go to project / workspace" },
+        { keys: [`${mod}+N`], label: "New chat" },
         { keys: ["F1"], label: "Show keyboard shortcuts" },
       ],
     },
