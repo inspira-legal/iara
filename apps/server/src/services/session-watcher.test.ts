@@ -19,6 +19,7 @@ function createMockAppState(
       const [pSlug, wsSlug] = wsId.split("/") as [string, string];
       return path.join(tmpHome, "projects", pSlug, wsSlug);
     }),
+    discoverRepos: vi.fn().mockReturnValue([]),
   } as any;
 }
 
