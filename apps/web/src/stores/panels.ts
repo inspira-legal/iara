@@ -17,7 +17,6 @@ const cached = panelsCache.get();
 interface PanelsState {
   rightPanelOpen: boolean;
   rightPanelWidth: number;
-  editingProjectId: string | null;
 }
 
 interface PanelsActions {
@@ -25,17 +24,15 @@ interface PanelsActions {
   openRightPanel(): void;
   closeRightPanel(): void;
   setRightPanelWidth(width: number): void;
-  setEditingProjectId(id: string | null): void;
 }
 
 const DEFAULT_WIDTH = 360;
 const MIN_WIDTH = 280;
 const MAX_WIDTH = 500;
 
-export const usePanelsStore = create<PanelsState & PanelsActions>((set, get) => ({
+export const usePanelsStore = create<PanelsState & PanelsActions>((set) => ({
   rightPanelOpen: false,
   rightPanelWidth: cached?.rightPanelWidth ?? DEFAULT_WIDTH,
-  editingProjectId: null,
 
   toggleRightPanel: () => {
     set((s) => ({ rightPanelOpen: !s.rightPanelOpen }));
@@ -53,9 +50,5 @@ export const usePanelsStore = create<PanelsState & PanelsActions>((set, get) => 
     const clamped = Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, width));
     set({ rightPanelWidth: clamped });
     panelsCache.set({ rightPanelWidth: clamped });
-  },
-
-  setEditingProjectId: (id) => {
-    set({ editingProjectId: id, rightPanelOpen: id ? false : get().rightPanelOpen });
   },
 }));

@@ -27,6 +27,7 @@ interface TerminalCreateConfig {
   resumeSessionId?: string;
   pluginDir?: string;
   env?: Record<string, string>;
+  initialPrompt?: string;
   cols?: number;
   rows?: number;
 }
@@ -58,15 +59,6 @@ export class TerminalManager {
   create(config: TerminalCreateConfig): { terminalId: string; sessionId: string } {
     const mode = config.mode ?? "claude";
 
-    // Reuse existing terminal for claude mode (one per workspace).
-    // Shell mode always creates a new instance (multiple shells per workspace).
-    if (mode === "claude") {
-      const existing = this.getByWorkspaceId(config.workspaceId, "claude");
-      if (existing) {
-        return { terminalId: existing.id, sessionId: existing.sessionId };
-      }
-    }
-
     const terminalId = crypto.randomUUID();
     const sessionId = config.resumeSessionId ?? crypto.randomUUID();
 
@@ -93,11 +85,12 @@ export class TerminalManager {
       const launchConfig: LaunchConfig = {
         workspaceDir: config.workspaceDir,
         repoDirs: config.repoDirs,
-        resumeSessionId: config.resumeSessionId,
         sessionId,
+        resumeSessionId: config.resumeSessionId,
         appendSystemPrompt: systemPrompt,
         pluginDir: config.pluginDir || process.env.IARA_PLUGIN_DIR || undefined,
         env: config.env,
+        initialPrompt: config.initialPrompt,
       };
 
       const claudeArgs = buildClaudeArgs(launchConfig);
@@ -106,7 +99,7 @@ export class TerminalManager {
 
       command = resolved.command;
       args = resolved.args;
-      env.IARA_SESSION_ID = sessionId;
+      env.IARA_TERMINAL_ID = terminalId;
       console.log("[terminal] spawn claude", { cwd: config.workspaceDir, command, args });
     }
 

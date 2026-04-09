@@ -3,6 +3,7 @@ import { X, Settings2 } from "lucide-react";
 import type { RepoInfo } from "@iara/contracts";
 import { usePanelsStore } from "~/stores/panels";
 import { useAppStore } from "~/stores/app";
+import { useActiveWorkspace } from "~/lib/workspace";
 import { useScriptsStore } from "~/stores/scripts";
 import { EnvEditor } from "./EnvEditor";
 import { Button } from "./ui/Button";
@@ -14,12 +15,10 @@ export function RightPanel() {
   const width = usePanelsStore((s) => s.rightPanelWidth);
   const setWidth = usePanelsStore((s) => s.setRightPanelWidth);
   const closePanel = usePanelsStore((s) => s.closeRightPanel);
-  const editingProjectId = usePanelsStore((s) => s.editingProjectId);
 
-  const selectedWorkspaceId = useAppStore((s) => s.selectedWorkspaceId);
+  const activeWorkspaceId = useActiveWorkspace();
   const repoInfo = useAppStore((s) => {
-    const wsId = s.selectedWorkspaceId;
-    return wsId ? s.getRepoInfo(wsId) : EMPTY_REPO_INFO;
+    return activeWorkspaceId ? s.getRepoInfo(activeWorkspaceId) : EMPTY_REPO_INFO;
   });
 
   const scriptsConfig = useScriptsStore((s) => s.config);
@@ -74,8 +73,8 @@ export function RightPanel() {
     return () => document.removeEventListener("keydown", handler);
   }, [open, closePanel]);
 
-  // Don't render when editing project or panel is closed
-  if (!open || editingProjectId || !selectedWorkspaceId) return null;
+  // Don't render when panel is closed or no active workspace
+  if (!open || !activeWorkspaceId) return null;
 
   if (serviceNames.length === 0) return null;
 
@@ -101,7 +100,7 @@ export function RightPanel() {
           </Button>
         </div>
         <div className="flex-1 overflow-y-auto p-3">
-          <EnvEditor workspaceId={selectedWorkspaceId} serviceNames={serviceNames} />
+          <EnvEditor workspaceId={activeWorkspaceId} serviceNames={serviceNames} />
         </div>
       </div>
     </div>

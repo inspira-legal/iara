@@ -153,6 +153,15 @@ export function registerSocketHandlers(server: SocketServer, pushFn: PushFn): vo
     return { ok: true, params };
   });
 
+  server.on("session.update-id", (params) => {
+    const terminalId = params.terminalId as string;
+    const sessionId = params.sessionId as string;
+    if (terminalId && sessionId) {
+      pushFn("session:updated", { terminalId, sessionId });
+    }
+    return { ok: true };
+  });
+
   server.on("notify", (params) => {
     const title = (params.title as string) ?? "iara";
     const body = (params.message as string) ?? (params.body as string) ?? "";

@@ -4,13 +4,10 @@ import { Button } from "./Button";
 import { DialogShell } from "./DialogShell";
 import { Input } from "./Input";
 import { Label } from "./Label";
-import { Textarea } from "./Textarea";
-import { Alert } from "./Alert";
 import { TabGroup } from "./TabGroup";
 import { SectionHeader } from "./SectionHeader";
 import { StatusBadge } from "./StatusBadge";
 import { Spinner } from "./Spinner";
-import { Skeleton } from "./Skeleton";
 import { EmptyState } from "./EmptyState";
 
 afterEach(() => {
@@ -183,57 +180,6 @@ describe("Label", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Textarea
-// ---------------------------------------------------------------------------
-describe("Textarea", () => {
-  it("renders a textarea element", () => {
-    render(<Textarea placeholder="Write something" />);
-    const el = screen.getByPlaceholderText("Write something");
-    expect(el).toBeInTheDocument();
-    expect(el.tagName).toBe("TEXTAREA");
-  });
-
-  it("forwards props", () => {
-    render(<Textarea rows={5} placeholder="ta" />);
-    expect(screen.getByPlaceholderText("ta")).toHaveAttribute("rows", "5");
-  });
-});
-
-// ---------------------------------------------------------------------------
-// Alert
-// ---------------------------------------------------------------------------
-describe("Alert", () => {
-  it("renders children", () => {
-    render(<Alert variant="info">Info message</Alert>);
-    expect(screen.getByText("Info message")).toBeInTheDocument();
-  });
-
-  it("applies error variant classes", () => {
-    const { container } = render(<Alert variant="error">Err</Alert>);
-    expect(container.firstElementChild!.className).toMatch(/border-red-700/);
-  });
-
-  it("applies warning variant classes", () => {
-    const { container } = render(<Alert variant="warning">Warn</Alert>);
-    expect(container.firstElementChild!.className).toMatch(/border-yellow-700/);
-  });
-
-  it("applies info variant classes", () => {
-    const { container } = render(<Alert variant="info">Info</Alert>);
-    expect(container.firstElementChild!.className).toMatch(/border-blue-700/);
-  });
-
-  it("renders icon when provided", () => {
-    render(
-      <Alert variant="info" icon={<span data-testid="icon">!</span>}>
-        msg
-      </Alert>,
-    );
-    expect(screen.getByTestId("icon")).toBeInTheDocument();
-  });
-});
-
-// ---------------------------------------------------------------------------
 // TabGroup
 // ---------------------------------------------------------------------------
 describe("TabGroup", () => {
@@ -328,22 +274,6 @@ describe("Spinner", () => {
   it("does not render text span when text is omitted", () => {
     const { container } = render(<Spinner />);
     expect(container.querySelector("span")).toBeNull();
-  });
-});
-
-// ---------------------------------------------------------------------------
-// Skeleton
-// ---------------------------------------------------------------------------
-describe("Skeleton", () => {
-  it("renders with animate-pulse class", () => {
-    const { container } = render(<Skeleton />);
-    expect(container.firstElementChild).toBeInTheDocument();
-    expect(container.firstElementChild!.className).toMatch(/animate-pulse/);
-  });
-
-  it("merges custom className", () => {
-    const { container } = render(<Skeleton className="h-4 w-full" />);
-    expect(container.firstElementChild!.className).toMatch(/h-4/);
   });
 });
 

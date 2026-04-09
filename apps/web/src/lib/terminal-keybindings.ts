@@ -61,6 +61,26 @@ const KEYBINDINGS: Keybinding[] = [
 ];
 
 // ---------------------------------------------------------------------------
+// App-level shortcuts that must pass through xterm to the window listener
+// ---------------------------------------------------------------------------
+
+function isAppShortcut(event: KeyboardEvent): boolean {
+  const mod = event.ctrlKey || event.metaKey;
+  const key = event.key.toLowerCase();
+
+  // mod+w, mod+k, mod+n, mod+b
+  if (mod && !event.shiftKey && !event.altKey && "wknb".includes(key)) return true;
+  // mod+1-9
+  if (mod && !event.shiftKey && !event.altKey && key >= "1" && key <= "9") return true;
+  // alt+1-9
+  if (event.altKey && !mod && !event.shiftKey && key >= "1" && key <= "9") return true;
+  // F1
+  if (key === "f1") return true;
+
+  return false;
+}
+
+// ---------------------------------------------------------------------------
 // Matching
 // ---------------------------------------------------------------------------
 
@@ -78,6 +98,7 @@ function findBinding(event: KeyboardEvent): Keybinding | undefined {
 export function setupTerminalKeybindings(
   term: Terminal,
   write: (data: string) => void,
+  opts?: { blockSuspend?: boolean },
 ): KeybindingHandlers {
   const handlers: KeybindingHandlers = { onCopy: null, onModChange: null };
   let prevMod = false;
@@ -88,6 +109,22 @@ export function setupTerminalKeybindings(
     if (mod !== prevMod) {
       prevMod = mod;
       handlers.onModChange?.(mod);
+    }
+
+    // Let app-level shortcuts pass through to the window listener
+    if (isAppShortcut(event)) return false;
+
+    // Block Ctrl+Z (SIGTSTP) in Claude sessions — suspending is not useful
+    if (
+      opts?.blockSuspend &&
+      event.type === "keydown" &&
+      event.key === "z" &&
+      event.ctrlKey &&
+      !event.shiftKey &&
+      !event.metaKey &&
+      !event.altKey
+    ) {
+      return false;
     }
 
     const binding = findBinding(event);

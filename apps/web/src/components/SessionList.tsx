@@ -32,10 +32,10 @@ export function SessionList({ workspaceId, projectId, onLaunch }: SessionListPro
           <button
             type="button"
             onClick={() => onLaunch()}
-            className="flex items-center gap-1 rounded-md px-2 py-1 text-xs text-blue-400 hover:bg-zinc-800"
+            className="flex items-center gap-1 rounded-md px-2 py-1 text-xs text-accent-soft hover:bg-zinc-800"
           >
             <Plus size={12} />
-            New
+            New Session
           </button>
         )}
       </div>
@@ -43,15 +43,17 @@ export function SessionList({ workspaceId, projectId, onLaunch }: SessionListPro
       {sessions.length === 0 ? (
         <div className="flex flex-col items-center gap-2 rounded-lg border border-dashed border-zinc-700/60 px-4 py-5 text-center">
           <Terminal size={16} className="text-zinc-600" />
-          <p className="text-xs text-zinc-500">No sessions yet.</p>
+          <p className="text-xs text-zinc-500">
+            No sessions yet. Launch one to start working with Claude.
+          </p>
           {onLaunch && (
             <button
               type="button"
               onClick={() => onLaunch()}
-              className="flex items-center gap-1 rounded-md px-3 py-1.5 text-xs text-blue-400 hover:bg-zinc-800"
+              className="flex items-center gap-1 rounded-md px-3 py-1.5 text-xs text-accent-soft hover:bg-zinc-800"
             >
               <Plus size={12} />
-              Launch session
+              New Session
             </button>
           )}
         </div>
@@ -90,7 +92,7 @@ function SessionMeta({ session, index }: { session: SessionInfo; index: number }
         <Clock size={10} />
         <span>{formatDate(session.lastMessageAt)}</span>
         <MessageSquare size={10} className="ml-1" />
-        <span>{session.messageCount} msgs</span>
+        <span>{session.messageCount} messages</span>
       </div>
     </div>
   );

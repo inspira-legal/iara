@@ -201,7 +201,7 @@ function ToastMessage({ toast, onDismiss }: { toast: ToastItem; onDismiss: (id: 
         type="button"
         onClick={() => onDismiss(toast.id)}
         aria-label="Dismiss notification"
-        className="ml-2 rounded text-zinc-500 hover:text-zinc-300 focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:outline-none"
+        className="ml-2 rounded text-zinc-500 hover:text-zinc-300 focus-visible:ring-2 focus-visible:ring-accent-ring focus-visible:outline-none"
       >
         <X size={14} />
       </button>

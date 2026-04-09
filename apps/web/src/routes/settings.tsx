@@ -34,7 +34,7 @@ function SettingsPage() {
           type="button"
           onClick={() => void navigate({ to: "/" })}
           aria-label="Go back"
-          className="rounded p-1.5 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-300 focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:outline-none"
+          className="rounded p-1.5 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-300 focus-visible:ring-2 focus-visible:ring-accent-ring focus-visible:outline-none"
         >
           <ArrowLeft size={16} />
         </button>
@@ -145,7 +145,7 @@ function ToggleRow({
         aria-labelledby={labelId}
         aria-describedby={descId}
         onClick={onChange}
-        className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full transition-colors focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-900 focus-visible:outline-none ${
+        className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full transition-colors focus-visible:ring-2 focus-visible:ring-accent-ring focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-900 focus-visible:outline-none ${
           checked ? "bg-blue-600" : "bg-zinc-700"
         }`}
       >
@@ -231,12 +231,12 @@ function AutocompactInput({
               if (dirty) handleSave();
             }}
             placeholder="—"
-            className="w-24 rounded border border-zinc-700 bg-zinc-800 px-2 py-1 text-right text-sm text-zinc-200 placeholder-zinc-600 focus:border-blue-500 focus:outline-none"
+            className="w-24 rounded border border-zinc-700 bg-zinc-800 px-2 py-1 text-right text-sm text-zinc-200 placeholder-zinc-600 focus:border-accent-ring focus:outline-none"
           />
           <select
             value={mode}
             onChange={handleModeChange}
-            className="rounded border border-zinc-700 bg-zinc-800 px-2 py-1 text-xs text-zinc-400 focus:border-blue-500 focus:outline-none"
+            className="rounded border border-zinc-700 bg-zinc-800 px-2 py-1 text-xs text-zinc-400 focus:border-accent-ring focus:outline-none"
           >
             <option value="pct">%</option>
             <option value="tokens">tokens</option>

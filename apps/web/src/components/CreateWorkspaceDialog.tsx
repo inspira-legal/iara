@@ -80,7 +80,7 @@ export function CreateWorkspaceDialog({ open, onClose, projectId }: CreateWorksp
   const canSubmit = name.trim() && computedSlug;
 
   return (
-    <DialogShell open={open} title="New Workspace" onClose={handleClose}>
+    <DialogShell open={open} title="New Workspace" maxWidth="max-w-lg" onClose={handleClose}>
       <div className="space-y-4">
         <div>
           <Label>Name</Label>

@@ -69,10 +69,6 @@ export type WsMethods = {
   };
   "workspaces.update": { params: { workspaceId: string }; result: void };
   "workspaces.delete": { params: { workspaceId: string }; result: void };
-  "workspaces.regenerate": {
-    params: { workspaceId: string };
-    result: { requestId: string };
-  };
   "workspaces.renameBranch": {
     params: { workspaceId: string; repoName: string; newBranch: string };
     result: RepoInfo[];
@@ -85,6 +81,10 @@ export type WsMethods = {
   // Sessions
   "sessions.list": { params: { workspaceId: string }; result: SessionInfo[] };
   "sessions.listByProject": { params: { projectId: string }; result: SessionInfo[] };
+  "sessions.rename": {
+    params: { workspaceId: string; sessionId: string; title: string };
+    result: void;
+  };
 
   // Claude
   "claude.cancel": { params: { requestId: string }; result: void };
@@ -153,6 +153,7 @@ export type WsMethods = {
       mode?: "claude" | "shell";
       resumeSessionId?: string;
       sessionCwd?: string;
+      initialPrompt?: string;
       cols?: number;
       rows?: number;
     };
@@ -178,6 +179,7 @@ export type WsPushEvents = {
   notification: { title: string; body: string; type?: string };
   "clone:progress": CloneProgress;
   "session:changed": { workspaceId: string };
+  "session:updated": { terminalId: string; sessionId: string };
   "env:changed": { workspaceId: string };
   "settings:changed": { key: string; value: string };
   "claude:progress": { requestId: string; progress: ClaudeProgress };

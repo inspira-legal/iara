@@ -3,14 +3,14 @@ import { Group, Panel, Separator, useDefaultLayout, usePanelRef } from "react-re
 import { BottomPanel } from "./BottomPanel";
 import { RightPanel } from "./RightPanel";
 import { useScriptsStore } from "~/stores/scripts";
-import { useWorkspace } from "~/lib/workspace";
-import { useAppStore } from "~/stores/app";
+import { useRouterState } from "@tanstack/react-router";
 
 export function MainPanel({ children }: { children: ReactNode }) {
   const bottomPanelRef = usePanelRef();
   const { syncCollapsed } = useScriptsStore();
-  const workspace = useWorkspace();
-  const hasProject = useAppStore((s) => s.selectedWorkspaceId !== null);
+  const isSessionPage = useRouterState({
+    select: (s) => s.location.pathname.startsWith("/session/"),
+  });
 
   const contentLayout = useDefaultLayout({ id: "iara:content-layout:v3", storage: localStorage });
 
@@ -37,7 +37,7 @@ export function MainPanel({ children }: { children: ReactNode }) {
             <RightPanel />
           </div>
         </Panel>
-        {(workspace || hasProject) && (
+        {isSessionPage && (
           <>
             <Separator className="relative z-10 -my-1.5 h-3 bg-transparent outline-none after:absolute after:inset-x-0 after:top-1/2 after:h-1 after:-translate-y-1/2 after:bg-transparent after:transition-colors hover:after:bg-blue-500/50 data-[resize-handle-active]:after:bg-blue-500/70" />
             <Panel

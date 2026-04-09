@@ -4,7 +4,7 @@ import { transport } from "../lib/ws-transport.js";
 
 const MAX_LOG_LINES = 1000;
 
-type PanelTab = "scripts" | "output" | "terminal" | null;
+type PanelTab = string | null;
 
 interface ScriptsState {
   config: ScriptsConfig | null;

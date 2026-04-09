@@ -19,6 +19,7 @@ import {
   AlertCircle,
   TerminalSquare,
   X,
+  Plus,
 } from "lucide-react";
 import type { EssencialKey, ResolvedServiceDef, ScriptStatus } from "@iara/contracts";
 import { isScriptActive, isScriptUnhealthy } from "~/lib/script-status";
@@ -27,7 +28,7 @@ import { StatusButton } from "~/components/ui/StatusButton";
 import { useScriptsStore, useIsDiscovering, useDiscoveryError } from "~/stores/scripts";
 import { useShellStore, type ShellEntry } from "~/stores/shell";
 import { useAppStore } from "~/stores/app";
-import { useWorkspace } from "~/lib/workspace";
+import { useActiveWorkspace, useActiveSessionEntryId } from "~/lib/workspace";
 import { transport } from "~/lib/ws-transport";
 import { XTerm, getOrCreateXTermInstance } from "~/components/XTerm";
 import { ConnectedTerminal, destroyXTermInstance } from "~/components/ConnectedTerminal";
@@ -54,8 +55,62 @@ export function BottomPanel({ panelRef }: { panelRef: RefObject<PanelImperativeH
   const discover = useScriptsStore((s) => s.discover);
   const setActiveTab = useScriptsStore((s) => s.setActiveTab);
   const discovering = useIsDiscovering();
-  const workspace = useWorkspace();
+  const workspace = useActiveWorkspace();
+  const sessionEntryId = useActiveSessionEntryId();
   const projectId = workspace?.split("/")[0] ?? null;
+
+  // Shell state
+  const shells = useShellStore((s) => s.shells);
+  const addShell = useShellStore((s) => s.addShell);
+  const removeShell = useShellStore((s) => s.removeShell);
+  const getWorkspace = useAppStore((s) => s.getWorkspace);
+  const projects = useAppStore((s) => s.projects);
+  // Filter shells by active session
+  const workspaceShells = useMemo(
+    () => (sessionEntryId ? shells.filter((s) => s.sessionEntryId === sessionEntryId) : []),
+    [shells, sessionEntryId],
+  );
+
+  // Resolve whether the active tab is a shell tab
+  const activeShell = useMemo(
+    () => workspaceShells.find((s) => s.id === activeTab) ?? null,
+    [workspaceShells, activeTab],
+  );
+
+  function shellDisplayName(shell: ShellEntry): string {
+    if (shell.title) return shell.title;
+    const projectId = shell.workspaceId.split("/")[0]!;
+    const project = projects.find((p) => p.id === projectId);
+    const ws = getWorkspace(shell.workspaceId);
+    const projectName = project?.name ?? projectId;
+    const wsName = ws?.name ?? shell.workspaceId.split("/")[1] ?? shell.workspaceId;
+    return `${projectName} / ${wsName}`;
+  }
+
+  function handleAddShell() {
+    if (!sessionEntryId || !workspace) return;
+    const id = addShell(sessionEntryId, workspace);
+    setActiveTab(id);
+    if (collapsed) {
+      panelRef.current?.expand();
+    }
+  }
+
+  function handleCloseShell(shellId: string) {
+    const shell = shells.find((s) => s.id === shellId);
+    if (!shell) return;
+    if (shell.terminalId) {
+      const ok = window.confirm("Close this terminal? Any running process will be terminated.");
+      if (!ok) return;
+      destroyXTermInstance(`shell:${shell.terminalId}`);
+    }
+    removeShell(shellId);
+    // Switch to another tab if we just closed the active one
+    if (activeTab === shellId) {
+      const remaining = workspaceShells.filter((s) => s.id !== shellId);
+      setActiveTab(remaining.length > 0 ? remaining[0]!.id : "scripts");
+    }
+  }
 
   // Subscribe to push events (global, always active)
   useEffect(() => {
@@ -135,7 +190,7 @@ export function BottomPanel({ panelRef }: { panelRef: RefObject<PanelImperativeH
     }
   };
 
-  const handleTabClick = (tab: "scripts" | "output" | "terminal") => {
+  const handleTabClick = (tab: string) => {
     if (!workspace) return;
     if (activeTab === tab) {
       setActiveTab(null);
@@ -156,7 +211,7 @@ export function BottomPanel({ panelRef }: { panelRef: RefObject<PanelImperativeH
           type="button"
           onClick={toggleCollapse}
           aria-label={collapsed ? "Expand panel" : "Collapse panel"}
-          className="mr-1 rounded p-1 text-zinc-500 hover:text-zinc-300 focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:outline-none"
+          className="mr-1 rounded p-1 text-zinc-500 hover:text-zinc-300 focus-visible:ring-2 focus-visible:ring-accent-ring focus-visible:outline-none"
         >
           {collapsed ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
         </button>
@@ -174,12 +229,49 @@ export function BottomPanel({ panelRef }: { panelRef: RefObject<PanelImperativeH
               badge={runningCount || undefined}
             />
           )}
-          <TabButton
-            label="Terminal"
-            icon={<TerminalSquare size={12} />}
-            active={activeTab === "terminal"}
-            onClick={() => handleTabClick("terminal")}
-          />
+          {workspaceShells.map((shell) => (
+            <button
+              key={shell.id}
+              type="button"
+              onClick={() => handleTabClick(shell.id)}
+              onAuxClick={(e) => {
+                if (e.button === 1) handleCloseShell(shell.id);
+              }}
+              className={`group flex items-center gap-1.5 rounded px-2 py-1 text-xs ${
+                activeTab === shell.id
+                  ? "bg-zinc-800 text-zinc-200"
+                  : "text-zinc-500 hover:bg-zinc-800/50 hover:text-zinc-400"
+              }`}
+            >
+              <TerminalSquare size={12} />
+              <span className="max-w-[120px] truncate">{shellDisplayName(shell)}</span>
+              {shell.status === "exited" && (
+                <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-red-500" />
+              )}
+              <span
+                role="button"
+                tabIndex={-1}
+                className="shrink-0 rounded p-0.5 hover:bg-zinc-700"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleCloseShell(shell.id);
+                }}
+                onKeyDown={() => {}}
+              >
+                <X size={12} />
+              </span>
+            </button>
+          ))}
+          <button
+            type="button"
+            onClick={handleAddShell}
+            disabled={!sessionEntryId || !workspace}
+            title="New terminal"
+            className="flex items-center gap-1 rounded px-1.5 py-1 text-zinc-600 hover:bg-zinc-800/50 hover:text-zinc-400 disabled:opacity-40"
+          >
+            <Plus size={14} />
+            <span className="text-xs">New Terminal</span>
+          </button>
         </div>
       </div>
 
@@ -187,9 +279,26 @@ export function BottomPanel({ panelRef }: { panelRef: RefObject<PanelImperativeH
       <div className="relative min-h-0 flex-1 overflow-hidden bg-zinc-950">
         {activeTab === "scripts" && <ScriptsTab />}
         {activeTab === "output" && <OutputTab />}
-        <div className={activeTab === "terminal" ? "flex h-full flex-col" : "hidden"}>
-          <ShellTab />
-        </div>
+        {workspaceShells.map((shell) => (
+          <div
+            key={shell.id}
+            className={`absolute inset-0 ${shell.id === activeTab ? "z-10 visible" : "z-0 invisible"}`}
+          >
+            <ShellTerminal
+              shell={shell}
+              isActive={shell.id === activeTab}
+              tabVisible={activeShell !== null}
+            />
+          </div>
+        ))}
+        {!activeShell &&
+          activeTab !== "scripts" &&
+          activeTab !== "output" &&
+          workspaceShells.length === 0 && (
+            <div className="flex h-full items-center justify-center text-sm text-zinc-600">
+              No terminals open
+            </div>
+          )}
       </div>
     </div>
   );
@@ -240,7 +349,7 @@ function ScriptsTab() {
   const discover = useScriptsStore((s) => s.discover);
   const discovering = useIsDiscovering();
   const discoveryError = useDiscoveryError();
-  const workspace = useWorkspace();
+  const workspace = useActiveWorkspace();
   const projectId = workspace?.split("/")[0] ?? null;
   if (!projectId) {
     return <div className="p-4 text-sm text-zinc-600">Select a workspace to manage scripts</div>;
@@ -334,7 +443,7 @@ function CommandBar() {
   const stopAll = useScriptsStore((s) => s.stopAll);
   const discover = useScriptsStore((s) => s.discover);
   const discovering = useIsDiscovering();
-  const workspace = useWorkspace();
+  const workspace = useActiveWorkspace();
   const statuses = config?.statuses ?? [];
 
   const openScriptsFile = () => {
@@ -364,7 +473,7 @@ function CommandBar() {
           }}
           disabled={discovering}
           aria-label="Rediscover scripts"
-          className="flex items-center gap-1.5 rounded px-2.5 py-1.5 text-xs text-zinc-600 transition-colors hover:bg-zinc-800 hover:text-zinc-400 disabled:opacity-50 focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:outline-none"
+          className="flex items-center gap-1.5 rounded px-2.5 py-1.5 text-xs text-zinc-600 transition-colors hover:bg-zinc-800 hover:text-zinc-400 disabled:opacity-50 focus-visible:ring-2 focus-visible:ring-accent-ring focus-visible:outline-none"
         >
           {discovering ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />}
         </button>
@@ -372,7 +481,7 @@ function CommandBar() {
           type="button"
           onClick={openScriptsFile}
           aria-label="Edit scripts.yaml"
-          className="flex items-center gap-1.5 rounded px-2.5 py-1.5 text-xs text-zinc-600 transition-colors hover:bg-zinc-800 hover:text-zinc-400 focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:outline-none"
+          className="flex items-center gap-1.5 rounded px-2.5 py-1.5 text-xs text-zinc-600 transition-colors hover:bg-zinc-800 hover:text-zinc-400 focus-visible:ring-2 focus-visible:ring-accent-ring focus-visible:outline-none"
         >
           <FileEdit size={12} />
         </button>
@@ -423,7 +532,7 @@ function ServiceCard({
   const [showOthers, setShowOthers] = useState(false);
   const runScript = useScriptsStore((s) => s.runScript);
   const stopScript = useScriptsStore((s) => s.stopScript);
-  const workspace = useWorkspace();
+  const workspace = useActiveWorkspace();
 
   const serviceStatuses = statuses.filter((s) => s.service === service.name);
   const worstHealth = getWorstHealth(serviceStatuses);
@@ -787,156 +896,8 @@ function OutputGroup({
 }
 
 // ---------------------------------------------------------------------------
-// Shell Tab — global terminal list with sidebar
+// Shell Terminal — individual terminal instance
 // ---------------------------------------------------------------------------
-
-function ShellTab() {
-  const workspace = useWorkspace();
-  const shells = useShellStore((s) => s.shells);
-  const activeId = useShellStore((s) => s.activeId);
-  const addShell = useShellStore((s) => s.addShell);
-  const removeShell = useShellStore((s) => s.removeShell);
-  const setActiveId = useShellStore((s) => s.setActiveId);
-  const getWorkspace = useAppStore((s) => s.getWorkspace);
-  const tabVisible = useScriptsStore((s) => s.activeTab) === "terminal";
-  const [confirmingClose, setConfirmingClose] = useState<string | null>(null);
-
-  function handleAddShell() {
-    if (!workspace) return;
-    addShell(workspace);
-  }
-
-  function handleRemoveShell(shellId: string) {
-    const shell = shells.find((s) => s.id === shellId);
-    if (!shell) return;
-
-    // Confirm if process is still running
-    if (shell.status === "active" || shell.status === "connecting") {
-      setConfirmingClose(shellId);
-      return;
-    }
-
-    doRemoveShell(shellId);
-  }
-
-  function doRemoveShell(shellId: string) {
-    const shell = shells.find((s) => s.id === shellId);
-    if (shell?.terminalId) {
-      destroyXTermInstance(`shell:${shell.terminalId}`);
-    }
-    removeShell(shellId);
-    setConfirmingClose(null);
-  }
-
-  function shellDisplayName(shell: ShellEntry): string {
-    if (shell.title) return shell.title;
-    const ws = getWorkspace(shell.workspaceId);
-    return ws?.name ?? shell.workspaceId;
-  }
-
-  return (
-    <div className="flex h-full">
-      {/* Sidebar — terminal list */}
-      <div className="flex w-44 shrink-0 flex-col border-r border-zinc-800">
-        <div className="flex-1 overflow-y-auto py-1">
-          {shells.map((shell) => (
-            <button
-              key={shell.id}
-              type="button"
-              onClick={() => setActiveId(shell.id)}
-              onAuxClick={(e) => {
-                if (e.button === 1) handleRemoveShell(shell.id);
-              }}
-              title={shellDisplayName(shell)}
-              className={`group flex w-full items-center gap-1.5 px-2 py-1 text-left text-xs ${
-                activeId === shell.id
-                  ? "bg-zinc-700/50 text-zinc-200"
-                  : "text-zinc-500 hover:bg-zinc-800 hover:text-zinc-400"
-              }`}
-            >
-              <TerminalSquare size={12} className="shrink-0" />
-              <span className="min-w-0 flex-1 truncate">{shellDisplayName(shell)}</span>
-              {shell.status === "exited" && (
-                <span className="h-2 w-2 shrink-0 rounded-full bg-red-500" />
-              )}
-              <X
-                size={12}
-                className="shrink-0 opacity-0 group-hover:opacity-100"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleRemoveShell(shell.id);
-                }}
-              />
-            </button>
-          ))}
-        </div>
-        <button
-          type="button"
-          onClick={handleAddShell}
-          disabled={!workspace}
-          title="New terminal"
-          className="flex items-center gap-1.5 border-t border-zinc-800 px-2 py-1.5 text-xs text-zinc-500 hover:bg-zinc-800 hover:text-zinc-400 disabled:opacity-40 disabled:hover:bg-transparent"
-        >
-          <span className="text-sm">+</span> New Terminal
-        </button>
-      </div>
-
-      {/* All terminals — stack with visibility to preserve xterm canvas */}
-      <div className="relative min-w-0 flex-1 overflow-hidden">
-        {shells.map((shell) => (
-          <div
-            key={shell.id}
-            className={`absolute inset-0 ${shell.id === activeId ? "z-10 visible" : "z-0 invisible"}`}
-          >
-            <ShellTerminal shell={shell} isActive={shell.id === activeId} tabVisible={tabVisible} />
-          </div>
-        ))}
-        {shells.length === 0 && (
-          <div className="flex h-full flex-col items-center justify-center gap-2 text-sm text-zinc-600">
-            <TerminalSquare size={24} className="text-zinc-700" />
-            <p>No terminals open</p>
-            {workspace && (
-              <button
-                type="button"
-                onClick={handleAddShell}
-                className="mt-1 rounded-md bg-zinc-800 px-3 py-1.5 text-xs text-zinc-400 hover:bg-zinc-700 hover:text-zinc-300"
-              >
-                New Terminal
-              </button>
-            )}
-          </div>
-        )}
-      </div>
-
-      {/* Close confirmation dialog */}
-      {confirmingClose && (
-        <div className="absolute inset-0 z-50 flex items-center justify-center bg-zinc-950/70">
-          <div className="flex flex-col gap-3 rounded-lg bg-zinc-800 p-4 shadow-xl">
-            <p className="text-sm text-zinc-300">
-              Terminal process is still running. Close anyway?
-            </p>
-            <div className="flex justify-end gap-2">
-              <button
-                type="button"
-                onClick={() => setConfirmingClose(null)}
-                className="rounded px-3 py-1.5 text-xs text-zinc-400 hover:bg-zinc-700"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={() => doRemoveShell(confirmingClose)}
-                className="rounded bg-red-600 px-3 py-1.5 text-xs text-white hover:bg-red-500"
-              >
-                Close
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
 
 function ShellTerminal({
   shell,
@@ -1016,7 +977,7 @@ function ShellTerminal({
         instancePrefix="shell"
         onExit={handleExit}
         onTitleChange={handleTitleChange}
-        className="p-1"
+        className="p-3"
       />
       {shell.status === "connecting" && (
         <div
@@ -1035,7 +996,7 @@ function ShellTerminal({
             <button
               type="button"
               onClick={handleRestart}
-              className="flex items-center gap-1.5 rounded-md bg-blue-600 px-3 py-1.5 text-sm font-medium text-white transition-colors hover:bg-blue-500 focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:outline-none"
+              className="flex items-center gap-1.5 rounded-md bg-blue-600 px-3 py-1.5 text-sm font-medium text-white transition-colors hover:bg-blue-500 focus-visible:ring-2 focus-visible:ring-accent-ring focus-visible:outline-none"
             >
               Restart
             </button>

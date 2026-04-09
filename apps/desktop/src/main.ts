@@ -155,6 +155,7 @@ function spawnServer(): void {
     IARA_PORT: String(serverPort),
     IARA_AUTH_TOKEN: authToken,
     IARA_STATE_DIR: stateDir,
+    IARA_BRIDGE_PATH: path.resolve(__dirname, "bridge.js"),
   };
 
   if (!isDevelopment) {

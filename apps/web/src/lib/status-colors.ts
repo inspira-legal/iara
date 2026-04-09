@@ -16,13 +16,6 @@ export const statusTextColor: Record<StatusVariant, string> = {
   info: "text-blue-400",
 } as const;
 
-/** Border + background tint for status containers (alerts, banners). */
-export const statusSurfaceStyle: Record<Exclude<StatusVariant, "success">, string> = {
-  error: "border-red-700/50 bg-red-900/20",
-  warning: "border-yellow-700/50 bg-yellow-900/20",
-  info: "border-blue-700/50 bg-blue-900/20",
-} as const;
-
 /** Border color for status-colored outlines (buttons, cards). */
 export const statusBorderColor: Record<StatusVariant | "idle", string> = {
   success: "border-green-600/30",

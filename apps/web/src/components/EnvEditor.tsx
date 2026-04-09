@@ -212,7 +212,7 @@ function EnvSection({
                   value={entry.key}
                   onChange={(e) => onUpdate(idx, "key", e.target.value)}
                   placeholder="KEY"
-                  className="w-[40%] rounded border border-zinc-700 bg-zinc-900 px-2 py-1 font-mono text-xs text-zinc-100 placeholder-zinc-600 outline-none focus:border-blue-500"
+                  className="w-[40%] rounded border border-zinc-700 bg-zinc-900 px-2 py-1 font-mono text-xs text-zinc-100 placeholder-zinc-600 outline-none focus:border-accent-ring"
                 />
                 <span className="text-xs text-zinc-600">=</span>
                 <input
@@ -220,7 +220,7 @@ function EnvSection({
                   value={entry.value}
                   onChange={(e) => onUpdate(idx, "value", e.target.value)}
                   placeholder="value"
-                  className="min-w-0 flex-1 rounded border border-zinc-700 bg-zinc-900 px-2 py-1 font-mono text-xs text-zinc-100 placeholder-zinc-600 outline-none focus:border-blue-500"
+                  className="min-w-0 flex-1 rounded border border-zinc-700 bg-zinc-900 px-2 py-1 font-mono text-xs text-zinc-100 placeholder-zinc-600 outline-none focus:border-accent-ring"
                 />
                 <button
                   type="button"

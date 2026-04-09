@@ -5,12 +5,13 @@ import { loadPrompt } from "../prompts/index.js";
 export interface LaunchConfig {
   workspaceDir: string;
   repoDirs: string[];
-  sessionId?: string | undefined;
+  sessionId: string;
   resumeSessionId?: string | undefined;
   appendSystemPrompt?: string | undefined;
   workspaceContext?: WorkspaceContext | undefined;
   pluginDir?: string | undefined;
   env?: Record<string, string> | undefined;
+  initialPrompt?: string | undefined;
 }
 
 /** Context about the workspace environment, used to build a richer system prompt. */
@@ -37,7 +38,7 @@ export function buildClaudeArgs(config: LaunchConfig): string[] {
   // Session handling
   if (config.resumeSessionId) {
     args.push("--resume", config.resumeSessionId);
-  } else if (config.sessionId) {
+  } else {
     args.push("--session-id", config.sessionId);
   }
 
@@ -54,6 +55,11 @@ export function buildClaudeArgs(config: LaunchConfig): string[] {
   // System prompt
   if (config.appendSystemPrompt) {
     args.push("--append-system-prompt", config.appendSystemPrompt);
+  }
+
+  // Initial prompt (positional arg — must be last)
+  if (config.initialPrompt) {
+    args.push(config.initialPrompt);
   }
 
   return args;

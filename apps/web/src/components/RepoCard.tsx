@@ -5,7 +5,7 @@ import {
   AlertCircle,
   ArrowUp,
   ArrowDown,
-  X,
+  Trash2,
   ChevronDown,
 } from "lucide-react";
 import type { RepoInfo } from "@iara/contracts";
@@ -22,6 +22,7 @@ interface RepoCardProps {
   onRepoInfoUpdate?: (updated: RepoInfo[]) => void;
   workspaceId?: string;
   projectId?: string;
+  showStatus?: boolean;
 }
 
 export function RepoCard({
@@ -30,6 +31,7 @@ export function RepoCard({
   onRepoInfoUpdate,
   workspaceId,
   projectId,
+  showStatus = true,
 }: RepoCardProps) {
   const isClean = repo.dirtyCount === 0;
   const showAheadBehind = repo.ahead > 0 || repo.behind > 0;
@@ -141,7 +143,7 @@ export function RepoCard({
             }}
             disabled={renaming}
             autoFocus
-            className="w-32 rounded border border-zinc-600 bg-zinc-900 px-1 py-0.5 text-xs text-zinc-300 outline-none focus:border-blue-500"
+            className="w-32 rounded border border-zinc-600 bg-zinc-900 px-1 py-0.5 text-xs text-zinc-300 outline-none focus:border-accent-ring"
           />
         ) : (
           <span className="flex items-center gap-0.5">
@@ -192,17 +194,18 @@ export function RepoCard({
         )}
       </div>
 
-      {isClean ? (
-        <StatusBadge variant="success" icon={<CheckCircle2 size={13} />}>
-          clean
-        </StatusBadge>
-      ) : (
-        <StatusBadge variant="error" icon={<AlertCircle size={13} />}>
-          {repo.dirtyCount} modified
-        </StatusBadge>
-      )}
+      {showStatus &&
+        (isClean ? (
+          <StatusBadge variant="success" icon={<CheckCircle2 size={13} />}>
+            clean
+          </StatusBadge>
+        ) : (
+          <StatusBadge variant="error" icon={<AlertCircle size={13} />}>
+            {repo.dirtyCount} modified
+          </StatusBadge>
+        ))}
 
-      {showAheadBehind && (
+      {showStatus && showAheadBehind && (
         <span className="flex shrink-0 items-center gap-1.5 text-xs">
           {repo.ahead > 0 && (
             <span className="flex items-center gap-0.5 text-green-400">
@@ -226,7 +229,7 @@ export function RepoCard({
           className="ml-auto shrink-0 rounded-md p-1 text-zinc-600 hover:bg-zinc-700 hover:text-red-400"
           title="Remove repo"
         >
-          <X size={14} />
+          <Trash2 size={14} />
         </button>
       )}
     </div>
