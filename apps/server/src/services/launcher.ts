@@ -32,7 +32,7 @@ export interface RepoContext {
 }
 
 export function buildClaudeArgs(config: LaunchConfig): string[] {
-  const args: string[] = ["--dangerously-skip-permissions"];
+  const args: string[] = ["--enable-auto-mode"];
 
   // Session handling
   if (config.resumeSessionId) {

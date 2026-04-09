@@ -25,6 +25,16 @@ function getGuardrailsEnv(appState: AppState): Record<string, string> {
   return {};
 }
 
+function getAutoBackgroundTasksEnv(appState: AppState): Record<string, string> {
+  const enabled = appState.getSetting("claude.auto_background_tasks");
+  return enabled === "true" ? { CLAUDE_AUTO_BACKGROUND_TASKS: "1" } : {};
+}
+
+function getNoFlickerEnv(appState: AppState): Record<string, string> {
+  const enabled = appState.getSetting("claude.no_flicker");
+  return enabled === "true" ? { CLAUDE_CODE_NO_FLICKER: "1" } : {};
+}
+
 export function registerTerminalHandlers(appState: AppState, manager: TerminalManager): void {
   registerMethod("terminal.create", async (params) => {
     const mode = params.mode ?? "claude";
@@ -118,6 +128,8 @@ export function registerTerminalHandlers(appState: AppState, manager: TerminalMa
       env: {
         ...getAutocompactEnv(appState),
         ...getGuardrailsEnv(appState),
+        ...getAutoBackgroundTasksEnv(appState),
+        ...getNoFlickerEnv(appState),
         IARA_WORKSPACE_ID: params.workspaceId,
         IARA_WORKSPACE_DIR: workspaceDir,
         IARA_PROJECT_ID: projectSlug,

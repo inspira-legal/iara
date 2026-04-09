@@ -18,6 +18,8 @@ function SettingsPage() {
   const autocompactPct = settings["claude.autocompact_pct"] ?? "";
   const autocompactTokens = settings["claude.autocompact_tokens"] ?? "";
   const guardrailsEnabled = settings["guardrails.enabled"] !== "false";
+  const autoBackgroundTasks = settings["claude.auto_background_tasks"] === "true";
+  const noFlicker = settings["claude.no_flicker"] === "true";
 
   const handleToggleNotifications = useCallback(() => {
     const newValue = osNotificationsEnabled ? "false" : "true";
@@ -66,6 +68,29 @@ function SettingsPage() {
               checked={guardrailsEnabled}
               onChange={() => {
                 void updateSetting("guardrails.enabled", guardrailsEnabled ? "false" : "true");
+              }}
+            />
+          </div>
+          <div className="mt-3 border-t border-zinc-800 pt-3">
+            <ToggleRow
+              label="Auto background tasks"
+              description="Automatically move long-running subagents to the background after ~2 minutes"
+              checked={autoBackgroundTasks}
+              onChange={() => {
+                void updateSetting(
+                  "claude.auto_background_tasks",
+                  autoBackgroundTasks ? "false" : "true",
+                );
+              }}
+            />
+          </div>
+          <div className="mt-3 border-t border-zinc-800 pt-3">
+            <ToggleRow
+              label="Fullscreen rendering"
+              description="Flicker-free rendering with flat memory usage (takes effect on next session)"
+              checked={noFlicker}
+              onChange={() => {
+                void updateSetting("claude.no_flicker", noFlicker ? "false" : "true");
               }}
             />
           </div>
