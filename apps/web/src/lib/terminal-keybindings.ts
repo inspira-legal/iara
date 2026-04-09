@@ -1,5 +1,5 @@
 import type { Terminal } from "@xterm/xterm";
-import { writeClipboard, readClipboard } from "./clipboard.js";
+import { writeClipboard } from "./clipboard.js";
 
 export interface KeybindingHandlers {
   onCopy: (() => void) | null;
@@ -36,11 +36,9 @@ const KEYBINDINGS: Keybinding[] = [
     ctrl: true,
     shift: true,
     key: "v",
-    action: (term) => {
-      void readClipboard().then((text) => {
-        if (text) term.paste(text);
-      });
-    },
+    // No-op: prevent xterm from processing as a key sequence, but let the
+    // browser's native paste event fire so xterm's built-in paste handler works.
+    action: () => {},
   },
   {
     ctrl: true,
