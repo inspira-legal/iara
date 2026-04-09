@@ -651,4 +651,295 @@ describe("useActiveSessionStore", () => {
       expect(useActiveSessionStore.getState().getEntry(id).hasData).toBe(false);
     });
   });
+
+  // -----------------------------------------------------------------------
+  // create error handling
+  // -----------------------------------------------------------------------
+
+  describe("create() error handling", () => {
+    it("sets CLAUDE_NOT_AVAILABLE errorCode when error has matching code", async () => {
+      const err = new Error("not available") as Error & { code: string };
+      err.code = "CLAUDE_NOT_AVAILABLE";
+      mockRequest.mockRejectedValueOnce(err);
+
+      await useActiveSessionStore.getState().create("proj1/ws1");
+
+      const entry = useActiveSessionStore.getState().getEntry("test-uuid");
+      expect(entry.status).toBe("exited");
+      expect(entry.errorCode).toBe("CLAUDE_NOT_AVAILABLE");
+    });
+
+    it("sets null errorCode for generic errors", async () => {
+      mockRequest.mockRejectedValueOnce(new Error("generic fail"));
+
+      await useActiveSessionStore.getState().create("proj1/ws1");
+
+      const entry = useActiveSessionStore.getState().getEntry("test-uuid");
+      expect(entry.errorCode).toBeNull();
+    });
+  });
+
+  // -----------------------------------------------------------------------
+  // handleExit with isResume (failed resume retry)
+  // -----------------------------------------------------------------------
+
+  describe("handleExit() with failed resume", () => {
+    it("retries as fresh session when resume fails with non-zero exit", async () => {
+      const entries = new Map<string, ActiveSessionEntry>();
+      entries.set("entry-1", {
+        ...DEFAULT_ENTRY,
+        id: "entry-1",
+        workspaceId: "proj1/ws1",
+        terminalId: "term-1",
+        sessionId: "sess-1",
+        status: "active",
+        isResume: true,
+      });
+      useActiveSessionStore.setState({ entries });
+
+      // The retry create() will call terminal.create + sessions.list
+      mockRandomUUID.mockReturnValue("retry-uuid");
+      mockRequest
+        .mockResolvedValueOnce({ terminalId: "new-term", sessionId: "new-sess" })
+        .mockResolvedValueOnce([]); // sessions.list
+
+      useActiveSessionStore.getState().handleExit("term-1", 1);
+
+      // Original entry should be removed
+      expect(useActiveSessionStore.getState().entries.has("entry-1")).toBe(false);
+
+      // Wait for the async create() triggered by handleExit
+      await vi.waitFor(() => {
+        expect(useActiveSessionStore.getState().entries.has("retry-uuid")).toBe(true);
+      });
+    });
+
+    it("does not retry when isResume is false", () => {
+      const entries = new Map<string, ActiveSessionEntry>();
+      entries.set("entry-1", {
+        ...DEFAULT_ENTRY,
+        id: "entry-1",
+        workspaceId: "proj1/ws1",
+        terminalId: "term-1",
+        sessionId: "sess-1",
+        status: "active",
+        isResume: false,
+      });
+      useActiveSessionStore.setState({ entries });
+
+      useActiveSessionStore.getState().handleExit("term-1", 1);
+
+      // Should set exited state, not retry
+      const entry = useActiveSessionStore.getState().getEntry("entry-1");
+      expect(entry.status).toBe("exited");
+      expect(entry.exitCode).toBe(1);
+    });
+
+    it("does not retry when exit code is 0 even if isResume", () => {
+      const entries = new Map<string, ActiveSessionEntry>();
+      entries.set("entry-1", {
+        ...DEFAULT_ENTRY,
+        id: "entry-1",
+        workspaceId: "proj1/ws1",
+        terminalId: "term-1",
+        sessionId: "sess-1",
+        status: "active",
+        isResume: true,
+      });
+      useActiveSessionStore.setState({ entries });
+
+      useActiveSessionStore.getState().handleExit("term-1", 0);
+
+      // Exit code 0 removes entry normally
+      expect(useActiveSessionStore.getState().entries.has("entry-1")).toBe(false);
+      expect(mockRefreshSessions).toHaveBeenCalledWith("proj1/ws1");
+    });
+  });
+
+  // -----------------------------------------------------------------------
+  // renameSession
+  // -----------------------------------------------------------------------
+
+  describe("renameSession()", () => {
+    it("calls sessions.rename and updates title", async () => {
+      const entries = new Map<string, ActiveSessionEntry>();
+      entries.set("entry-1", {
+        ...DEFAULT_ENTRY,
+        id: "entry-1",
+        workspaceId: "proj1/ws1",
+        terminalId: "term-1",
+        sessionId: "sess-1",
+        status: "active",
+      });
+      useActiveSessionStore.setState({ entries });
+
+      mockRequest.mockResolvedValueOnce(undefined); // sessions.rename
+
+      await useActiveSessionStore.getState().renameSession("entry-1", "New Title");
+
+      expect(mockRequest).toHaveBeenCalledWith("sessions.rename", {
+        workspaceId: "proj1/ws1",
+        sessionId: "sess-1",
+        title: "New Title",
+      });
+      expect(useActiveSessionStore.getState().getEntry("entry-1").title).toBe("New Title");
+    });
+
+    it("does nothing if entry has no sessionId", async () => {
+      const entries = new Map<string, ActiveSessionEntry>();
+      entries.set("entry-1", {
+        ...DEFAULT_ENTRY,
+        id: "entry-1",
+        workspaceId: "proj1/ws1",
+      });
+      useActiveSessionStore.setState({ entries });
+
+      await useActiveSessionStore.getState().renameSession("entry-1", "New Title");
+
+      expect(mockRequest).not.toHaveBeenCalled();
+    });
+
+    it("does nothing for unknown entryId", async () => {
+      await useActiveSessionStore.getState().renameSession("unknown", "New Title");
+      expect(mockRequest).not.toHaveBeenCalled();
+    });
+  });
+
+  // -----------------------------------------------------------------------
+  // session:updated subscription
+  // -----------------------------------------------------------------------
+
+  describe("session:updated subscription", () => {
+    function getUpdatedHandler(): (payload: { terminalId: string; sessionId: string }) => void {
+      const handler = subscriptionHandlers.get("session:updated");
+      if (!handler) throw new Error("session:updated subscriber not registered");
+      return handler as (payload: { terminalId: string; sessionId: string }) => void;
+    }
+
+    it("updates sessionId when terminal matches and sessionId differs", () => {
+      const entries = new Map<string, ActiveSessionEntry>();
+      entries.set("entry-1", {
+        ...DEFAULT_ENTRY,
+        id: "entry-1",
+        workspaceId: "proj1/ws1",
+        terminalId: "term-1",
+        sessionId: "old-sess",
+        status: "active",
+      });
+      useActiveSessionStore.setState({ entries });
+
+      getUpdatedHandler()({ terminalId: "term-1", sessionId: "new-sess" });
+
+      expect(useActiveSessionStore.getState().getEntry("entry-1").sessionId).toBe("new-sess");
+    });
+
+    it("does not update when sessionId is already the same", () => {
+      const entries = new Map<string, ActiveSessionEntry>();
+      const entry: ActiveSessionEntry = {
+        ...DEFAULT_ENTRY,
+        id: "entry-1",
+        workspaceId: "proj1/ws1",
+        terminalId: "term-1",
+        sessionId: "same-sess",
+        status: "active",
+      };
+      entries.set("entry-1", entry);
+      useActiveSessionStore.setState({ entries });
+
+      getUpdatedHandler()({ terminalId: "term-1", sessionId: "same-sess" });
+
+      // Should return same state reference (no mutation)
+      expect(useActiveSessionStore.getState().entries.get("entry-1")).toBe(entry);
+    });
+
+    it("does nothing for unknown terminalId", () => {
+      const entries = new Map<string, ActiveSessionEntry>();
+      entries.set("entry-1", {
+        ...DEFAULT_ENTRY,
+        id: "entry-1",
+        workspaceId: "proj1/ws1",
+        terminalId: "term-1",
+        sessionId: "sess-1",
+        status: "active",
+      });
+      useActiveSessionStore.setState({ entries });
+      const before = useActiveSessionStore.getState().entries;
+
+      getUpdatedHandler()({ terminalId: "unknown", sessionId: "new-sess" });
+
+      expect(useActiveSessionStore.getState().entries).toBe(before);
+    });
+  });
+
+  // -----------------------------------------------------------------------
+  // session:changed subscription
+  // -----------------------------------------------------------------------
+
+  describe("session:changed subscription", () => {
+    function getChangedHandler(): (payload: { workspaceId: string }) => void {
+      const handler = subscriptionHandlers.get("session:changed");
+      if (!handler) throw new Error("session:changed subscriber not registered");
+      return handler as (payload: { workspaceId: string }) => void;
+    }
+
+    it("fetches sessions and updates titles for matching workspace", async () => {
+      const entries = new Map<string, ActiveSessionEntry>();
+      entries.set("entry-1", {
+        ...DEFAULT_ENTRY,
+        id: "entry-1",
+        workspaceId: "proj1/ws1",
+        terminalId: "term-1",
+        sessionId: "sess-1",
+        status: "active",
+      });
+      useActiveSessionStore.setState({ entries });
+
+      mockRequest.mockResolvedValueOnce([{ id: "sess-1", title: "Updated Title" }]);
+
+      getChangedHandler()({ workspaceId: "proj1/ws1" });
+
+      await vi.waitFor(() => {
+        expect(useActiveSessionStore.getState().getEntry("entry-1").title).toBe("Updated Title");
+      });
+    });
+
+    it("does not fetch sessions if no active entries for workspace", () => {
+      const entries = new Map<string, ActiveSessionEntry>();
+      entries.set("entry-1", {
+        ...DEFAULT_ENTRY,
+        id: "entry-1",
+        workspaceId: "proj1/ws1",
+        status: "active",
+      });
+      useActiveSessionStore.setState({ entries });
+
+      getChangedHandler()({ workspaceId: "proj1/ws2" }); // different workspace
+
+      expect(mockRequest).not.toHaveBeenCalled();
+    });
+
+    it("skips sessions without title", async () => {
+      const entries = new Map<string, ActiveSessionEntry>();
+      entries.set("entry-1", {
+        ...DEFAULT_ENTRY,
+        id: "entry-1",
+        workspaceId: "proj1/ws1",
+        terminalId: "term-1",
+        sessionId: "sess-1",
+        status: "active",
+      });
+      useActiveSessionStore.setState({ entries });
+
+      mockRequest.mockResolvedValueOnce([{ id: "sess-1", title: null }]);
+
+      getChangedHandler()({ workspaceId: "proj1/ws1" });
+
+      await vi.waitFor(() => {
+        expect(mockRequest).toHaveBeenCalledWith("sessions.list", { workspaceId: "proj1/ws1" });
+      });
+
+      // Title should remain null since the session has no title
+      expect(useActiveSessionStore.getState().getEntry("entry-1").title).toBeNull();
+    });
+  });
 });

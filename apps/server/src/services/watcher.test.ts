@@ -1,8 +1,13 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import * as fs from "node:fs";
-import * as path from "node:path";
-import * as os from "node:os";
 import { ProjectsWatcher } from "./watcher.js";
+
+const { mockSubscribe } = vi.hoisted(() => ({
+  mockSubscribe: vi.fn(),
+}));
+
+vi.mock("@parcel/watcher", () => ({
+  subscribe: mockSubscribe,
+}));
 
 function createMockAppState(overrides: Record<string, unknown> = {}) {
   return {
@@ -15,91 +20,206 @@ function createMockAppState(overrides: Record<string, unknown> = {}) {
 }
 
 describe("ProjectsWatcher", () => {
-  let tmpDir: string;
   // biome-ignore lint: test mock
   let pushFn: any;
+  let watcherCallback: (_err: unknown, events: Array<{ path: string; type: string }>) => void;
 
   beforeEach(() => {
     vi.useFakeTimers();
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "watcher-test-"));
     pushFn = vi.fn();
+    mockSubscribe.mockReset();
+    mockSubscribe.mockImplementation(async (_dir: string, callback: any, _opts: any) => {
+      watcherCallback = callback;
+      return { unsubscribe: vi.fn().mockResolvedValue(undefined) };
+    });
   });
 
   afterEach(() => {
     vi.useRealTimers();
-    fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 
   describe("start()", () => {
-    it("creates a watcher without throwing", () => {
+    it("subscribes to the projects directory with correct options", async () => {
       const appState = createMockAppState();
-      const watcher = new ProjectsWatcher(tmpDir, appState, pushFn);
-      expect(() => watcher.start()).not.toThrow();
-      watcher.stop();
+      const watcher = new ProjectsWatcher("/tmp/projects", appState, pushFn);
+      await watcher.start();
+
+      expect(mockSubscribe).toHaveBeenCalledWith("/tmp/projects", expect.any(Function), {
+        ignore: ["**/.git/**", "**/node_modules/**"],
+      });
     });
 
-    it("does not throw when directory does not exist", () => {
+    it("detects iara-scripts.yaml changes at project root", async () => {
       const appState = createMockAppState();
-      const watcher = new ProjectsWatcher("/nonexistent/path", appState, pushFn);
-      expect(() => watcher.start()).not.toThrow();
-    });
-  });
+      const watcher = new ProjectsWatcher("/tmp/projects", appState, pushFn);
+      await watcher.start();
 
-  describe("suppressNext()", () => {
-    it("suppresses a path so watcher ignores own writes", () => {
-      const appState = createMockAppState();
-      const watcher = new ProjectsWatcher(tmpDir, appState, pushFn);
+      watcherCallback(null, [
+        {
+          path: "/tmp/projects/myproj/iara-scripts.yaml",
+          type: "update",
+        },
+      ]);
+      vi.advanceTimersByTime(100);
 
-      // Access private ownWrites via any
-      const w = watcher as any;
-      watcher.suppressNext("/some/path/project.json");
-      expect(w.ownWrites.has("/some/path/project.json")).toBe(true);
+      expect(appState.rescanProject).toHaveBeenCalledWith("myproj");
     });
 
-    it("clears suppression after 1 second", () => {
+    it("ignores iara-scripts.yaml in subdirectories", async () => {
       const appState = createMockAppState();
-      const watcher = new ProjectsWatcher(tmpDir, appState, pushFn);
-      const w = watcher as any;
+      const watcher = new ProjectsWatcher("/tmp/projects", appState, pushFn);
+      await watcher.start();
 
-      watcher.suppressNext("/some/path");
-      expect(w.ownWrites.has("/some/path")).toBe(true);
+      watcherCallback(null, [
+        {
+          path: "/tmp/projects/myproj/subdir/iara-scripts.yaml",
+          type: "update",
+        },
+      ]);
+      vi.advanceTimersByTime(100);
 
-      vi.advanceTimersByTime(1100);
-      expect(w.ownWrites.has("/some/path")).toBe(false);
+      expect(appState.rescanProject).not.toHaveBeenCalled();
     });
 
-    it("resets timer on repeated suppressions", () => {
+    it("detects workspaces/ directory changes", async () => {
       const appState = createMockAppState();
-      const watcher = new ProjectsWatcher(tmpDir, appState, pushFn);
-      const w = watcher as any;
+      const watcher = new ProjectsWatcher("/tmp/projects", appState, pushFn);
+      await watcher.start();
 
-      watcher.suppressNext("/some/path");
-      vi.advanceTimersByTime(800);
-      // Still present
-      expect(w.ownWrites.has("/some/path")).toBe(true);
+      watcherCallback(null, [
+        {
+          path: "/tmp/projects/myproj/workspaces/new-ws",
+          type: "create",
+        },
+      ]);
+      vi.advanceTimersByTime(100);
 
-      // Re-suppress resets the timer
-      watcher.suppressNext("/some/path");
-      vi.advanceTimersByTime(800);
-      // Should still be present (800ms after second suppress)
-      expect(w.ownWrites.has("/some/path")).toBe(true);
+      expect(appState.rescanProject).toHaveBeenCalledWith("myproj");
+    });
 
-      vi.advanceTimersByTime(300);
-      // Now 1100ms after second suppress
-      expect(w.ownWrites.has("/some/path")).toBe(false);
+    it("detects .git directory at project root level", async () => {
+      const appState = createMockAppState();
+      const watcher = new ProjectsWatcher("/tmp/projects", appState, pushFn);
+      await watcher.start();
+
+      watcherCallback(null, [{ path: "/tmp/projects/myproj/.git", type: "create" }]);
+      vi.advanceTimersByTime(100);
+
+      expect(appState.rescanProject).toHaveBeenCalledWith("myproj");
+    });
+
+    it("ignores .git in deeply nested paths", async () => {
+      const appState = createMockAppState();
+      const watcher = new ProjectsWatcher("/tmp/projects", appState, pushFn);
+      await watcher.start();
+
+      watcherCallback(null, [
+        {
+          path: "/tmp/projects/myproj/subdir/deep/.git",
+          type: "create",
+        },
+      ]);
+      vi.advanceTimersByTime(100);
+
+      expect(appState.rescanProject).not.toHaveBeenCalled();
+    });
+
+    it("suppresses events for own writes", async () => {
+      const appState = createMockAppState();
+      const watcher = new ProjectsWatcher("/tmp/projects", appState, pushFn);
+      await watcher.start();
+
+      watcher.suppressNext("/tmp/projects/myproj/iara-scripts.yaml");
+      watcherCallback(null, [
+        {
+          path: "/tmp/projects/myproj/iara-scripts.yaml",
+          type: "update",
+        },
+      ]);
+      vi.advanceTimersByTime(100);
+
+      expect(appState.rescanProject).not.toHaveBeenCalled();
+    });
+
+    it("skips events with empty relative path", async () => {
+      const appState = createMockAppState();
+      const watcher = new ProjectsWatcher("/tmp/projects", appState, pushFn);
+      await watcher.start();
+
+      watcherCallback(null, [{ path: "/tmp/projects", type: "update" }]);
+      vi.advanceTimersByTime(100);
+
+      expect(appState.rescanProject).not.toHaveBeenCalled();
+    });
+
+    it("ignores unrelated file changes", async () => {
+      const appState = createMockAppState();
+      const watcher = new ProjectsWatcher("/tmp/projects", appState, pushFn);
+      await watcher.start();
+
+      watcherCallback(null, [
+        {
+          path: "/tmp/projects/myproj/random-file.txt",
+          type: "update",
+        },
+      ]);
+      vi.advanceTimersByTime(100);
+
+      expect(appState.rescanProject).not.toHaveBeenCalled();
+    });
+
+    it("falls back to scheduleFlush on callback error", async () => {
+      const appState = createMockAppState();
+      const watcher = new ProjectsWatcher("/tmp/projects", appState, pushFn);
+      await watcher.start();
+
+      // null events causes for..of to throw, triggering catch → scheduleFlush
+      watcherCallback(null, null as any);
+      vi.advanceTimersByTime(100);
+
+      // The catch calls scheduleFlush → flush runs (no pending slugs = no-op)
+    });
+
+    it("silently handles subscribe failure", async () => {
+      mockSubscribe.mockRejectedValueOnce(new Error("cannot watch"));
+      const appState = createMockAppState();
+      const watcher = new ProjectsWatcher("/tmp/projects", appState, pushFn);
+
+      await expect(watcher.start()).resolves.toBeUndefined();
+    });
+
+    it("processes multiple events in a single batch", async () => {
+      const appState = createMockAppState();
+      const watcher = new ProjectsWatcher("/tmp/projects", appState, pushFn);
+      await watcher.start();
+
+      watcherCallback(null, [
+        {
+          path: "/tmp/projects/proj1/iara-scripts.yaml",
+          type: "update",
+        },
+        {
+          path: "/tmp/projects/proj2/workspaces/ws1",
+          type: "create",
+        },
+        { path: "/tmp/projects/proj3/.git", type: "create" },
+      ]);
+      vi.advanceTimersByTime(100);
+
+      expect(appState.rescanProject).toHaveBeenCalledWith("proj1");
+      expect(appState.rescanProject).toHaveBeenCalledWith("proj2");
+      expect(appState.rescanProject).toHaveBeenCalledWith("proj3");
     });
   });
 
   describe("flush()", () => {
-    it("collects unique project slugs and rescans", () => {
+    it("calls rescanProject for each pending slug", () => {
       const appState = createMockAppState();
-      const watcher = new ProjectsWatcher(tmpDir, appState, pushFn);
+      const watcher = new ProjectsWatcher("/tmp/projects", appState, pushFn);
       const w = watcher as any;
 
-      // Simulate pending changes
       w.pendingProjectSlugs.add("proj1");
       w.pendingProjectSlugs.add("proj2");
-
       w.flush();
 
       expect(appState.rescanProject).toHaveBeenCalledWith("proj1");
@@ -107,7 +227,7 @@ describe("ProjectsWatcher", () => {
       expect(appState.rescanProject).toHaveBeenCalledTimes(2);
     });
 
-    it("pushes project:changed events for each project", () => {
+    it("pushes project:changed for each successfully rescanned project", () => {
       const project1 = { slug: "proj1" };
       const project2 = { slug: "proj2" };
       const appState = createMockAppState({
@@ -118,18 +238,23 @@ describe("ProjectsWatcher", () => {
         }),
       });
 
-      const watcher = new ProjectsWatcher(tmpDir, appState, pushFn);
+      const watcher = new ProjectsWatcher("/tmp/projects", appState, pushFn);
       const w = watcher as any;
 
       w.pendingProjectSlugs.add("proj1");
       w.pendingProjectSlugs.add("proj2");
       w.flush();
 
-      expect(pushFn).toHaveBeenCalledWith("project:changed", { project: project1 });
-      expect(pushFn).toHaveBeenCalledWith("project:changed", { project: project2 });
+      expect(pushFn).toHaveBeenCalledWith("project:changed", {
+        project: project1,
+      });
+      expect(pushFn).toHaveBeenCalledWith("project:changed", {
+        project: project2,
+      });
+      expect(pushFn).toHaveBeenCalledTimes(2);
     });
 
-    it("does full resync when a previously known project disappears", () => {
+    it("does full resync when a previously known project is deleted", () => {
       const state = { projects: [], settings: {} };
       const appState = createMockAppState({
         rescanProject: vi.fn().mockReturnValue(null),
@@ -137,7 +262,7 @@ describe("ProjectsWatcher", () => {
         getState: vi.fn().mockReturnValue(state),
       });
 
-      const watcher = new ProjectsWatcher(tmpDir, appState, pushFn);
+      const watcher = new ProjectsWatcher("/tmp/projects", appState, pushFn);
       const w = watcher as any;
 
       w.pendingProjectSlugs.add("deleted");
@@ -147,9 +272,25 @@ describe("ProjectsWatcher", () => {
       expect(pushFn).toHaveBeenCalledWith("state:resync", { state });
     });
 
-    it("clears pending changes after flush", () => {
+    it("skips unknown projects that return null without triggering resync", () => {
+      const appState = createMockAppState({
+        rescanProject: vi.fn().mockReturnValue(null),
+        getProject: vi.fn().mockReturnValue(null),
+      });
+
+      const watcher = new ProjectsWatcher("/tmp/projects", appState, pushFn);
+      const w = watcher as any;
+
+      w.pendingProjectSlugs.add("unknown");
+      w.flush();
+
+      expect(appState.scan).not.toHaveBeenCalled();
+      expect(pushFn).not.toHaveBeenCalled();
+    });
+
+    it("clears pendingProjectSlugs after flush", () => {
       const appState = createMockAppState();
-      const watcher = new ProjectsWatcher(tmpDir, appState, pushFn);
+      const watcher = new ProjectsWatcher("/tmp/projects", appState, pushFn);
       const w = watcher as any;
 
       w.pendingProjectSlugs.add("proj");
@@ -158,7 +299,7 @@ describe("ProjectsWatcher", () => {
       expect(w.pendingProjectSlugs.size).toBe(0);
     });
 
-    it("catches errors and does full resync", () => {
+    it("catches errors and falls back to full resync", () => {
       const state = { projects: [], settings: {} };
       const appState = createMockAppState({
         rescanProject: vi.fn().mockImplementation(() => {
@@ -167,7 +308,7 @@ describe("ProjectsWatcher", () => {
         getState: vi.fn().mockReturnValue(state),
       });
 
-      const watcher = new ProjectsWatcher(tmpDir, appState, pushFn);
+      const watcher = new ProjectsWatcher("/tmp/projects", appState, pushFn);
       const w = watcher as any;
 
       w.pendingProjectSlugs.add("proj");
@@ -178,10 +319,56 @@ describe("ProjectsWatcher", () => {
     });
   });
 
-  describe("scheduleFlush()", () => {
-    it("debounces flush calls to 100ms", () => {
+  describe("suppressNext()", () => {
+    it("adds path to ownWrites map", () => {
       const appState = createMockAppState();
-      const watcher = new ProjectsWatcher(tmpDir, appState, pushFn);
+      const watcher = new ProjectsWatcher("/tmp/projects", appState, pushFn);
+      const w = watcher as any;
+
+      watcher.suppressNext("/some/path/file.yaml");
+      expect(w.ownWrites.has("/some/path/file.yaml")).toBe(true);
+    });
+
+    it("removes path from ownWrites after 1000ms timeout", () => {
+      const appState = createMockAppState();
+      const watcher = new ProjectsWatcher("/tmp/projects", appState, pushFn);
+      const w = watcher as any;
+
+      watcher.suppressNext("/some/path");
+      expect(w.ownWrites.has("/some/path")).toBe(true);
+
+      vi.advanceTimersByTime(999);
+      expect(w.ownWrites.has("/some/path")).toBe(true);
+
+      vi.advanceTimersByTime(1);
+      expect(w.ownWrites.has("/some/path")).toBe(false);
+    });
+
+    it("replaces existing timer on repeated calls for the same path", () => {
+      const appState = createMockAppState();
+      const watcher = new ProjectsWatcher("/tmp/projects", appState, pushFn);
+      const w = watcher as any;
+
+      watcher.suppressNext("/some/path");
+      vi.advanceTimersByTime(800);
+      expect(w.ownWrites.has("/some/path")).toBe(true);
+
+      // Re-suppress resets the 1000ms timer
+      watcher.suppressNext("/some/path");
+      vi.advanceTimersByTime(800);
+      // 800ms after second call, still present
+      expect(w.ownWrites.has("/some/path")).toBe(true);
+
+      vi.advanceTimersByTime(200);
+      // 1000ms after second call, now removed
+      expect(w.ownWrites.has("/some/path")).toBe(false);
+    });
+  });
+
+  describe("scheduleFlush()", () => {
+    it("debounces flush with 100ms delay", () => {
+      const appState = createMockAppState();
+      const watcher = new ProjectsWatcher("/tmp/projects", appState, pushFn);
       const w = watcher as any;
       const flushSpy = vi.spyOn(w, "flush");
 
@@ -195,109 +382,75 @@ describe("ProjectsWatcher", () => {
       vi.advanceTimersByTime(100);
       expect(flushSpy).toHaveBeenCalledTimes(1);
     });
-  });
 
-  describe("file change detection", () => {
-    it("ignores files that are not project.json or workspace.json", () => {
+    it("resets debounce timer on each call", () => {
       const appState = createMockAppState();
-      const watcher = new ProjectsWatcher(tmpDir, appState, pushFn);
-      watcher.start();
-
-      // Write a non-JSON file — should not trigger rescan
-      const projDir = path.join(tmpDir, "proj1");
-      fs.mkdirSync(projDir, { recursive: true });
-      fs.writeFileSync(path.join(projDir, "random.txt"), "hello");
-
-      vi.advanceTimersByTime(200);
-      expect(appState.rescanProject).not.toHaveBeenCalled();
-      watcher.stop();
-    });
-
-    it("detects project.json changes", () => {
-      const appState = createMockAppState();
-      const watcher = new ProjectsWatcher(tmpDir, appState, pushFn);
-
-      // Create initial structure
-      const projDir = path.join(tmpDir, "proj1");
-      fs.mkdirSync(projDir, { recursive: true });
-      fs.writeFileSync(path.join(projDir, "project.json"), "{}");
-
-      watcher.start();
-
-      // Modify project.json
-      fs.writeFileSync(path.join(projDir, "project.json"), '{"updated": true}');
-
-      vi.advanceTimersByTime(200);
-      // May or may not fire depending on OS watcher timing — just verify no crash
-      watcher.stop();
-    });
-
-    it("suppressed writes are ignored", () => {
-      const appState = createMockAppState();
-      const watcher = new ProjectsWatcher(tmpDir, appState, pushFn);
-
-      const projDir = path.join(tmpDir, "proj1");
-      fs.mkdirSync(projDir, { recursive: true });
-      fs.writeFileSync(path.join(projDir, "project.json"), "{}");
-
-      watcher.start();
-
-      const fullPath = path.join(projDir, "project.json");
-      watcher.suppressNext(fullPath);
-      fs.writeFileSync(fullPath, '{"suppressed": true}');
-
-      vi.advanceTimersByTime(200);
-      // The write was suppressed, so rescan should not be triggered for this change
-      watcher.stop();
-    });
-  });
-
-  describe("flush() - rescanProject returns null for unknown project", () => {
-    it("skips projects that return null from rescanProject", () => {
-      const appState = createMockAppState({
-        rescanProject: vi.fn().mockReturnValue(null),
-        getProject: vi.fn().mockReturnValue(null), // not previously known
-      });
-
-      const watcher = new ProjectsWatcher(tmpDir, appState, pushFn);
+      const watcher = new ProjectsWatcher("/tmp/projects", appState, pushFn);
       const w = watcher as any;
+      const flushSpy = vi.spyOn(w, "flush");
 
-      w.pendingProjectSlugs.add("unknown");
-      w.flush();
+      w.pendingProjectSlugs.add("proj");
+      w.scheduleFlush();
 
-      // No resync, no project:changed event
-      expect(appState.scan).not.toHaveBeenCalled();
-      expect(pushFn).not.toHaveBeenCalled();
+      vi.advanceTimersByTime(80);
+      expect(flushSpy).not.toHaveBeenCalled();
+
+      // Calling again resets the 100ms window
+      w.scheduleFlush();
+
+      vi.advanceTimersByTime(80);
+      expect(flushSpy).not.toHaveBeenCalled();
+
+      vi.advanceTimersByTime(20);
+      expect(flushSpy).toHaveBeenCalledTimes(1);
     });
   });
 
   describe("stop()", () => {
-    it("clears debounce timer on stop", () => {
+    it("clears debounce timer", () => {
       const appState = createMockAppState();
-      const watcher = new ProjectsWatcher(tmpDir, appState, pushFn);
+      const watcher = new ProjectsWatcher("/tmp/projects", appState, pushFn);
       const w = watcher as any;
 
-      // Schedule a flush to set debounceTimer
       w.pendingProjectSlugs.add("proj");
       w.scheduleFlush();
       expect(w.debounceTimer).not.toBeNull();
 
       watcher.stop();
-      // Timer should be cleared (watcher sets to null via close, but debounceTimer handled by stop)
+
+      // Advancing time should not trigger flush since timer was cleared
+      const flushSpy = vi.spyOn(w, "flush");
+      vi.advanceTimersByTime(200);
+      expect(flushSpy).not.toHaveBeenCalled();
     });
 
-    it("cleans up watcher and timers", () => {
+    it("unsubscribes from watcher subscription", async () => {
       const appState = createMockAppState();
-      const watcher = new ProjectsWatcher(tmpDir, appState, pushFn);
-      watcher.start();
-      expect(() => watcher.stop()).not.toThrow();
+      const watcher = new ProjectsWatcher("/tmp/projects", appState, pushFn);
+      const w = watcher as any;
+
+      const unsubscribe = vi.fn().mockResolvedValue(undefined);
+      w.subscription = { unsubscribe };
+
+      await watcher.stop();
+
+      expect(unsubscribe).toHaveBeenCalled();
+      expect(w.subscription).toBeNull();
     });
 
-    it("is safe to call multiple times", () => {
+    it("is safe to call when no subscription exists", async () => {
       const appState = createMockAppState();
-      const watcher = new ProjectsWatcher(tmpDir, appState, pushFn);
-      watcher.stop();
-      watcher.stop();
+      const watcher = new ProjectsWatcher("/tmp/projects", appState, pushFn);
+
+      await expect(watcher.stop()).resolves.toBeUndefined();
+    });
+
+    it("is safe to call multiple times", async () => {
+      const appState = createMockAppState();
+      const watcher = new ProjectsWatcher("/tmp/projects", appState, pushFn);
+
+      await watcher.stop();
+      await watcher.stop();
     });
   });
 });
