@@ -78,7 +78,7 @@ export function CommandPalette({
   const handleSelectWorkspace = useCallback(
     (workspaceId: string) => {
       useAppStore.getState().selectWorkspace(workspaceId);
-      void navigate({ to: `/workspace/${workspaceId}` } as any);
+      void navigate({ to: "/workspace/$", params: { _splat: workspaceId } } as any);
       onClose();
     },
     [navigate, onClose],
@@ -86,7 +86,7 @@ export function CommandPalette({
 
   const handleSelectProject = useCallback(
     (projectId: string) => {
-      void navigate({ to: `/project/${projectId}` } as any);
+      void navigate({ to: "/project/$", params: { _splat: projectId } } as any);
       onClose();
     },
     [navigate, onClose],

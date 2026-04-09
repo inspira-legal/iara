@@ -113,14 +113,17 @@ export const useActiveSessionStore = create<ActiveSessionState & ActiveSessionAc
       const saved = sessionsCache.get();
       if (!saved || saved.length === 0) return;
 
-      for (const s of saved) {
-        // Re-create each saved session by resuming it
-        const createOpts: { resumeSessionId: string; title?: string } = {
-          resumeSessionId: s.sessionId,
-        };
-        if (s.title) createOpts.title = s.title;
-        void get().create(s.workspaceId, createOpts);
-      }
+      // Restore sessions sequentially to avoid spawning many processes at once
+      const restoreSequentially = async () => {
+        for (const s of saved) {
+          const createOpts: { resumeSessionId: string; title?: string } = {
+            resumeSessionId: s.sessionId,
+          };
+          if (s.title) createOpts.title = s.title;
+          await get().create(s.workspaceId, createOpts);
+        }
+      };
+      void restoreSequentially();
       // Clear cache — create() will persist fresh entries once connected
       sessionsCache.clear();
     },

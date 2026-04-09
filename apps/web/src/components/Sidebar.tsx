@@ -450,7 +450,7 @@ function SortableSessionItem({
           void navigate({ to: "/session/$id", params: { id: entry.id } } as any);
         }
       }}
-      className={`group flex w-full items-start gap-2 rounded px-2 py-1.5 text-left cursor-default focus-visible:ring-2 focus-visible:ring-accent-ring focus-visible:outline-none ${
+      className={`group flex w-full items-start gap-2 rounded px-2 py-1.5 text-left cursor-pointer focus-visible:ring-2 focus-visible:ring-accent-ring focus-visible:outline-none ${
         isActive
           ? "bg-zinc-800 text-zinc-100"
           : "text-zinc-400 hover:bg-zinc-800/60 hover:text-zinc-200"

@@ -100,6 +100,8 @@ export function BottomPanel({ panelRef }: { panelRef: RefObject<PanelImperativeH
     const shell = shells.find((s) => s.id === shellId);
     if (!shell) return;
     if (shell.terminalId) {
+      const ok = window.confirm("Close this terminal? Any running process will be terminated.");
+      if (!ok) return;
       destroyXTermInstance(`shell:${shell.terminalId}`);
     }
     removeShell(shellId);
@@ -289,11 +291,14 @@ export function BottomPanel({ panelRef }: { panelRef: RefObject<PanelImperativeH
             />
           </div>
         ))}
-        {activeShell && workspaceShells.length === 0 && (
-          <div className="flex h-full items-center justify-center text-sm text-zinc-600">
-            No terminals open
-          </div>
-        )}
+        {!activeShell &&
+          activeTab !== "scripts" &&
+          activeTab !== "output" &&
+          workspaceShells.length === 0 && (
+            <div className="flex h-full items-center justify-center text-sm text-zinc-600">
+              No terminals open
+            </div>
+          )}
       </div>
     </div>
   );

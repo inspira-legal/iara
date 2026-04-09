@@ -16,7 +16,7 @@ export interface SessionInfo {
   messageCount: number;
 }
 
-export async function listSessions(repoDirs: string[]): Promise<SessionInfo[]> {
+export async function listSessions(repoDirs: Iterable<string>): Promise<SessionInfo[]> {
   const seen = new Set<string>();
   const sessions: SessionInfo[] = [];
 

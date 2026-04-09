@@ -38,7 +38,7 @@ export function registerSessionHandlers(appState: AppState): void {
       }
     }
 
-    return listSessions([...dirs]);
+    return listSessions(dirs);
   });
 
   registerMethod("sessions.rename", async (params) => {
