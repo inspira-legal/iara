@@ -69,10 +69,6 @@ export type WsMethods = {
   };
   "workspaces.update": { params: { workspaceId: string }; result: void };
   "workspaces.delete": { params: { workspaceId: string }; result: void };
-  "workspaces.regenerate": {
-    params: { workspaceId: string };
-    result: { requestId: string };
-  };
   "workspaces.renameBranch": {
     params: { workspaceId: string; repoName: string; newBranch: string };
     result: RepoInfo[];
@@ -183,6 +179,7 @@ export type WsPushEvents = {
   notification: { title: string; body: string; type?: string };
   "clone:progress": CloneProgress;
   "session:changed": { workspaceId: string };
+  "session:updated": { terminalId: string; sessionId: string };
   "env:changed": { workspaceId: string };
   "settings:changed": { key: string; value: string };
   "claude:progress": { requestId: string; progress: ClaudeProgress };

@@ -3,6 +3,7 @@ import * as path from "node:path";
 
 export interface PluginConfig {
   bridgePath: string;
+  nodePath: string;
   socketPath: string;
   guardrailsPath: string;
 }
@@ -40,7 +41,7 @@ export function generatePluginDir(serverDir: string, config: PluginConfig): stri
     ),
   );
 
-  // hooks/hooks.json — PreToolUse guardrails, PostToolUse status, Stop status
+  // hooks/hooks.json — PreToolUse guardrails, PostToolUse status, Stop status, SessionStart sync
   fs.writeFileSync(
     path.join(hooksDir, "hooks.json"),
     JSON.stringify(
@@ -63,7 +64,7 @@ export function generatePluginDir(serverDir: string, config: PluginConfig): stri
               hooks: [
                 {
                   type: "command",
-                  command: `[ -n "$IARA_SERVER_SOCKET" ] && ${config.bridgePath} status.tool-complete || true`,
+                  command: `[ -n "$IARA_SERVER_SOCKET" ] && ELECTRON_RUN_AS_NODE=1 ${config.nodePath} ${config.bridgePath} status.tool-complete || true`,
                 },
               ],
             },
@@ -74,7 +75,18 @@ export function generatePluginDir(serverDir: string, config: PluginConfig): stri
               hooks: [
                 {
                   type: "command",
-                  command: `[ -n "$IARA_SERVER_SOCKET" ] && ${config.bridgePath} status.session-end || true`,
+                  command: `[ -n "$IARA_SERVER_SOCKET" ] && ELECTRON_RUN_AS_NODE=1 ${config.nodePath} ${config.bridgePath} status.session-end || true`,
+                },
+              ],
+            },
+          ],
+          SessionStart: [
+            {
+              matcher: "",
+              hooks: [
+                {
+                  type: "command",
+                  command: `sh \${CLAUDE_PLUGIN_ROOT}/scripts/session-start.sh`,
                 },
               ],
             },
@@ -89,6 +101,19 @@ export function generatePluginDir(serverDir: string, config: PluginConfig): stri
   // scripts/guardrails.sh — copy from source hooks dir
   fs.copyFileSync(config.guardrailsPath, path.join(scriptsDir, "guardrails.sh"));
 
+  // scripts/session-start.sh — notify server of session ID changes (e.g. after /clear)
+  fs.writeFileSync(
+    path.join(scriptsDir, "session-start.sh"),
+    `#!/bin/sh
+# Extract session_id from stdin JSON and notify the server.
+# Fires on every SessionStart: new, resume, clear, compact.
+SESSION_ID=$(ELECTRON_RUN_AS_NODE=1 ${config.nodePath} -e "let d='';process.stdin.on('data',c=>d+=c);process.stdin.on('end',()=>{try{process.stdout.write(JSON.parse(d).session_id||'')}catch{}})")
+[ -z "$SESSION_ID" ] && exit 0
+[ -z "$IARA_TERMINAL_ID" ] && exit 0
+IARA_DESKTOP_SOCKET="${config.socketPath}" ELECTRON_RUN_AS_NODE=1 ${config.nodePath} ${config.bridgePath} session.update-id sessionId="$SESSION_ID" terminalId="$IARA_TERMINAL_ID" || true
+`,
+  );
+
   // commands/notify.md
   fs.writeFileSync(
     path.join(commandsDir, "notify.md"),
@@ -99,7 +124,7 @@ Send a notification via the iara server.
 ## Usage
 
 \`\`\`bash
-IARA_SERVER_SOCKET="${config.socketPath}" ${config.bridgePath} notify message="$ARGUMENTS"
+IARA_DESKTOP_SOCKET="${config.socketPath}" ELECTRON_RUN_AS_NODE=1 ${config.nodePath} ${config.bridgePath} notify message="$ARGUMENTS"
 \`\`\`
 
 Pass \`$ARGUMENTS\` as the notification message.
@@ -116,7 +141,7 @@ Control dev servers managed by iara.
 ## Usage
 
 \`\`\`bash
-IARA_SERVER_SOCKET="${config.socketPath}" ${config.bridgePath} dev.$ARGUMENTS
+IARA_DESKTOP_SOCKET="${config.socketPath}" ELECTRON_RUN_AS_NODE=1 ${config.nodePath} ${config.bridgePath} dev.$ARGUMENTS
 \`\`\`
 
 Available methods:

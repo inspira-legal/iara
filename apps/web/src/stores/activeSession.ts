@@ -25,6 +25,8 @@ export interface ActiveSessionEntry {
   hasData: boolean;
   initialPrompt: string | null;
   title: string | null;
+  /** True when this session was created via --resume (restore on reopen). */
+  isResume: boolean;
 }
 
 interface ActiveSessionState {
@@ -63,6 +65,7 @@ const DEFAULT_ENTRY: ActiveSessionEntry = {
   hasData: false,
   initialPrompt: null,
   title: null,
+  isResume: false,
 };
 
 function persistSessions(): void {
@@ -133,6 +136,7 @@ export const useActiveSessionStore = create<ActiveSessionState & ActiveSessionAc
           status: "connecting",
           initialPrompt: opts?.initialPrompt ?? null,
           title: opts?.title ?? null,
+          isResume: opts?.resumeSessionId !== undefined,
         });
         return { entries: next };
       });
@@ -169,6 +173,7 @@ export const useActiveSessionStore = create<ActiveSessionState & ActiveSessionAc
             hasData: false,
             initialPrompt: existing?.initialPrompt ?? null,
             title: existing?.title ?? null,
+            isResume: existing?.isResume ?? false,
           });
           return { entries: next };
         });
@@ -269,6 +274,31 @@ export const useActiveSessionStore = create<ActiveSessionState & ActiveSessionAc
     },
 
     handleExit: (terminalId, exitCode) => {
+      // Find the entry for this terminal before mutating state
+      let failedResumeEntry: { id: string; workspaceId: string } | null = null;
+      const entries = get().entries;
+      for (const entry of entries.values()) {
+        if (entry.terminalId === terminalId && exitCode !== 0 && entry.isResume) {
+          // Resume failed (session no longer exists) — will retry as fresh session
+          failedResumeEntry = { id: entry.id, workspaceId: entry.workspaceId };
+          break;
+        }
+      }
+
+      // If resume failed, retry as a fresh session
+      if (failedResumeEntry) {
+        const { id, workspaceId } = failedResumeEntry;
+        set((state) => {
+          const next = new Map(state.entries);
+          next.delete(id);
+          return { entries: next };
+        });
+        cleanupSessionShells(id);
+        persistSessions();
+        void get().create(workspaceId);
+        return;
+      }
+
       let removedEntryId: string | null = null;
       let removedWorkspaceId: string | null = null;
       set((state) => {
@@ -347,6 +377,24 @@ transport.subscribe("terminal:data", ({ terminalId }: { terminalId: string }) =>
     return s;
   });
 });
+
+// Update session ID when Claude creates a new session (e.g. after /clear)
+transport.subscribe(
+  "session:updated",
+  ({ terminalId, sessionId }: { terminalId: string; sessionId: string }) => {
+    useActiveSessionStore.setState((s) => {
+      for (const [entryId, entry] of s.entries) {
+        if (entry.terminalId === terminalId && entry.sessionId !== sessionId) {
+          const next = new Map(s.entries);
+          next.set(entryId, { ...entry, sessionId });
+          return { entries: next };
+        }
+      }
+      return s;
+    });
+    persistSessions();
+  },
+);
 
 // Sync session titles when server detects JSONL changes
 transport.subscribe("session:changed", ({ workspaceId }: { workspaceId: string }) => {

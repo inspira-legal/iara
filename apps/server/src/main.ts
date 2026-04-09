@@ -84,10 +84,12 @@ httpServer.on("listening", async () => {
   }
 
   // Generate plugin dir (hooks + slash commands, scoped per-session via --plugin-dir)
-  const bridgePath = path.join(import.meta.dirname, "cli-bridge", "bridge.js");
+  const bridgePath =
+    process.env.IARA_BRIDGE_PATH ?? path.join(import.meta.dirname, "cli-bridge", "bridge.js");
   const guardrailsPath = path.join(import.meta.dirname, "hooks", "guardrails.sh");
   const pluginDir = generatePluginDir(stateDir, {
     bridgePath,
+    nodePath: process.execPath,
     socketPath: socketServer.getSocketPath(),
     guardrailsPath,
   });

@@ -1,14 +1,11 @@
 import { useEffect, useState } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { GitBranch, GitFork, Plus, Sparkles, Trash2 } from "lucide-react";
+import { GitBranch, GitFork, Plus, Trash2 } from "lucide-react";
 import type { RepoInfo } from "@iara/contracts";
 import { useAppStore } from "~/stores/app";
-import { useRegenerate } from "~/hooks/useRegenerate";
 import { transport } from "~/lib/ws-transport";
-import { ClaudeMdView } from "~/components/ClaudeMdView";
 import { RepoCard } from "~/components/RepoCard";
 import { AddRepoDialog } from "~/components/AddRepoDialog";
-import { RegenerationBanner } from "~/components/RegenerationBanner";
 import { ConfirmDialog } from "~/components/ConfirmDialog";
 import { CreateWorkspaceDialog } from "~/components/CreateWorkspaceDialog";
 import { Button } from "~/components/ui/Button";
@@ -45,12 +42,6 @@ function ProjectPage() {
       {/* Content */}
       <div className="flex-1 overflow-y-auto p-6">
         <div className="mx-auto w-full max-w-4xl space-y-8">
-          {/* CLAUDE.md */}
-          <div>
-            <SectionHeader title="CLAUDE.md" />
-            <ClaudeMdView filePath={`${project.slug}/CLAUDE.md`} />
-          </div>
-
           {/* Project management */}
           {mainWorkspace && (
             <ProjectManagement project={project} mainWorkspaceId={mainWorkspace.id} />
@@ -91,17 +82,6 @@ function ProjectManagement({
   } | null>(null);
   const [deletingWorkspace, setDeletingWorkspace] = useState(false);
 
-  const { isRegenerating, showEmptyBanner, messages, error, handleStartRegenerate, cancel } =
-    useRegenerate({
-      entityId: `edit:${project.id}`,
-      filePath: `${project.slug}/CLAUDE.md`,
-      regenerateFn: () =>
-        transport.request("projects.analyze", {
-          projectId: project.id,
-          description: "",
-        }),
-    });
-
   useEffect(() => {
     void refreshRepoInfo(project.id, cacheKey, mainWorkspaceId);
   }, [project.id, cacheKey, mainWorkspaceId, refreshRepoInfo]);
@@ -114,35 +94,6 @@ function ProjectManagement({
 
   return (
     <>
-      {/* Regeneration */}
-      <div>
-        <SectionHeader
-          title="Regenerate CLAUDE.md"
-          action={
-            !isRegenerating && !showEmptyBanner ? (
-              <Button
-                variant="action"
-                size="sm"
-                onClick={() => void handleStartRegenerate()}
-                title="Regenerate CLAUDE.md"
-              >
-                <Sparkles size={12} />
-                Regenerate
-              </Button>
-            ) : undefined
-          }
-        />
-        <RegenerationBanner
-          isRegenerating={isRegenerating}
-          showEmptyBanner={showEmptyBanner}
-          error={error}
-          messages={messages}
-          fileName="CLAUDE.md"
-          onGenerate={() => void handleStartRegenerate()}
-          onCancel={cancel}
-        />
-      </div>
-
       {/* Repos */}
       <div>
         <SectionHeader title="Repos" />
@@ -338,7 +289,7 @@ function WorkspaceRow({
             e.stopPropagation();
             onDelete();
           }}
-          className="shrink-0 rounded p-1 text-zinc-600 opacity-0 transition-opacity hover:bg-zinc-700 hover:text-red-400 group-hover:opacity-100"
+          className="shrink-0 rounded p-1 text-zinc-600 hover:bg-zinc-700 hover:text-red-400"
           aria-label={`Delete ${workspace.name}`}
         >
           <Trash2 size={13} />

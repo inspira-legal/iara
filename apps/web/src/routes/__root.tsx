@@ -7,7 +7,6 @@ import { useNotificationStore } from "~/stores/notifications";
 import { useAppStore } from "~/stores/app";
 // Import stores to register global WS listeners
 import { useActiveSessionStore } from "~/stores/activeSession";
-import "~/stores/terminal";
 import { SplashScreen } from "~/components/SplashScreen";
 
 function RootComponent() {

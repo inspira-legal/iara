@@ -65,8 +65,6 @@ export function BottomPanel({ panelRef }: { panelRef: RefObject<PanelImperativeH
   const removeShell = useShellStore((s) => s.removeShell);
   const getWorkspace = useAppStore((s) => s.getWorkspace);
   const projects = useAppStore((s) => s.projects);
-  const [confirmingClose, setConfirmingClose] = useState<string | null>(null);
-
   // Filter shells by active session
   const workspaceShells = useMemo(
     () => (sessionEntryId ? shells.filter((s) => s.sessionEntryId === sessionEntryId) : []),
@@ -101,20 +99,10 @@ export function BottomPanel({ panelRef }: { panelRef: RefObject<PanelImperativeH
   function handleCloseShell(shellId: string) {
     const shell = shells.find((s) => s.id === shellId);
     if (!shell) return;
-    if (shell.status === "active" || shell.status === "connecting") {
-      setConfirmingClose(shellId);
-      return;
-    }
-    doRemoveShell(shellId);
-  }
-
-  function doRemoveShell(shellId: string) {
-    const shell = shells.find((s) => s.id === shellId);
-    if (shell?.terminalId) {
+    if (shell.terminalId) {
       destroyXTermInstance(`shell:${shell.terminalId}`);
     }
     removeShell(shellId);
-    setConfirmingClose(null);
     // Switch to another tab if we just closed the active one
     if (activeTab === shellId) {
       const remaining = workspaceShells.filter((s) => s.id !== shellId);
@@ -307,33 +295,6 @@ export function BottomPanel({ panelRef }: { panelRef: RefObject<PanelImperativeH
           </div>
         )}
       </div>
-
-      {/* Close confirmation dialog */}
-      {confirmingClose && (
-        <div className="absolute inset-0 z-50 flex items-center justify-center bg-zinc-950/70">
-          <div className="flex flex-col gap-3 rounded-lg bg-zinc-800 p-4 shadow-xl">
-            <p className="text-sm text-zinc-300">
-              Terminal process is still running. Close anyway?
-            </p>
-            <div className="flex justify-end gap-2">
-              <button
-                type="button"
-                onClick={() => setConfirmingClose(null)}
-                className="rounded px-3 py-1.5 text-xs text-zinc-400 hover:bg-zinc-700"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={() => doRemoveShell(confirmingClose)}
-                className="rounded bg-red-600 px-3 py-1.5 text-xs text-white hover:bg-red-500"
-              >
-                Close
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

@@ -85,8 +85,8 @@ export class TerminalManager {
       const launchConfig: LaunchConfig = {
         workspaceDir: config.workspaceDir,
         repoDirs: config.repoDirs,
-        resumeSessionId: config.resumeSessionId,
         sessionId,
+        resumeSessionId: config.resumeSessionId,
         appendSystemPrompt: systemPrompt,
         pluginDir: config.pluginDir || process.env.IARA_PLUGIN_DIR || undefined,
         env: config.env,
@@ -99,7 +99,7 @@ export class TerminalManager {
 
       command = resolved.command;
       args = resolved.args;
-      env.IARA_SESSION_ID = sessionId;
+      env.IARA_TERMINAL_ID = terminalId;
       console.log("[terminal] spawn claude", { cwd: config.workspaceDir, command, args });
     }
 

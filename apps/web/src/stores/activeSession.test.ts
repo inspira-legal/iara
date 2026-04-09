@@ -57,6 +57,7 @@ const DEFAULT_ENTRY: ActiveSessionEntry = {
   hasData: false,
   initialPrompt: null,
   title: null,
+  isResume: false,
 };
 
 const INITIAL_STATE = {
@@ -96,6 +97,7 @@ describe("useActiveSessionStore", () => {
         hasData: false,
         initialPrompt: null,
         title: null,
+        isResume: false,
       };
       const entries = new Map<string, ActiveSessionEntry>();
       entries.set("entry-1", entry);

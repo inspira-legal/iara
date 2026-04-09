@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { FolderOpen, GitBranch, Plus, X } from "lucide-react";
+import { FolderOpen, GitBranch, Plus, Settings, X } from "lucide-react";
 import { useNavigate, useRouterState } from "@tanstack/react-router";
 import {
   DndContext,
@@ -123,13 +123,21 @@ export function Sidebar({
   return (
     <aside className="flex h-full flex-col bg-zinc-900">
       {/* Top bar */}
-      <div className="flex h-12 shrink-0 items-center border-b border-zinc-800 px-4">
+      <div className="flex h-12 shrink-0 items-center justify-between border-b border-zinc-800 px-4">
         <button
           type="button"
           onClick={() => void navigate({ to: "/" })}
           className="cursor-pointer text-sm font-bold tracking-wide text-zinc-100 hover:text-zinc-300"
         >
           iara
+        </button>
+        <button
+          type="button"
+          onClick={() => void navigate({ to: "/settings" } as any)}
+          className="flex items-center gap-1 rounded px-1.5 py-1 text-xs text-zinc-500 hover:bg-zinc-800 hover:text-zinc-300"
+        >
+          <Settings size={13} />
+          Settings
         </button>
       </div>
 

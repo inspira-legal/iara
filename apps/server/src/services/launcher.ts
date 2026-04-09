@@ -5,7 +5,7 @@ import { loadPrompt } from "../prompts/index.js";
 export interface LaunchConfig {
   workspaceDir: string;
   repoDirs: string[];
-  sessionId?: string | undefined;
+  sessionId: string;
   resumeSessionId?: string | undefined;
   appendSystemPrompt?: string | undefined;
   workspaceContext?: WorkspaceContext | undefined;
@@ -38,7 +38,7 @@ export function buildClaudeArgs(config: LaunchConfig): string[] {
   // Session handling
   if (config.resumeSessionId) {
     args.push("--resume", config.resumeSessionId);
-  } else if (config.sessionId) {
+  } else {
     args.push("--session-id", config.sessionId);
   }
 

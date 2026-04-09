@@ -5,7 +5,7 @@ import {
   AlertCircle,
   ArrowUp,
   ArrowDown,
-  X,
+  Trash2,
   ChevronDown,
 } from "lucide-react";
 import type { RepoInfo } from "@iara/contracts";
@@ -229,7 +229,7 @@ export function RepoCard({
           className="ml-auto shrink-0 rounded-md p-1 text-zinc-600 hover:bg-zinc-700 hover:text-red-400"
           title="Remove repo"
         >
-          <X size={14} />
+          <Trash2 size={14} />
         </button>
       )}
     </div>
