@@ -117,6 +117,32 @@ describe("SessionWatcher", () => {
 
       watcher.stop();
     });
+
+    it("watches repo subdirectories discovered by discoverRepos", async () => {
+      const projects = [
+        {
+          slug: "proj1",
+          workspaces: [{ id: "proj1/default", slug: "default" }],
+        },
+      ];
+
+      const wsDir = path.join(tmpHome, "projects", "proj1", "default");
+      const repoDir = path.join(wsDir, "my-repo");
+      fs.mkdirSync(repoDir, { recursive: true });
+
+      const pushFn = vi.fn();
+      const appState = createMockAppState(projects);
+      appState.discoverRepos.mockReturnValue(["my-repo"]);
+      const watcher = new SessionWatcher(pushFn, appState);
+
+      await watcher.refresh();
+
+      const w = watcher as any;
+      // Should have more hashes due to repo subdirectory
+      expect(w.hashToWorkspaceIds.size).toBeGreaterThanOrEqual(2);
+
+      watcher.stop();
+    });
   });
 
   describe("push events", () => {
@@ -357,6 +383,38 @@ describe("SessionWatcher", () => {
       const w = watcher as any;
       expect(w.subscriptions.size).toBe(0);
       expect(w.debounceTimers.size).toBe(0);
+    });
+
+    it("clears pending debounce timers on stop", async () => {
+      const projects = [
+        {
+          slug: "proj1",
+          workspaces: [{ id: "proj1/default", slug: "default" }],
+        },
+      ];
+
+      const wsDir = path.join(tmpHome, "projects", "proj1", "default");
+      fs.mkdirSync(wsDir, { recursive: true });
+
+      const pushFn = vi.fn();
+      const appState = createMockAppState(projects);
+      const watcher = new SessionWatcher(pushFn, appState);
+      await watcher.refresh();
+
+      const w = watcher as any;
+      const hashes = Array.from(w.hashToWorkspaceIds.keys()) as string[];
+      if (hashes.length > 0) {
+        // Start a debounce timer but stop before it fires
+        w.debouncedNotify(hashes[0]);
+        expect(w.debounceTimers.size).toBe(1);
+
+        watcher.stop();
+
+        expect(w.debounceTimers.size).toBe(0);
+        // Timer should not fire after stop
+        vi.advanceTimersByTime(600);
+        expect(pushFn).not.toHaveBeenCalled();
+      }
     });
 
     it("is safe to call without starting", () => {

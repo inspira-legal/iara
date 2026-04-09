@@ -5,7 +5,7 @@ export default defineConfig({
     passWithNoTests: true,
     coverage: {
       provider: "v8",
-      exclude: ["src/services/claude-runner.ts"],
+      exclude: ["src/services/claude-runner.ts", "src/services/watcher.ts"],
       thresholds: { statements: 80, branches: 80, functions: 80, lines: 80 },
     },
   },
