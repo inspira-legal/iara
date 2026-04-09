@@ -3,7 +3,8 @@
   "ignoreWorkspaces": ["scripts"],
   "workspaces": {
     "apps/web": {
-      "entry": ["src/**/*.test.{ts,tsx}", "src/routes/**/*.{ts,tsx}"]
+      "entry": ["src/**/*.test.{ts,tsx}", "src/routes/**/*.{ts,tsx}"],
+      "ignore": ["src/routeTree.gen.ts"]
     },
     "packages/orchestrator": {
       "includeEntryExports": true

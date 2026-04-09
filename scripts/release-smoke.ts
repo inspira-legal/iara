@@ -51,7 +51,7 @@ const platforms: [Platform, Arch[]][] = [
 for (const [platform, arch] of platforms) {
   const config = createBuildConfig(platform, arch);
   assert(config.appId === "com.iara.desktop", `${platform} config missing appId`);
-  assert(config.productName === "iara", `${platform} config missing productName`);
+  assert(config.productName === "Iara", `${platform} config missing productName`);
   assert(config[platform] != null, `${platform} config missing platform key`);
   console.log(`Build config OK: ${platform} ${arch.join(",")}`);
 }
