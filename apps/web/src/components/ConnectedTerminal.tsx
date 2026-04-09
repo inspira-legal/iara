@@ -12,6 +12,8 @@ interface ConnectedTerminalProps {
   onExit?: ((exitCode: number) => void) | undefined;
   /** Called when the terminal title changes (OSC 0/2). */
   onTitleChange?: ((title: string) => void) | undefined;
+  /** Block Ctrl+Z (SIGTSTP) from reaching the terminal. */
+  blockSuspend?: boolean | undefined;
   className?: string | undefined;
   children?: ReactNode | undefined;
 }
@@ -30,6 +32,7 @@ export function ConnectedTerminal({
   instancePrefix = "term",
   onExit,
   onTitleChange,
+  blockSuspend,
   className,
   children,
 }: ConnectedTerminalProps) {
@@ -90,6 +93,7 @@ export function ConnectedTerminal({
     <XTerm
       instanceId={instanceId}
       terminalId={terminalId}
+      blockSuspend={blockSuspend}
       onData={handleData}
       onResize={handleResize}
       onCopy={() => toast("Copied to clipboard", "success")}

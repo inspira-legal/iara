@@ -79,7 +79,12 @@ function ActiveSessionView() {
       )}
 
       <div className="relative flex flex-1 flex-col overflow-hidden">
-        <ConnectedTerminal terminalId={terminalId} instancePrefix="claude" className="p-3" />
+        <ConnectedTerminal
+          terminalId={terminalId}
+          instancePrefix="claude"
+          blockSuspend
+          className="p-3"
+        />
         {status === "exited" && isClaudeUnavailable && <ClaudeUnavailableOverlay />}
         {status === "exited" && !isClaudeUnavailable && (
           <div className="absolute inset-0 flex items-center justify-center bg-zinc-950/80">

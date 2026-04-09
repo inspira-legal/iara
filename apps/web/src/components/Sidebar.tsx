@@ -19,10 +19,8 @@ import {
 import { restrictToVerticalAxis } from "@dnd-kit/modifiers";
 import { CSS } from "@dnd-kit/utilities";
 import { useAppStore } from "~/stores/app";
-import { transport } from "~/lib/ws-transport";
 import { useActiveSessionStore, type ActiveSessionEntry } from "~/stores/activeSession";
 import type { CommandPaletteMode } from "~/components/CommandPalette";
-import { CreateProjectDialog } from "~/components/CreateProjectDialog";
 import { CreateWorkspaceDialog } from "~/components/CreateWorkspaceDialog";
 
 type SidebarTab = "chats" | "projects";
@@ -43,10 +41,12 @@ export function Sidebar({
   panelRef,
   panelCollapsed,
   onOpenPalette,
+  onCreateProject,
 }: {
   panelRef: React.RefObject<import("react-resizable-panels").PanelImperativeHandle | null>;
   panelCollapsed: boolean;
   onOpenPalette: (mode: CommandPaletteMode) => void;
+  onCreateProject: () => void;
 }) {
   const navigate = useNavigate();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
@@ -55,7 +55,6 @@ export function Sidebar({
   const projects = useAppStore((s) => s.projects);
   const isMac = useAppStore((s) => s.capabilities.platform === "darwin");
   const [activeTab, setActiveTab] = useState<SidebarTab>("chats");
-  const [showCreateProject, setShowCreateProject] = useState(false);
 
   // Auto-switch to chats tab when navigating to a session
   useEffect(() => {
@@ -193,7 +192,7 @@ export function Sidebar({
           <div className="flex flex-col gap-0.5">
             <button
               type="button"
-              onClick={() => setShowCreateProject(true)}
+              onClick={onCreateProject}
               className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-sm text-zinc-300 hover:bg-zinc-800"
             >
               <Plus size={14} className="shrink-0" />
@@ -214,8 +213,6 @@ export function Sidebar({
           for shortcuts
         </span>
       </div>
-
-      <CreateProjectDialog open={showCreateProject} onClose={() => setShowCreateProject(false)} />
     </aside>
   );
 }
@@ -252,10 +249,6 @@ function TabButton({
 // ProjectTree
 // ---------------------------------------------------------------------------
 
-function openFolder(workspaceId: string) {
-  void transport.request("files.openInExplorer", { workspaceId });
-}
-
 function ProjectTree({
   project,
   pathname,
@@ -273,62 +266,39 @@ function ProjectTree({
   const isOpen =
     isProjectPage || project.workspaces.some((ws) => pathname === `/workspace/${ws.id}`);
   const [showCreateWs, setShowCreateWs] = useState(false);
-  const mainWsId = `${project.slug}/main`;
 
   return (
     <div>
-      <div
-        className={`group flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-sm ${
+      <button
+        type="button"
+        onClick={() => void navigate({ to: `/project/${project.id}` } as any)}
+        className={`flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-sm ${
           isProjectPage
             ? "bg-zinc-800 text-zinc-100"
             : "text-zinc-400 hover:bg-zinc-800/60 hover:text-zinc-200"
         }`}
       >
-        <button
-          type="button"
-          onClick={() => void navigate({ to: `/project/${project.id}` } as any)}
-          className="flex min-w-0 flex-1 items-center gap-2"
-        >
-          <FolderOpen size={13} className="shrink-0 text-zinc-600" />
-          <span className="truncate">{project.name}</span>
-        </button>
-        <button
-          type="button"
-          onClick={() => openFolder(mainWsId)}
-          className="flex shrink-0 items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-medium text-zinc-500 opacity-0 hover:bg-zinc-700 hover:text-zinc-300 group-hover:opacity-100"
-        >
-          Open folder
-        </button>
-      </div>
+        <FolderOpen size={13} className="shrink-0 text-zinc-600" />
+        <span className="truncate">{project.name}</span>
+      </button>
       {isOpen && (
         <div className="ml-3 flex flex-col gap-0.5 border-l border-zinc-800 pl-2 pt-0.5">
           {project.workspaces.map((ws) => {
             const isWsActive = pathname === `/workspace/${ws.id}`;
             return (
-              <div
+              <button
                 key={ws.id}
-                className={`group flex w-full items-center gap-2 rounded px-2 py-1 text-left text-sm ${
+                type="button"
+                onClick={() => void navigate({ to: `/workspace/${ws.id}` } as any)}
+                className={`flex w-full items-center gap-2 rounded px-2 py-1 text-left text-sm ${
                   isWsActive
                     ? "bg-zinc-800 text-zinc-100"
                     : "text-zinc-400 hover:bg-zinc-800/60 hover:text-zinc-200"
                 }`}
               >
-                <button
-                  type="button"
-                  onClick={() => void navigate({ to: `/workspace/${ws.id}` } as any)}
-                  className="flex min-w-0 flex-1 items-center gap-2"
-                >
-                  <GitBranch size={12} className="shrink-0 text-zinc-600" />
-                  <span className="truncate">{ws.name}</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => openFolder(ws.id)}
-                  className="flex shrink-0 items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-medium text-zinc-500 opacity-0 hover:bg-zinc-700 hover:text-zinc-300 group-hover:opacity-100"
-                >
-                  Open folder
-                </button>
-              </div>
+                <GitBranch size={12} className="shrink-0 text-zinc-600" />
+                <span className="truncate">{ws.name}</span>
+              </button>
             );
           })}
           <button
@@ -509,10 +479,10 @@ function SortableSessionItem({
             void navigate({ to: "/" });
           }
         }}
-        className="mt-0.5 shrink-0 rounded p-0.5 text-zinc-600 opacity-0 hover:bg-zinc-700 hover:text-zinc-400 group-hover:opacity-100"
+        className="shrink-0 rounded p-1 text-zinc-600 opacity-0 hover:bg-zinc-700 hover:text-zinc-400 group-hover:opacity-100"
         aria-label="Close session"
       >
-        <X size={12} />
+        <X size={14} />
       </button>
     </div>
   );

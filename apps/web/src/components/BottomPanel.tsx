@@ -28,7 +28,7 @@ import { StatusButton } from "~/components/ui/StatusButton";
 import { useScriptsStore, useIsDiscovering, useDiscoveryError } from "~/stores/scripts";
 import { useShellStore, type ShellEntry } from "~/stores/shell";
 import { useAppStore } from "~/stores/app";
-import { useActiveWorkspace } from "~/lib/workspace";
+import { useActiveWorkspace, useActiveSessionEntryId } from "~/lib/workspace";
 import { transport } from "~/lib/ws-transport";
 import { XTerm, getOrCreateXTermInstance } from "~/components/XTerm";
 import { ConnectedTerminal, destroyXTermInstance } from "~/components/ConnectedTerminal";
@@ -56,6 +56,7 @@ export function BottomPanel({ panelRef }: { panelRef: RefObject<PanelImperativeH
   const setActiveTab = useScriptsStore((s) => s.setActiveTab);
   const discovering = useIsDiscovering();
   const workspace = useActiveWorkspace();
+  const sessionEntryId = useActiveSessionEntryId();
   const projectId = workspace?.split("/")[0] ?? null;
 
   // Shell state
@@ -66,10 +67,10 @@ export function BottomPanel({ panelRef }: { panelRef: RefObject<PanelImperativeH
   const projects = useAppStore((s) => s.projects);
   const [confirmingClose, setConfirmingClose] = useState<string | null>(null);
 
-  // Filter shells by active workspace
+  // Filter shells by active session
   const workspaceShells = useMemo(
-    () => (workspace ? shells.filter((s) => s.workspaceId === workspace) : []),
-    [shells, workspace],
+    () => (sessionEntryId ? shells.filter((s) => s.sessionEntryId === sessionEntryId) : []),
+    [shells, sessionEntryId],
   );
 
   // Resolve whether the active tab is a shell tab
@@ -89,8 +90,8 @@ export function BottomPanel({ panelRef }: { panelRef: RefObject<PanelImperativeH
   }
 
   function handleAddShell() {
-    if (!workspace) return;
-    const id = addShell(workspace);
+    if (!sessionEntryId || !workspace) return;
+    const id = addShell(sessionEntryId, workspace);
     setActiveTab(id);
     if (collapsed) {
       panelRef.current?.expand();
@@ -274,7 +275,7 @@ export function BottomPanel({ panelRef }: { panelRef: RefObject<PanelImperativeH
           <button
             type="button"
             onClick={handleAddShell}
-            disabled={!workspace}
+            disabled={!sessionEntryId || !workspace}
             title="New terminal"
             className="flex items-center gap-1 rounded px-1.5 py-1 text-zinc-600 hover:bg-zinc-800/50 hover:text-zinc-400 disabled:opacity-40"
           >
@@ -1010,7 +1011,7 @@ function ShellTerminal({
         instancePrefix="shell"
         onExit={handleExit}
         onTitleChange={handleTitleChange}
-        className="p-1"
+        className="p-3"
       />
       {shell.status === "connecting" && (
         <div

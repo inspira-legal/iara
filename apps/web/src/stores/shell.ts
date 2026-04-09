@@ -5,6 +5,7 @@ export type ShellStatus = "idle" | "connecting" | "active" | "exited";
 
 export interface ShellEntry {
   id: string;
+  sessionEntryId: string;
   workspaceId: string;
   terminalId: string | null;
   status: ShellStatus;
@@ -18,9 +19,9 @@ interface ShellState {
 }
 
 interface ShellActions {
-  addShell(workspaceId: string): string;
+  addShell(sessionEntryId: string, workspaceId: string): string;
   removeShell(id: string): void;
-  destroyByWorkspaceId(workspaceId: string): void;
+  destroyBySessionEntryId(sessionEntryId: string): void;
   updateShell(id: string, updates: Partial<ShellEntry>): void;
   setActiveId(id: string | null): void;
 }
@@ -29,12 +30,20 @@ export const useShellStore = create<ShellState & ShellActions>((set, get) => ({
   shells: [],
   activeId: null,
 
-  addShell: (workspaceId) => {
+  addShell: (sessionEntryId, workspaceId) => {
     const id = crypto.randomUUID();
     set((s) => ({
       shells: [
         ...s.shells,
-        { id, workspaceId, terminalId: null, status: "idle", exitCode: null, title: null },
+        {
+          id,
+          sessionEntryId,
+          workspaceId,
+          terminalId: null,
+          status: "idle",
+          exitCode: null,
+          title: null,
+        },
       ],
       activeId: id,
     }));
@@ -60,9 +69,9 @@ export const useShellStore = create<ShellState & ShellActions>((set, get) => ({
     set({ shells: next, activeId: nextActiveId });
   },
 
-  destroyByWorkspaceId: (workspaceId) => {
+  destroyBySessionEntryId: (sessionEntryId) => {
     const { shells, activeId } = get();
-    const matched = shells.filter((s) => s.workspaceId === workspaceId);
+    const matched = shells.filter((s) => s.sessionEntryId === sessionEntryId);
     if (matched.length === 0) return;
 
     for (const shell of matched) {
@@ -71,7 +80,7 @@ export const useShellStore = create<ShellState & ShellActions>((set, get) => ({
       }
     }
 
-    const next = shells.filter((s) => s.workspaceId !== workspaceId);
+    const next = shells.filter((s) => s.sessionEntryId !== sessionEntryId);
     const nextActiveId = matched.some((s) => s.id === activeId) ? null : activeId;
     set({ shells: next, activeId: nextActiveId });
   },

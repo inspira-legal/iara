@@ -59,15 +59,6 @@ export class TerminalManager {
   create(config: TerminalCreateConfig): { terminalId: string; sessionId: string } {
     const mode = config.mode ?? "claude";
 
-    // Reuse existing terminal for claude mode (one per workspace).
-    // Shell mode always creates a new instance (multiple shells per workspace).
-    if (mode === "claude") {
-      const existing = this.getByWorkspaceId(config.workspaceId, "claude");
-      if (existing) {
-        return { terminalId: existing.id, sessionId: existing.sessionId };
-      }
-    }
-
     const terminalId = crypto.randomUUID();
     const sessionId = config.resumeSessionId ?? crypto.randomUUID();
 

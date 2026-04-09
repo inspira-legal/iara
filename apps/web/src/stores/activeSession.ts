@@ -85,13 +85,17 @@ function invalidateSessions(workspaceId: string): void {
   void useAppStore.getState().refreshSessions(workspaceId);
 }
 
-/** Stop all scripts and destroy all shell terminals when no active sessions remain for a workspace. */
+/** Destroy shell terminals for a specific session entry. */
+function cleanupSessionShells(sessionEntryId: string): void {
+  useShellStore.getState().destroyBySessionEntryId(sessionEntryId);
+}
+
+/** Stop all scripts when no active sessions remain for a workspace. */
 function cleanupWorkspaceIfEmpty(workspaceId: string): void {
   const entries = useActiveSessionStore.getState().entries;
   const hasRemaining = [...entries.values()].some((e) => e.workspaceId === workspaceId);
   if (hasRemaining) return;
   void useScriptsStore.getState().stopAll(workspaceId);
-  useShellStore.getState().destroyByWorkspaceId(workspaceId);
 }
 
 export const useActiveSessionStore = create<ActiveSessionState & ActiveSessionActions>(
@@ -240,6 +244,7 @@ export const useActiveSessionStore = create<ActiveSessionState & ActiveSessionAc
         next.delete(id);
         return { entries: next };
       });
+      cleanupSessionShells(id);
       persistSessions();
       if (workspaceId) {
         cleanupWorkspaceIfEmpty(workspaceId);
@@ -264,6 +269,7 @@ export const useActiveSessionStore = create<ActiveSessionState & ActiveSessionAc
     },
 
     handleExit: (terminalId, exitCode) => {
+      let removedEntryId: string | null = null;
       let removedWorkspaceId: string | null = null;
       set((state) => {
         const next = new Map(state.entries);
@@ -272,6 +278,7 @@ export const useActiveSessionStore = create<ActiveSessionState & ActiveSessionAc
             if (exitCode === 0) {
               next.delete(entryId);
               invalidateSessions(entry.workspaceId);
+              removedEntryId = entryId;
               removedWorkspaceId = entry.workspaceId;
             } else {
               next.set(entryId, { ...entry, status: "exited", exitCode, terminalId: null });
@@ -282,6 +289,9 @@ export const useActiveSessionStore = create<ActiveSessionState & ActiveSessionAc
         return { entries: next };
       });
       persistSessions();
+      if (removedEntryId) {
+        cleanupSessionShells(removedEntryId);
+      }
       if (removedWorkspaceId) {
         cleanupWorkspaceIfEmpty(removedWorkspaceId);
       }

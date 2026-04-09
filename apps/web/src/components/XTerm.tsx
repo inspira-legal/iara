@@ -58,6 +58,7 @@ function createXTermInstance(opts?: {
   /** If set, file link Ctrl+Click resolves relative paths via terminal.getCwd */
   terminalId?: string;
   readOnly?: boolean;
+  blockSuspend?: boolean;
 }): XTermInstance {
   const term = new Terminal({
     fontFamily: "'JetBrainsMono NF', monospace",
@@ -264,7 +265,11 @@ function createXTermInstance(opts?: {
     : (data: string) => {
         instance.onInput?.(data);
       };
-  const keybindingHandlers = setupTerminalKeybindings(term, write);
+  const keybindingHandlers = setupTerminalKeybindings(
+    term,
+    write,
+    opts?.blockSuspend ? { blockSuspend: true } : undefined,
+  );
   keybindingHandlers.onModChange = setModHeld;
   instance.keybindingHandlers = keybindingHandlers;
 
@@ -284,6 +289,8 @@ interface XTermProps {
   readOnly?: boolean | undefined;
   /** Terminal ID for resolving relative file paths via getCwd. */
   terminalId?: string | undefined;
+  /** Block Ctrl+Z (SIGTSTP) from reaching the terminal. */
+  blockSuspend?: boolean | undefined;
   className?: string | undefined;
 }
 
@@ -307,7 +314,7 @@ export function destroyXTermInstance(id: string): void {
 
 export function getOrCreateXTermInstance(
   id: string,
-  opts?: { readOnly?: boolean; terminalId?: string },
+  opts?: { readOnly?: boolean; terminalId?: string; blockSuspend?: boolean },
 ): XTermInstance {
   const existing = instances.get(id);
   if (existing) return existing;
@@ -336,6 +343,7 @@ export function XTerm({
   onResize,
   readOnly,
   terminalId,
+  blockSuspend,
   className,
 }: XTermProps) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -350,9 +358,10 @@ export function XTerm({
     const container = containerRef.current;
     if (!container) return;
 
-    const opts: { readOnly?: boolean; terminalId?: string } = {};
+    const opts: { readOnly?: boolean; terminalId?: string; blockSuspend?: boolean } = {};
     if (readOnly) opts.readOnly = readOnly;
     if (terminalId) opts.terminalId = terminalId;
+    if (blockSuspend) opts.blockSuspend = blockSuspend;
     const instance = getOrCreateXTermInstance(instanceId, opts);
     const { term, fitAddon, keybindingHandlers } = instance;
 
@@ -422,7 +431,7 @@ export function XTerm({
         container.removeChild(term.element);
       }
     };
-  }, [instanceId, readOnly, terminalId]);
+  }, [instanceId, readOnly, terminalId, blockSuspend]);
 
   useEffect(() => attach(), [attach]);
 

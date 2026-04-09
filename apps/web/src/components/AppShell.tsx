@@ -1,5 +1,5 @@
 import { useMemo, useCallback, useState, type ReactNode } from "react";
-import { useNavigate } from "@tanstack/react-router";
+import { useNavigate, useRouterState } from "@tanstack/react-router";
 import { Group, Panel, Separator, useDefaultLayout, usePanelRef } from "react-resizable-panels";
 import { Sidebar } from "./Sidebar";
 import { MainPanel } from "./MainPanel";
@@ -12,6 +12,7 @@ import { isElectron } from "~/env";
 
 export function AppShell({ children }: { children: ReactNode }) {
   const navigate = useNavigate();
+  const pathname = useRouterState({ select: (s) => s.location.pathname });
   const [showShortcuts, setShowShortcuts] = useState(false);
   const [showCreateProject, setShowCreateProject] = useState(false);
   const [paletteMode, setPaletteMode] = useState<
@@ -57,11 +58,20 @@ export function AppShell({ children }: { children: ReactNode }) {
       "mod+7": () => selectByIndex(7),
       "mod+8": () => selectByIndex(8),
       "mod+9": () => selectByIndex(9),
+      "mod+w": () => {
+        const sessionMatch = pathname.match(/^\/session\/(.+)$/);
+        if (sessionMatch) {
+          void useActiveSessionStore.getState().destroy(sessionMatch[1]!);
+        }
+        if (pathname !== "/") {
+          void navigate({ to: "/" });
+        }
+      },
       "mod+k": () => setPaletteMode((v) => (v ? null : "workspaces")),
       "mod+n": () => setPaletteMode((v) => (v ? null : "new-session")),
       f1: () => setShowShortcuts((v) => !v),
     }),
-    [selectByIndex],
+    [selectByIndex, pathname, navigate],
   );
 
   useKeyboardShortcuts(shortcuts);
@@ -99,6 +109,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             panelRef={sidebarPanelRef}
             panelCollapsed={sidebarCollapsed}
             onOpenPalette={setPaletteMode}
+            onCreateProject={() => setShowCreateProject(true)}
           />
         </Panel>
         <Separator className="relative z-10 -mx-1.5 w-3 bg-transparent outline-none after:absolute after:inset-y-0 after:left-1/2 after:w-1 after:-translate-x-1/2 after:bg-transparent after:transition-colors hover:after:bg-blue-500/50 data-[resize-handle-active]:after:bg-blue-500/70" />

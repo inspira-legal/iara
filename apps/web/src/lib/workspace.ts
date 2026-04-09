@@ -6,6 +6,15 @@ const SESSION_PATH_RE = /\/session\/([^/]+)/;
 const WORKSPACE_PATH_RE = /\/workspace\/(.+)$/;
 
 /**
+ * Returns the active session entry ID from the URL, or null if not on a session page.
+ */
+export function useActiveSessionEntryId(): string | null {
+  const pathname = useRouterState({ select: (s) => s.location.pathname });
+  const match = SESSION_PATH_RE.exec(pathname);
+  return match?.[1] ?? null;
+}
+
+/**
  * Returns the active workspace ID by checking:
  * 1. If on `/session/:id`, the workspace tied to that session entry
  * 2. If on `/workspace/:id`, the workspace ID from the URL
