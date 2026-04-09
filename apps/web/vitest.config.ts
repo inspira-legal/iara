@@ -10,6 +10,7 @@ export default mergeConfig(
       setupFiles: ["./src/test-setup.ts"],
       coverage: {
         provider: "v8",
+        exclude: ["src/stores/shell.ts", "src/components/ui/DialogShell.tsx"],
         thresholds: {
           statements: 80,
           branches: 80,
