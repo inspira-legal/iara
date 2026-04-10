@@ -6,6 +6,10 @@ inputs:
     description: "Run full build after install (also installs native module tooling on macOS/Windows)"
     required: false
     default: "false"
+  generate-routes:
+    description: "Generate TanStack Router route tree (fast, no full build)"
+    required: false
+    default: "false"
 
 runs:
   using: composite
@@ -34,6 +38,11 @@ runs:
 
     - shell: bash
       run: bun install --frozen-lockfile
+
+    - name: Generate routes
+      if: inputs.build != 'true' && inputs.generate-routes == 'true'
+      shell: bash
+      run: cd apps/web && bunx @tanstack/router-cli generate
 
     - name: Generate routes and build
       if: inputs.build == 'true'
