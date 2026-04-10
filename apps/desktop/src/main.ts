@@ -369,9 +369,35 @@ function createWindow(): BrowserWindow {
   browserPanel.attach(win);
   win.on("resize", () => browserPanel.updateBounds());
 
-  // Remove default menu to prevent Electron accelerators (Ctrl+C, Ctrl+V, Ctrl+A, etc.)
-  // from intercepting terminal control keys. DevTools is still accessible via F12 / Ctrl+Shift+I.
-  Menu.setApplicationMenu(null);
+  // Minimal app menu: keeps macOS clipboard shortcuts (Cmd+C/V/X/A) working in text
+  // inputs while removing most Electron defaults that steal terminal control keys.
+  // DevTools is still accessible via F12 / Ctrl+Shift+I.
+  const editMenu: Electron.MenuItemConstructorOptions = {
+    label: "Edit",
+    submenu: [
+      { role: "undo" },
+      { role: "redo" },
+      { type: "separator" },
+      { role: "cut" },
+      { role: "copy" },
+      { role: "paste" },
+      { role: "selectAll" },
+    ],
+  };
+
+  if (isDevelopment) {
+    Menu.setApplicationMenu(
+      Menu.buildFromTemplate([
+        editMenu,
+        {
+          label: "View",
+          submenu: [{ role: "toggleDevTools" }, { role: "reload" }, { role: "forceReload" }],
+        },
+      ]),
+    );
+  } else {
+    Menu.setApplicationMenu(Menu.buildFromTemplate([editMenu]));
+  }
 
   // Keyboard shortcuts handled at the Electron level (before Chromium processes them).
   // Chromium steals Ctrl+Shift+C/I/J even with devTools:false — we must intercept and

@@ -12,16 +12,22 @@ export interface KeybindingHandlers {
 
 type Action = (term: Terminal, write: (data: string) => void, handlers: KeybindingHandlers) => void;
 
+type ModKey = "ctrl" | "meta";
+
 interface Keybinding {
-  ctrl: boolean;
-  shift: boolean;
+  mod?: ModKey | ModKey[];
+  shift?: boolean;
   key: string; // lowercase key value
   action: Action;
 }
 
 const KEYBINDINGS: Keybinding[] = [
+  // Copy/Paste/SelectAll — accepts both Ctrl and Meta so the same binding
+  // covers Ctrl+Shift on Linux/Win and Cmd+Shift on macOS.
+  // Cmd+C/V/A (without shift) are handled by the Electron Edit menu roles
+  // which dispatch native events to ClipboardAddon — no bindings needed here.
   {
-    ctrl: true,
+    mod: ["ctrl", "meta"],
     shift: true,
     key: "c",
     action: (term, _write, handlers) => {
@@ -33,31 +39,16 @@ const KEYBINDINGS: Keybinding[] = [
     },
   },
   {
-    ctrl: true,
+    mod: ["ctrl", "meta"],
     shift: true,
     key: "v",
     // No-op: prevent xterm from processing as a key sequence, but let the
     // browser's native paste event fire so xterm's built-in paste handler works.
     action: () => {},
   },
-  {
-    ctrl: true,
-    shift: true,
-    key: "a",
-    action: (term) => term.selectAll(),
-  },
-  {
-    ctrl: true,
-    shift: false,
-    key: "backspace",
-    action: (_term, write) => write("\x1b\x7f"),
-  },
-  {
-    ctrl: false,
-    shift: true,
-    key: "enter",
-    action: (_term, write) => write("\n"),
-  },
+  { mod: ["ctrl", "meta"], shift: true, key: "a", action: (term) => term.selectAll() },
+  { mod: "ctrl", key: "backspace", action: (_term, write) => write("\x1b\x7f") },
+  { shift: true, key: "enter", action: (_term, write) => write("\n") },
 ];
 
 // ---------------------------------------------------------------------------
@@ -84,11 +75,21 @@ function isAppShortcut(event: KeyboardEvent): boolean {
 // Matching
 // ---------------------------------------------------------------------------
 
-function findBinding(event: KeyboardEvent): Keybinding | undefined {
-  const isCtrl = event.ctrlKey || event.metaKey;
-  const key = event.key.toLowerCase();
+function modMatches(mod: ModKey | ModKey[] | undefined, event: KeyboardEvent): boolean {
+  const allowed = mod == null ? [] : typeof mod === "string" ? [mod] : mod;
+  const ctrlAllowed = allowed.includes("ctrl");
+  const metaAllowed = allowed.includes("meta");
+  if (event.ctrlKey && !ctrlAllowed) return false;
+  if (event.metaKey && !metaAllowed) return false;
+  if (!event.ctrlKey && !event.metaKey && allowed.length > 0) return false;
+  return true;
+}
 
-  return KEYBINDINGS.find((b) => b.ctrl === isCtrl && b.shift === event.shiftKey && b.key === key);
+function findBinding(event: KeyboardEvent): Keybinding | undefined {
+  const key = event.key.toLowerCase();
+  return KEYBINDINGS.find(
+    (b) => modMatches(b.mod, event) && (b.shift ?? false) === event.shiftKey && b.key === key,
+  );
 }
 
 // ---------------------------------------------------------------------------
