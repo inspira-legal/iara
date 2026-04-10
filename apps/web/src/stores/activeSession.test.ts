@@ -4,10 +4,9 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 // Transport mock
 // ---------------------------------------------------------------------------
 
-const { mockRequest, mockSubscribe, mockRefreshSessions, mockRandomUUID } = vi.hoisted(() => ({
+const { mockRequest, mockSubscribe, mockRandomUUID } = vi.hoisted(() => ({
   mockRequest: vi.fn(),
   mockSubscribe: vi.fn(() => vi.fn()),
-  mockRefreshSessions: vi.fn().mockResolvedValue(undefined),
   mockRandomUUID: vi.fn(() => "test-uuid"),
 }));
 
@@ -21,8 +20,9 @@ vi.mock("~/lib/ws-transport", () => ({
 vi.mock("./app", () => ({
   useAppStore: {
     getState: () => ({
-      refreshSessions: mockRefreshSessions,
+      getSessions: vi.fn(() => []),
     }),
+    subscribe: vi.fn(() => vi.fn()),
   },
 }));
 
@@ -145,9 +145,7 @@ describe("useActiveSessionStore", () => {
 
   describe("create()", () => {
     it("sets connecting state, calls transport, sets active, returns id", async () => {
-      mockRequest
-        .mockResolvedValueOnce({ terminalId: "term-1", sessionId: "sess-1" })
-        .mockResolvedValueOnce([]); // sessions.list
+      mockRequest.mockResolvedValueOnce({ terminalId: "term-1", sessionId: "sess-1" });
 
       const promise = useActiveSessionStore.getState().create("proj1/ws1");
 
@@ -166,19 +164,13 @@ describe("useActiveSessionStore", () => {
     });
 
     it("invalidates sessions after successful create", async () => {
-      mockRequest
-        .mockResolvedValueOnce({ terminalId: "term-1", sessionId: "sess-1" })
-        .mockResolvedValueOnce([]); // sessions.list
+      mockRequest.mockResolvedValueOnce({ terminalId: "term-1", sessionId: "sess-1" });
 
       await useActiveSessionStore.getState().create("proj1/ws1");
-
-      expect(mockRefreshSessions).toHaveBeenCalledWith("proj1/ws1");
     });
 
     it("passes resumeSessionId when provided", async () => {
-      mockRequest
-        .mockResolvedValueOnce({ terminalId: "term-1", sessionId: "sess-1" })
-        .mockResolvedValueOnce([]); // sessions.list
+      mockRequest.mockResolvedValueOnce({ terminalId: "term-1", sessionId: "sess-1" });
 
       await useActiveSessionStore.getState().create("proj1/ws1", {
         resumeSessionId: "prev-sess",
@@ -191,9 +183,7 @@ describe("useActiveSessionStore", () => {
     });
 
     it("passes sessionCwd when provided", async () => {
-      mockRequest
-        .mockResolvedValueOnce({ terminalId: "term-1", sessionId: "sess-1" })
-        .mockResolvedValueOnce([]); // sessions.list
+      mockRequest.mockResolvedValueOnce({ terminalId: "term-1", sessionId: "sess-1" });
 
       await useActiveSessionStore.getState().create("proj1/ws1", { sessionCwd: "/some/path" });
 
@@ -204,9 +194,7 @@ describe("useActiveSessionStore", () => {
     });
 
     it("passes initialPrompt when provided", async () => {
-      mockRequest
-        .mockResolvedValueOnce({ terminalId: "term-1", sessionId: "sess-1" })
-        .mockResolvedValueOnce([]); // sessions.list
+      mockRequest.mockResolvedValueOnce({ terminalId: "term-1", sessionId: "sess-1" });
 
       await useActiveSessionStore.getState().create("proj1/ws1", {
         initialPrompt: "hello world",
@@ -250,8 +238,7 @@ describe("useActiveSessionStore", () => {
 
       mockRequest
         .mockResolvedValueOnce(undefined) // terminal.destroy
-        .mockResolvedValueOnce({ terminalId: "new-term", sessionId: "new-sess" }) // terminal.create
-        .mockResolvedValueOnce([]); // sessions.list
+        .mockResolvedValueOnce({ terminalId: "new-term", sessionId: "new-sess" }); // terminal.create
 
       mockRandomUUID.mockReturnValue("new-uuid");
 
@@ -276,9 +263,7 @@ describe("useActiveSessionStore", () => {
       });
       useActiveSessionStore.setState({ entries });
 
-      mockRequest
-        .mockResolvedValueOnce({ terminalId: "new-term", sessionId: "new-sess" }) // terminal.create
-        .mockResolvedValueOnce([]); // sessions.list
+      mockRequest.mockResolvedValueOnce({ terminalId: "new-term", sessionId: "new-sess" }); // terminal.create
       mockRandomUUID.mockReturnValue("new-uuid");
 
       await useActiveSessionStore.getState().restart("entry-1");
@@ -306,8 +291,7 @@ describe("useActiveSessionStore", () => {
 
       mockRequest
         .mockRejectedValueOnce(new Error("destroy failed")) // terminal.destroy
-        .mockResolvedValueOnce({ terminalId: "new-term", sessionId: "new-sess" }) // terminal.create
-        .mockResolvedValueOnce([]); // sessions.list
+        .mockResolvedValueOnce({ terminalId: "new-term", sessionId: "new-sess" }); // terminal.create
 
       mockRandomUUID.mockReturnValue("new-uuid");
 
@@ -399,7 +383,6 @@ describe("useActiveSessionStore", () => {
 
       expect(mockRequest).toHaveBeenCalledWith("terminal.destroy", { terminalId: "term-1" });
       expect(useActiveSessionStore.getState().entries.has("entry-1")).toBe(false);
-      expect(mockRefreshSessions).toHaveBeenCalledWith("proj1/ws1");
     });
 
     it("skips destroy call if no terminalId", () => {
@@ -410,7 +393,6 @@ describe("useActiveSessionStore", () => {
       useActiveSessionStore.getState().resetToSessions("entry-1");
 
       expect(mockRequest).not.toHaveBeenCalled();
-      expect(mockRefreshSessions).toHaveBeenCalledWith("proj1/ws1");
     });
   });
 
@@ -434,7 +416,6 @@ describe("useActiveSessionStore", () => {
       useActiveSessionStore.getState().handleExit("term-1", 0);
 
       expect(useActiveSessionStore.getState().entries.has("entry-1")).toBe(false);
-      expect(mockRefreshSessions).toHaveBeenCalledWith("proj1/ws1");
     });
 
     it("non-zero exit code sets exited state", () => {
@@ -643,9 +624,7 @@ describe("useActiveSessionStore", () => {
       });
       useActiveSessionStore.setState({ entries });
 
-      mockRequest
-        .mockResolvedValueOnce({ terminalId: "new-term", sessionId: "new-sess" })
-        .mockResolvedValueOnce([]); // sessions.list
+      mockRequest.mockResolvedValueOnce({ terminalId: "new-term", sessionId: "new-sess" });
       const id = await useActiveSessionStore.getState().create("proj1/ws1");
 
       expect(useActiveSessionStore.getState().getEntry(id).hasData).toBe(false);
@@ -697,11 +676,9 @@ describe("useActiveSessionStore", () => {
       });
       useActiveSessionStore.setState({ entries });
 
-      // The retry create() will call terminal.create + sessions.list
+      // The retry create() will call terminal.create
       mockRandomUUID.mockReturnValue("retry-uuid");
-      mockRequest
-        .mockResolvedValueOnce({ terminalId: "new-term", sessionId: "new-sess" })
-        .mockResolvedValueOnce([]); // sessions.list
+      mockRequest.mockResolvedValueOnce({ terminalId: "new-term", sessionId: "new-sess" });
 
       useActiveSessionStore.getState().handleExit("term-1", 1);
 
@@ -752,7 +729,6 @@ describe("useActiveSessionStore", () => {
 
       // Exit code 0 removes entry normally
       expect(useActiveSessionStore.getState().entries.has("entry-1")).toBe(false);
-      expect(mockRefreshSessions).toHaveBeenCalledWith("proj1/ws1");
     });
   });
 

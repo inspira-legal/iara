@@ -8,7 +8,7 @@ import type { PushPatchFn } from "../types.js";
 import { computeProjectHash, listSessions } from "./sessions.js";
 import type { AppState } from "./state.js";
 
-const DEBOUNCE_MS = 2000;
+const DEBOUNCE_MS = 1000;
 
 export class SessionWatcher {
   private watcher: ShallowWatcher;

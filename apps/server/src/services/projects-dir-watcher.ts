@@ -2,7 +2,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { ShallowWatcher } from "@iara/shared/shallow-watcher";
 import { createKeyedDebounce } from "@iara/shared/timing";
-import { generateDotEnvFiles } from "./env.js";
+import { generateDotEnvFiles, readEnvToml } from "./env.js";
 import type { PushPatchFn } from "../types.js";
 import type { AppState } from "./state.js";
 
@@ -82,6 +82,12 @@ export class ProjectsDirWatcher {
       try {
         if (fs.statSync(wsDir).isDirectory()) {
           this.watcher.add(wsDir);
+          // Watch individual workspace dirs for env.toml changes
+          for (const wsEntry of fs.readdirSync(wsDir, { withFileTypes: true })) {
+            if (wsEntry.isDirectory()) {
+              this.watcher.add(path.join(wsDir, wsEntry.name));
+            }
+          }
         }
       } catch {
         // no workspaces dir
@@ -150,14 +156,23 @@ export class ProjectsDirWatcher {
       // Watching <projectsDir>/<slug>/workspaces/ — workspace added/removed
       this.projectDebounce.schedule(slug);
 
-      // Also check for env.toml in new workspace dirs
+      // Watch new workspace dirs for env.toml changes
       const newWsDir = path.join(watchedPath, filename);
       try {
         if (fs.statSync(newWsDir).isDirectory()) {
-          // Could add deeper watch here, but ShallowWatcher is non-recursive
-          // and we only need to detect workspace add/remove at this level
+          this.watcher?.add(newWsDir);
         }
       } catch {}
+      return;
+    }
+
+    if (parts.length === 3 && parts[1] === "workspaces") {
+      // Watching <projectsDir>/<slug>/workspaces/<ws>/ — env.toml in workspace
+      if (filename === "env.toml") {
+        const fullPath = path.join(watchedPath, filename);
+        if (this.consumeSuppression(fullPath)) return;
+        this.envDebounce.schedule(slug);
+      }
       return;
     }
   }
@@ -199,6 +214,7 @@ export class ProjectsDirWatcher {
   }
 
   private flushEnv(slugs: Set<string>): void {
+    const envPatch: Record<string, import("@iara/contracts").EnvData> = {};
     for (const slug of slugs) {
       const project = this.appState.getProject(slug);
       if (!project) continue;
@@ -207,7 +223,11 @@ export class ProjectsDirWatcher {
       for (const ws of project.workspaces) {
         const wsDir = this.appState.getWorkspaceDir(ws.id);
         generateDotEnvFiles(wsDir, repoNames);
+        envPatch[ws.id] = readEnvToml(wsDir);
       }
+    }
+    if (Object.keys(envPatch).length > 0) {
+      this.pushPatch({ env: envPatch });
     }
   }
 
