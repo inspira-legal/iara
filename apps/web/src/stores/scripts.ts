@@ -143,14 +143,20 @@ export const useScriptsStore = create<ScriptsState & ScriptsActions>((set, get) 
   subscribePush: () => {
     const logThrottle = createThrottle<{ key: string; line: string }>(50, (items) => {
       const logs = new Map(get().logs);
+      // Group new lines by key to batch per-script updates
+      const grouped = new Map<string, string[]>();
       for (const { key, line } of items) {
-        const existing = logs.get(key) ?? [];
-        existing.push(line);
-        if (existing.length > MAX_LOG_LINES) {
-          logs.set(key, existing.slice(-MAX_LOG_LINES));
-        } else {
-          logs.set(key, existing);
+        let arr = grouped.get(key);
+        if (!arr) {
+          arr = [];
+          grouped.set(key, arr);
         }
+        arr.push(line);
+      }
+      for (const [key, newLines] of grouped) {
+        const existing = logs.get(key) ?? [];
+        const combined = [...existing, ...newLines];
+        logs.set(key, combined.length > MAX_LOG_LINES ? combined.slice(-MAX_LOG_LINES) : combined);
       }
       set({ logs });
     });

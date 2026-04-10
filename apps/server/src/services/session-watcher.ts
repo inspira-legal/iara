@@ -1,4 +1,4 @@
-import * as fs from "node:fs";
+import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import * as os from "node:os";
 import { ShallowWatcher } from "@iara/shared/shallow-watcher";
@@ -65,9 +65,7 @@ export class SessionWatcher {
       const dir = path.join(os.homedir(), ".claude", "projects", hash);
       if (!this.watcher.has(dir)) {
         try {
-          if (!fs.existsSync(dir)) {
-            fs.mkdirSync(dir, { recursive: true });
-          }
+          await fs.mkdir(dir, { recursive: true });
           this.watcher.add(dir);
         } catch {
           // Directory not accessible

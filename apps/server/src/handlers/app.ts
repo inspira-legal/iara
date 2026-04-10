@@ -1,4 +1,4 @@
-import * as fs from "node:fs";
+import * as fs from "node:fs/promises";
 import type {
   EnvData,
   RepoInfo,
@@ -40,8 +40,13 @@ export function registerAppHandlers(appState: AppState, scriptSupervisor: Script
       try {
         const pp = projectPaths(appState.getProjectsDir(), project.slug);
         filePath = pp.scriptsYaml;
-        if (fs.existsSync(pp.scriptsYaml)) {
-          const content = fs.readFileSync(pp.scriptsYaml, "utf-8");
+        if (
+          await fs
+            .access(pp.scriptsYaml)
+            .then(() => true)
+            .catch(() => false)
+        ) {
+          const content = await fs.readFile(pp.scriptsYaml, "utf-8");
           const repoNames = appState.discoverRepos(project.slug);
           const defs = parseScriptsYaml(content, repoNames);
           // Convert ServiceDef[] to ResolvedServiceDef[] with placeholder resolved fields
@@ -54,8 +59,8 @@ export function registerAppHandlers(appState: AppState, scriptSupervisor: Script
           );
           hasFile = true;
         }
-      } catch {
-        // Best effort — scripts config parse failure is non-fatal
+      } catch (err) {
+        console.error(`[state.init] Failed to load scripts config for ${project.slug}:`, err);
       }
 
       for (const workspace of project.workspaces) {
