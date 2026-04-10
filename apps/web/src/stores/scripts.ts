@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import type { EssencialKey, ScriptStatus, ScriptsConfig } from "@iara/contracts";
+import { createThrottle } from "@iara/shared/timing";
 import { transport } from "../lib/ws-transport.js";
 
 const MAX_LOG_LINES = 1000;
@@ -140,14 +141,24 @@ export const useScriptsStore = create<ScriptsState & ScriptsActions>((set, get) 
   },
 
   subscribePush: () => {
+    const logThrottle = createThrottle<{ key: string; line: string }>(50, (items) => {
+      const logs = new Map(get().logs);
+      for (const { key, line } of items) {
+        const existing = logs.get(key) ?? [];
+        existing.push(line);
+        if (existing.length > MAX_LOG_LINES) {
+          logs.set(key, existing.slice(-MAX_LOG_LINES));
+        } else {
+          logs.set(key, existing);
+        }
+      }
+      set({ logs });
+    });
+
     const unsubLog = transport.subscribe(
       "scripts:log",
       ({ scriptId, line }: { scriptId: string; service: string; script: string; line: string }) => {
-        const key = scriptId;
-        const logs = new Map(get().logs);
-        const existing = logs.get(key) ?? [];
-        logs.set(key, [...existing.slice(-(MAX_LOG_LINES - 1)), line]);
-        set({ logs });
+        logThrottle.push({ key: scriptId, line });
       },
     );
 
@@ -161,6 +172,7 @@ export const useScriptsStore = create<ScriptsState & ScriptsActions>((set, get) 
     );
 
     return () => {
+      logThrottle.flush();
       unsubLog();
       unsubDiscovering();
     };

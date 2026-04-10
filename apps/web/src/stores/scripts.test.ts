@@ -348,6 +348,7 @@ describe("useScriptsStore", () => {
     });
 
     it("scripts:log appends log line", () => {
+      vi.useFakeTimers();
       const logs = new Map<string, string[]>();
       logs.set("8080:api:dev", ["line1"]);
       useScriptsStore.setState({ logs });
@@ -361,11 +362,14 @@ describe("useScriptsStore", () => {
       });
 
       useScriptsStore.getState().subscribePush();
+      vi.advanceTimersByTime(50);
 
       expect(useScriptsStore.getState().logs.get("8080:api:dev")).toEqual(["line1", "line2"]);
+      vi.useRealTimers();
     });
 
     it("scripts:log creates new log entry if none exists", () => {
+      vi.useFakeTimers();
       // biome-ignore lint: test mock
       mockSubscribe.mockImplementation((event: string, cb: (...args: any[]) => void) => {
         if (event === "scripts:log") {
@@ -375,11 +379,14 @@ describe("useScriptsStore", () => {
       });
 
       useScriptsStore.getState().subscribePush();
+      vi.advanceTimersByTime(50);
 
       expect(useScriptsStore.getState().logs.get("new-script")).toEqual(["first line"]);
+      vi.useRealTimers();
     });
 
     it("scripts:log caps at MAX_LOG_LINES (1000)", () => {
+      vi.useFakeTimers();
       const existingLines = Array.from({ length: 1000 }, (_, i) => `line-${i}`);
       const logs = new Map<string, string[]>();
       logs.set("script-1", existingLines);
@@ -394,11 +401,13 @@ describe("useScriptsStore", () => {
       });
 
       useScriptsStore.getState().subscribePush();
+      vi.advanceTimersByTime(50);
 
       const logLines = useScriptsStore.getState().logs.get("script-1")!;
       expect(logLines).toHaveLength(1000);
       expect(logLines[logLines.length - 1]).toBe("overflow-line");
       expect(logLines[0]).toBe("line-1"); // line-0 was dropped
+      vi.useRealTimers();
     });
 
     it("scripts:discovering adds projectId to discoveringProjects", () => {
