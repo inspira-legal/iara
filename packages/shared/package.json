@@ -31,6 +31,14 @@
     "./platform": {
       "types": "./src/platform.ts",
       "import": "./src/platform.ts"
+    },
+    "./timing": {
+      "types": "./src/timing.ts",
+      "import": "./src/timing.ts"
+    },
+    "./shallow-watcher": {
+      "types": "./src/shallow-watcher.ts",
+      "import": "./src/shallow-watcher.ts"
     }
   },
   "scripts": {
