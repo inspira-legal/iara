@@ -234,7 +234,9 @@ function resolveReposDir(appState: AppState, projectSlug: string, workspaceSlug?
 
 async function getGitBranch(repoPath: string): Promise<string> {
   try {
-    const { stdout } = await execGitAsync(["branch", "--show-current"], { cwd: repoPath });
+    const { stdout } = await execGitAsync(["--no-optional-locks", "branch", "--show-current"], {
+      cwd: repoPath,
+    });
     return stdout.trim() || "HEAD";
   } catch {
     return "unknown";
@@ -243,7 +245,9 @@ async function getGitBranch(repoPath: string): Promise<string> {
 
 async function getGitDirtyCount(repoPath: string): Promise<number> {
   try {
-    const { stdout } = await execGitAsync(["status", "--porcelain"], { cwd: repoPath });
+    const { stdout } = await execGitAsync(["--no-optional-locks", "status", "--porcelain"], {
+      cwd: repoPath,
+    });
     const trimmed = stdout.trim();
     return trimmed ? trimmed.split("\n").length : 0;
   } catch {
@@ -257,7 +261,7 @@ async function getGitAheadBehind(repoPath: string): Promise<{
 }> {
   try {
     const { stdout } = await execGitAsync(
-      ["rev-list", "--left-right", "--count", "HEAD...@{upstream}"],
+      ["--no-optional-locks", "rev-list", "--left-right", "--count", "HEAD...@{upstream}"],
       { cwd: repoPath },
     );
     const [ahead, behind] = stdout.trim().split("\t").map(Number);

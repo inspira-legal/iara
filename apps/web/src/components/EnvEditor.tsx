@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Plus, Trash2, AlertTriangle, X } from "lucide-react";
 import type { EnvData, EnvEntry, EnvServiceEntries } from "@iara/contracts";
 import { transport } from "~/lib/ws-transport.js";
+import { useAppStore } from "~/stores/app";
 
 interface EnvEditorProps {
   workspaceId: string;
@@ -15,38 +16,27 @@ export function EnvEditor({
   serviceNames: propServiceNames,
   hasActiveTerminal,
 }: EnvEditorProps) {
-  const [data, setData] = useState<EnvData>({ services: [] });
-  const [loading, setLoading] = useState(true);
+  // Read env data from the app store (populated via state.init / state:patch)
+  const storeEnv = useAppStore((s) => s.env[workspaceId]);
+  const [data, setData] = useState<EnvData>(storeEnv ?? { services: [] });
+  const [loading, setLoading] = useState(!storeEnv);
   const [activeService, setActiveService] = useState<string>(propServiceNames[0] ?? "");
   const [envDirty, setEnvDirty] = useState(false);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Listen for env:changed push events scoped to this workspace
+  // Sync from store when env data arrives or changes
   useEffect(() => {
-    const unsub = transport.subscribe(
-      "env:changed",
-      ({ workspaceId: changedWsId }: { workspaceId: string }) => {
-        if (changedWsId !== workspaceId) return;
-        if (hasActiveTerminal) setEnvDirty(true);
-      },
-    );
-    return unsub;
-  }, [hasActiveTerminal, workspaceId]);
+    if (storeEnv) {
+      setData(storeEnv);
+      setLoading(false);
+      if (hasActiveTerminal) setEnvDirty(true);
+    }
+  }, [storeEnv, hasActiveTerminal]);
 
-  const load = useCallback(() => {
-    transport
-      .request("env.list", { workspaceId })
-      .then((result) => {
-        setData(result);
-        setLoading(false);
-      })
-      .catch(() => setLoading(false));
+  // Reset dirty state when workspace changes
+  useEffect(() => {
+    setEnvDirty(false);
   }, [workspaceId]);
-
-  useEffect(() => {
-    setLoading(true);
-    load();
-  }, [load]);
 
   // Set active service when service names change
   useEffect(() => {
@@ -68,10 +58,10 @@ export function EnvEditor({
     (services: EnvServiceEntries[]) => {
       if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
       saveTimerRef.current = setTimeout(() => {
-        void transport.request("env.write", { workspaceId, services }).then(() => load());
+        void transport.request("env.write", { workspaceId, services });
       }, 500);
     },
-    [workspaceId, load],
+    [workspaceId],
   );
 
   const updateData = (serviceName: string, newEntries: EnvEntry[]): EnvData => {

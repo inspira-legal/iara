@@ -9,10 +9,10 @@ import { SocketServer, registerSocketHandlers } from "./socket.js";
 import { syncShellEnvironment } from "./services/shell-env.js";
 import { generatePluginDir } from "./services/plugins.js";
 import { SessionWatcher } from "./services/session-watcher.js";
-import { EnvWatcher } from "./services/env-watcher.js";
 import { AppState } from "./services/state.js";
-import { ProjectsWatcher } from "./services/watcher.js";
-import { GitWatcher } from "./services/git-watcher.js";
+import { ProjectsDirWatcher } from "./services/projects-dir-watcher.js";
+
+import { createPushPatch } from "./services/push.js";
 import * as os from "node:os";
 import { stateDir } from "./env.js";
 
@@ -33,33 +33,36 @@ const webDir =
 const projectsDir = path.join(os.homedir(), "iara");
 const appState = new AppState(projectsDir, stateDir);
 
+// Coalescing push for state:patch
+const pushPatch = createPushPatch(pushAll);
+
 // Services
-const scriptSupervisor = new ScriptSupervisor(pushAll);
+const scriptSupervisor = new ScriptSupervisor({
+  onLog: (params) => pushAll("scripts:log", params),
+  onStatusChange: ({ status }) => {
+    const wsId = `${status.projectId}/${status.workspace}`;
+    pushPatch({ scriptStatuses: { [wsId]: [status] } });
+  },
+});
 const notificationService = new NotificationService(pushAll);
 const terminalManager = new TerminalManager(pushAll);
 const socketServer = new SocketServer();
 registerSocketHandlers(socketServer, pushAll);
-const sessionWatcher = new SessionWatcher(pushAll, appState);
+const sessionWatcher = new SessionWatcher(pushPatch, appState);
 
 // FS watchers
-const watcher = new ProjectsWatcher(projectsDir, appState, pushAll);
-await watcher.start();
-const gitWatcher = new GitWatcher(appState, pushAll);
-gitWatcher.start();
-const envWatcher = new EnvWatcher(projectsDir, appState);
-await envWatcher.start();
-
+const projectsDirWatcher = new ProjectsDirWatcher(projectsDir, appState, pushPatch);
+await projectsDirWatcher.start();
 // Register all WS handlers
 registerAllHandlers({
   appState,
-  watcher,
-  gitWatcher,
+  projectsDirWatcher,
   scriptSupervisor,
   notificationService,
   terminalManager,
   sessionWatcher,
-  envWatcher,
   pushFn: pushAll,
+  pushPatch,
 });
 
 // Start session file watcher
@@ -100,13 +103,7 @@ httpServer.on("listening", async () => {
 function shutdown() {
   console.log("Shutting down...");
   try {
-    watcher.stop();
-  } catch {}
-  try {
-    gitWatcher.stop();
-  } catch {}
-  try {
-    envWatcher.stop();
+    projectsDirWatcher.stop();
   } catch {}
   try {
     terminalManager.destroyAll();

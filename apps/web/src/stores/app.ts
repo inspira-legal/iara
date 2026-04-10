@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import type {
   AppCapabilities,
+  AppInfo,
   CreateProjectInput,
   UpdateProjectInput,
   CreateWorkspaceInput,
@@ -9,10 +10,16 @@ import type {
   Workspace,
   RepoInfo,
   SessionInfo,
+  EnvData,
+  ScriptsConfig,
+  ScriptStatus,
 } from "@iara/contracts";
 import { transport } from "~/lib/ws-transport";
 import { LocalCache } from "~/lib/local-cache";
 import { AppCacheSchema } from "~/lib/cache-schemas";
+import { useActiveSessionStore } from "./activeSession.js";
+import { useScriptsStore } from "./scripts";
+
 const ROOT_WORKSPACE_SLUG = "main";
 
 const appCache = new LocalCache({
@@ -41,6 +48,10 @@ interface AppState {
   settings: Record<string, string>;
   repoInfo: Record<string, RepoInfo[]>;
   sessions: Record<string, SessionInfo[]>;
+  env: Record<string, EnvData>;
+  scripts: Record<string, ScriptsConfig>;
+  scriptStatuses: Record<string, ScriptStatus[]>;
+  appInfo: AppInfo | null;
   capabilities: AppCapabilities;
   selectedWorkspaceId: string | null;
   initialized: boolean;
@@ -75,18 +86,9 @@ interface AppActions {
 
   // Repo info
   getRepoInfo(workspaceId: string): RepoInfo[];
-  refreshRepoInfo(projectId: string, cacheKey: string, workspaceId?: string): Promise<void>;
 
   // Sessions
   getSessions(key: string): SessionInfo[];
-  refreshSessions(workspaceId: string): Promise<void>;
-  refreshSessionsByProject(projectId: string): Promise<void>;
-
-  // Push handlers
-  onProjectChanged(project: Project): void;
-  onWorkspaceChanged(workspace: Workspace): void;
-  onStateResync(state: { projects: Project[]; settings: Record<string, string> }): void;
-  onSettingsChanged(key: string, value: string): void;
 
   // Selectors
   getProject(id: string): Project | undefined;
@@ -117,6 +119,34 @@ function restoreSelection(projects: Project[], workspaceId: string | null): stri
 }
 
 // ---------------------------------------------------------------------------
+// Orphan pruning helper
+// ---------------------------------------------------------------------------
+
+function pruneOrphans(validWsIds: Set<string>, ...maps: Record<string, unknown>[]): void {
+  for (const map of maps) {
+    for (const key of Object.keys(map)) {
+      if (!validWsIds.has(key)) delete map[key];
+    }
+  }
+  // Prune active session entries for deleted workspaces
+  for (const [entryId, entry] of useActiveSessionStore.getState().entries) {
+    if (!validWsIds.has(entry.workspaceId)) {
+      void useActiveSessionStore.getState().destroy(entryId);
+    }
+  }
+  // Prune scripts store if its workspace was deleted
+  const scriptsState = useScriptsStore.getState();
+  if (scriptsState.currentWorkspaceId && !validWsIds.has(scriptsState.currentWorkspaceId)) {
+    useScriptsStore.setState({
+      config: null,
+      currentWorkspaceId: null,
+      logs: new Map(),
+      selectedLog: null,
+    });
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Store
 // ---------------------------------------------------------------------------
 
@@ -128,6 +158,10 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
   settings: cached?.settings ?? {},
   repoInfo: {},
   sessions: {},
+  env: {},
+  scripts: {},
+  scriptStatuses: {},
+  appInfo: null,
   capabilities: { claude: true, platform: "linux" as NodeJS.Platform },
   selectedWorkspaceId: cached?.workspaceId ?? null,
   initialized: false,
@@ -137,13 +171,18 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
   // ---------------------------------------------------------------------------
 
   init: async () => {
-    const [stateResult, capabilities] = await Promise.all([
-      transport.request("state.init", {}),
-      transport
-        .request("app.capabilities", {})
-        .catch((): AppCapabilities => ({ claude: true, platform: "linux" })),
-    ]);
-    const { projects, settings, repoInfo, sessions } = stateResult;
+    const result = await transport.request("state.init", {});
+    const {
+      projects,
+      settings,
+      repoInfo,
+      sessions,
+      env,
+      scripts,
+      scriptStatuses,
+      appInfo,
+      capabilities,
+    } = result;
 
     // Restore selection against fresh data (re-read cache in case it changed since module load)
     const freshCache = appCache.get();
@@ -154,6 +193,10 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
       settings,
       repoInfo,
       sessions,
+      env,
+      scripts,
+      scriptStatuses,
+      appInfo,
       capabilities,
       initialized: true,
       selectedWorkspaceId: workspaceId,
@@ -222,7 +265,7 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
 
   updateWorkspace: async (workspaceId, input) => {
     await transport.request("workspaces.update", { workspaceId, ...input });
-    // State updates come via push events (workspace:changed)
+    // State updates come via push events
   },
 
   deleteWorkspace: async (workspaceId) => {
@@ -277,104 +320,12 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
     return get().repoInfo[workspaceId] ?? EMPTY_REPO_INFO;
   },
 
-  refreshRepoInfo: async (projectId, cacheKey, workspaceId) => {
-    try {
-      const info = await transport.request("repos.getInfo", {
-        projectId,
-        ...(workspaceId ? { workspaceId } : {}),
-      });
-      set((state) => ({
-        repoInfo: { ...state.repoInfo, [cacheKey]: info },
-      }));
-    } catch {
-      // ignore — keep stale data
-    }
-  },
-
   // ---------------------------------------------------------------------------
   // Sessions
   // ---------------------------------------------------------------------------
 
   getSessions: (key) => {
     return get().sessions[key] ?? EMPTY_SESSIONS;
-  },
-
-  refreshSessions: async (workspaceId) => {
-    try {
-      const sessions = await transport.request("sessions.list", { workspaceId });
-      set((state) => ({
-        sessions: { ...state.sessions, [workspaceId]: sessions },
-      }));
-    } catch {
-      // ignore — keep stale data
-    }
-  },
-
-  refreshSessionsByProject: async (projectId) => {
-    try {
-      const sessions = await transport.request("sessions.listByProject", { projectId });
-      set((state) => ({
-        sessions: { ...state.sessions, [`project:${projectId}`]: sessions },
-      }));
-    } catch {
-      // ignore — keep stale data
-    }
-  },
-
-  // ---------------------------------------------------------------------------
-  // Push handlers
-  // ---------------------------------------------------------------------------
-
-  onProjectChanged: (project) => {
-    set((state) => {
-      const idx = state.projects.findIndex((p) => p.id === project.id);
-      if (idx === -1) {
-        return { projects: [...state.projects, project] };
-      }
-      const next = [...state.projects];
-      next[idx] = project;
-      return { projects: next };
-    });
-  },
-
-  onWorkspaceChanged: (workspace) => {
-    set((state) => {
-      const pIdx = state.projects.findIndex((p) => p.id === workspace.projectId);
-      if (pIdx === -1) return state;
-      const project = state.projects[pIdx]!;
-      const wIdx = project.workspaces.findIndex((w) => w.id === workspace.id);
-      const nextWorkspaces =
-        wIdx === -1
-          ? [...project.workspaces, workspace]
-          : [
-              ...project.workspaces.slice(0, wIdx),
-              workspace,
-              ...project.workspaces.slice(wIdx + 1),
-            ];
-      const next = [...state.projects];
-      next[pIdx] = { ...project, workspaces: nextWorkspaces };
-      return { projects: next };
-    });
-  },
-
-  onStateResync: (payload) => {
-    const validWsIds = new Set(payload.projects.flatMap((p) => p.workspaces.map((w) => w.id)));
-    // Prune stale repoInfo/sessions for deleted workspaces
-    const repoInfo = { ...get().repoInfo };
-    const sessions = { ...get().sessions };
-    for (const key of Object.keys(repoInfo)) {
-      if (!validWsIds.has(key)) delete repoInfo[key];
-    }
-    for (const key of Object.keys(sessions)) {
-      if (!validWsIds.has(key)) delete sessions[key];
-    }
-    set({ projects: payload.projects, settings: payload.settings, repoInfo, sessions });
-  },
-
-  onSettingsChanged: (key, value) => {
-    set((state) => ({
-      settings: { ...state.settings, [key]: value },
-    }));
   },
 
   // ---------------------------------------------------------------------------
@@ -398,59 +349,55 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
   },
 
   // ---------------------------------------------------------------------------
-  // Push subscription
+  // Push subscription — single state:patch handler
   // ---------------------------------------------------------------------------
 
   subscribePush: () => {
-    const unsubs = [
-      transport.subscribe("project:changed", (params) => {
-        get().onProjectChanged(params.project);
-      }),
-      transport.subscribe("workspace:changed", (params) => {
-        get().onWorkspaceChanged(params.workspace);
-      }),
-      transport.subscribe("state:resync", async (params) => {
-        get().onStateResync(params.state);
+    const unsub = transport.subscribe("state:patch", (patch) => {
+      set((state) => {
+        const next: Partial<AppState> = {};
 
-        // Prune stale entries from other stores for deleted workspaces
-        const validWsIds = new Set(
-          params.state.projects.flatMap((p: any) => p.workspaces.map((w: any) => w.id)),
-        );
-        const { useActiveSessionStore } = await import("./activeSession.js");
-        for (const [entryId, entry] of useActiveSessionStore.getState().entries) {
-          if (!validWsIds.has(entry.workspaceId)) {
-            void useActiveSessionStore.getState().destroy(entryId);
-          }
-        }
-        const { useScriptsStore } = await import("./scripts.js");
-        const scripts = useScriptsStore.getState();
-        if (scripts.currentWorkspaceId && !validWsIds.has(scripts.currentWorkspaceId)) {
-          useScriptsStore.setState({
-            config: null,
-            currentWorkspaceId: null,
-            logs: new Map(),
-            selectedLog: null,
-          });
-        }
-      }),
-      transport.subscribe("settings:changed", (params) => {
-        get().onSettingsChanged(params.key, params.value);
-      }),
-      transport.subscribe("session:changed", ({ workspaceId }) => {
-        void get().refreshSessions(workspaceId);
-      }),
-      transport.subscribe("repos:changed", ({ projectId, workspaceId, repoInfo }) => {
-        const key = workspaceId ?? `project:${projectId}`;
-        set((state) => ({
-          repoInfo: { ...state.repoInfo, [key]: repoInfo },
-        }));
-      }),
-    ];
+        // Full-replace fields
+        if (patch.projects) next.projects = patch.projects;
+        if (patch.settings) next.settings = patch.settings;
 
-    return () => {
-      for (const unsub of unsubs) {
-        unsub();
-      }
-    };
+        // Shallow-merge fields (by key)
+        if (patch.repoInfo) {
+          next.repoInfo = { ...state.repoInfo, ...patch.repoInfo };
+        }
+        if (patch.sessions) {
+          next.sessions = { ...state.sessions, ...patch.sessions };
+        }
+        if (patch.env) {
+          next.env = { ...state.env, ...patch.env };
+        }
+        if (patch.scripts) {
+          next.scripts = { ...state.scripts, ...patch.scripts };
+        }
+        if (patch.scriptStatuses) {
+          next.scriptStatuses = { ...state.scriptStatuses, ...patch.scriptStatuses };
+        }
+
+        // When projects change, prune orphaned entries from keyed maps
+        if (patch.projects) {
+          const validWsIds = new Set(patch.projects.flatMap((p) => p.workspaces.map((w) => w.id)));
+          const ri = next.repoInfo ?? { ...state.repoInfo };
+          const se = next.sessions ?? { ...state.sessions };
+          const en = next.env ?? { ...state.env };
+          const sc = next.scripts ?? { ...state.scripts };
+          const ss = next.scriptStatuses ?? { ...state.scriptStatuses };
+          pruneOrphans(validWsIds, ri, se, en, sc, ss);
+          next.repoInfo = ri;
+          next.sessions = se;
+          next.env = en;
+          next.scripts = sc;
+          next.scriptStatuses = ss;
+        }
+
+        return next;
+      });
+    });
+
+    return unsub;
   },
 }));

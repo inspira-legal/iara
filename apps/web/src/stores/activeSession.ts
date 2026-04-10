@@ -84,8 +84,8 @@ function persistSessions(): void {
   sessionsCache.set(persisted);
 }
 
-function invalidateSessions(workspaceId: string): void {
-  void useAppStore.getState().refreshSessions(workspaceId);
+function invalidateSessions(_workspaceId: string): void {
+  // Sessions are now pushed via state:patch from the server — no client-side refetch needed.
 }
 
 /** Destroy shell terminals for a specific session entry. */
@@ -182,12 +182,11 @@ export const useActiveSessionStore = create<ActiveSessionState & ActiveSessionAc
         });
         // Fetch session title if resuming an existing session
         if (result.sessionId) {
-          void transport.request("sessions.list", { workspaceId }).then((sessions) => {
-            const match = sessions.find((s) => s.id === result.sessionId);
-            if (match?.title) {
-              get().updateTitle(result.sessionId!, match.title);
-            }
-          });
+          const sessions = useAppStore.getState().getSessions(workspaceId);
+          const match = sessions.find((s) => s.id === result.sessionId);
+          if (match?.title) {
+            get().updateTitle(result.sessionId!, match.title);
+          }
         }
         // Invalidate session list so it picks up the new session
         invalidateSessions(workspaceId);
@@ -399,17 +398,19 @@ transport.subscribe(
   },
 );
 
-// Sync session titles when server detects JSONL changes
-transport.subscribe("session:changed", ({ workspaceId }: { workspaceId: string }) => {
-  const entries = useActiveSessionStore.getState().entries;
-  // Only fetch if we have active sessions for this workspace
-  const hasActiveEntries = [...entries.values()].some((e) => e.workspaceId === workspaceId);
-  if (!hasActiveEntries) return;
-
-  void transport.request("sessions.list", { workspaceId }).then((sessions) => {
-    for (const session of sessions) {
-      if (session.title) {
-        useActiveSessionStore.getState().updateTitle(session.id, session.title);
+// Sync session titles when server pushes updated sessions via state:patch.
+// Deferred to avoid circular import: app.ts imports activeSession.ts and vice versa.
+queueMicrotask(() => {
+  useAppStore.subscribe((state, prev) => {
+    if (state.sessions === prev.sessions) return;
+    const entries = useActiveSessionStore.getState().entries;
+    for (const [wsId, sessions] of Object.entries(state.sessions)) {
+      const hasActiveEntries = [...entries.values()].some((e) => e.workspaceId === wsId);
+      if (!hasActiveEntries) continue;
+      for (const session of sessions) {
+        if (session.title) {
+          useActiveSessionStore.getState().updateTitle(session.id, session.title);
+        }
       }
     }
   });

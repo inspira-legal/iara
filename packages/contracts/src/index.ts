@@ -42,9 +42,7 @@ export type {
   WsServerMessage,
 } from "./ws.js";
 export {
-  ProjectFileSchema,
   SettingsFileSchema,
-  WorkspaceFileSchema,
   ProjectSchema,
   WorkspaceSchema,
   RepoInfoSchema,
@@ -56,4 +54,4 @@ export {
   ResolvedServiceDefSchema,
   ScriptsConfigSchema,
 } from "./schemas.js";
-export type { ProjectFile, SettingsFile, WorkspaceFile } from "./schemas.js";
+export type { SettingsFile } from "./schemas.js";

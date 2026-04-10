@@ -1,35 +1,41 @@
-import * as fs from "node:fs";
+import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import * as os from "node:os";
-import * as watcher from "@parcel/watcher";
-import type { PushFn } from "../types.js";
-import { computeProjectHash } from "./sessions.js";
+import { ShallowWatcher } from "@iara/shared/shallow-watcher";
+import { createKeyedDebounce } from "@iara/shared/timing";
+import type { SessionInfo } from "@iara/contracts";
+import type { PushPatchFn } from "../types.js";
+import { computeProjectHash, listSessions } from "./sessions.js";
 import type { AppState } from "./state.js";
 
-const DEBOUNCE_MS = 500;
+const DEBOUNCE_MS = 1000;
 
-/**
- * Watches Claude session JSONL directories for changes and pushes
- * `session:changed` events to connected clients.
- *
- * Uses @parcel/watcher for reliable cross-platform file watching.
- */
 export class SessionWatcher {
-  private subscriptions = new Map<string, watcher.AsyncSubscription>();
+  private watcher: ShallowWatcher;
   private hashToWorkspaceIds = new Map<string, Set<string>>();
-  private debounceTimers = new Map<string, ReturnType<typeof setTimeout>>();
-  private pushAll: PushFn;
+  private debounce: ReturnType<typeof createKeyedDebounce<string>>;
+  private pushPatch: PushPatchFn;
   private appState: AppState;
 
-  constructor(pushAll: PushFn, appState: AppState) {
-    this.pushAll = pushAll;
+  constructor(pushPatch: PushPatchFn, appState: AppState) {
+    this.pushPatch = pushPatch;
     this.appState = appState;
+
+    this.watcher = new ShallowWatcher({
+      onChange: (_watchedPath, _eventType, filename) => {
+        if (!filename || !filename.endsWith(".jsonl")) return;
+        const hash = path.basename(_watchedPath);
+        if (this.hashToWorkspaceIds.has(hash)) {
+          this.debounce.schedule(hash);
+        }
+      },
+    });
+
+    this.debounce = createKeyedDebounce<string>(DEBOUNCE_MS, (hashes) => {
+      this.flushHashes(hashes);
+    });
   }
 
-  /**
-   * Rebuild watches for all workspaces across all projects.
-   * Call on startup and when workspaces/projects change.
-   */
   async refresh(): Promise<void> {
     const { projects } = this.appState.getState();
     const newHashes = new Map<string, Set<string>>();
@@ -37,95 +43,67 @@ export class SessionWatcher {
     for (const project of projects) {
       for (const workspace of project.workspaces) {
         const wsDir = this.appState.getWorkspaceDir(workspace.id);
-
-        // Watch the workspace dir itself
         const hash = computeProjectHash(wsDir);
         if (!newHashes.has(hash)) newHashes.set(hash, new Set());
         newHashes.get(hash)!.add(workspace.id);
-
-        // Also watch the parent dir — Claude CLI may hash the parent as cwd
-        const parentHash = computeProjectHash(path.dirname(wsDir));
-        if (parentHash !== hash) {
-          if (!newHashes.has(parentHash)) newHashes.set(parentHash, new Set());
-          newHashes.get(parentHash)!.add(workspace.id);
-        }
-
-        // Also watch repo subdirs within the workspace
-        const repoNames = this.appState.discoverRepos(project.id);
-        for (const name of repoNames) {
-          const repoDir = path.join(wsDir, name);
-          const repoHash = computeProjectHash(repoDir);
-          if (repoHash !== hash) {
-            if (!newHashes.has(repoHash)) newHashes.set(repoHash, new Set());
-            newHashes.get(repoHash)!.add(workspace.id);
-          }
-        }
       }
     }
 
-    // Remove subscriptions for hashes that no longer exist
-    for (const [hash, sub] of this.subscriptions) {
+    // Remove watches for hashes that no longer exist
+    for (const hash of this.hashToWorkspaceIds.keys()) {
       if (!newHashes.has(hash)) {
-        await sub.unsubscribe();
-        this.subscriptions.delete(hash);
+        const dir = path.join(os.homedir(), ".claude", "projects", hash);
+        this.watcher.remove(dir);
+        this.debounce.cancel(hash);
       }
     }
 
     this.hashToWorkspaceIds = newHashes;
 
-    // Add subscriptions for new hashes
+    // Add watches for new hashes
     for (const hash of newHashes.keys()) {
-      if (!this.subscriptions.has(hash)) {
-        await this.watchHash(hash);
+      const dir = path.join(os.homedir(), ".claude", "projects", hash);
+      if (!this.watcher.has(dir)) {
+        try {
+          await fs.mkdir(dir, { recursive: true });
+          this.watcher.add(dir);
+        } catch {
+          // Directory not accessible
+        }
       }
     }
   }
 
-  private async watchHash(hash: string): Promise<void> {
-    const dir = path.join(os.homedir(), ".claude", "projects", hash);
-    try {
-      if (!fs.existsSync(dir)) {
-        fs.mkdirSync(dir, { recursive: true });
+  private flushHashes(hashes: Set<string>): void {
+    const sessionsUpdate: Record<string, SessionInfo[]> = {};
+    const pending: Array<{ wsId: string; dir: string }> = [];
+
+    for (const hash of hashes) {
+      const workspaceIds = this.hashToWorkspaceIds.get(hash);
+      if (!workspaceIds) continue;
+      for (const wsId of workspaceIds) {
+        const wsDir = this.appState.getWorkspaceDir(wsId);
+        pending.push({ wsId, dir: wsDir });
       }
-
-      const sub = await watcher.subscribe(dir, (_err, events) => {
-        const hasJsonl = events.some((e) => e.path.endsWith(".jsonl"));
-        if (hasJsonl) {
-          this.debouncedNotify(hash);
-        }
-      });
-      this.subscriptions.set(hash, sub);
-    } catch {
-      // Directory not accessible
     }
-  }
 
-  private debouncedNotify(hash: string): void {
-    const existing = this.debounceTimers.get(hash);
-    if (existing) clearTimeout(existing);
+    if (pending.length === 0) return;
 
-    this.debounceTimers.set(
-      hash,
-      setTimeout(() => {
-        this.debounceTimers.delete(hash);
-        const workspaceIds = this.hashToWorkspaceIds.get(hash);
-        if (workspaceIds) {
-          for (const workspaceId of workspaceIds) {
-            this.pushAll("session:changed", { workspaceId });
-          }
+    void Promise.allSettled(
+      pending.map(async ({ wsId, dir }) => {
+        try {
+          sessionsUpdate[wsId] = await listSessions([dir]);
+        } catch {
+          sessionsUpdate[wsId] = [];
         }
-      }, DEBOUNCE_MS),
-    );
+      }),
+    ).then(() => {
+      this.pushPatch({ sessions: sessionsUpdate });
+    });
   }
 
   stop(): void {
-    for (const sub of this.subscriptions.values()) {
-      void sub.unsubscribe().catch(() => {});
-    }
-    this.subscriptions.clear();
-    for (const timer of this.debounceTimers.values()) {
-      clearTimeout(timer);
-    }
-    this.debounceTimers.clear();
+    this.watcher.stop();
+    this.debounce.cancelAll();
   }
 }

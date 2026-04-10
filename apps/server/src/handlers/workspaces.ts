@@ -7,30 +7,28 @@ import { gitWorktreeAdd, gitWorktreeRemove } from "@iara/shared/git";
 import { projectPaths, workspacePaths } from "@iara/shared/paths";
 import { rmGraceful } from "@iara/shared/fs";
 import type { TerminalManager } from "../services/terminal.js";
-import type { GitWatcher } from "../services/git-watcher.js";
+
 import { registerMethod } from "../router.js";
 import type { SessionWatcher } from "../services/session-watcher.js";
 import { AppState } from "../services/state.js";
-import type { EnvWatcher } from "../services/env-watcher.js";
-import type { ProjectsWatcher } from "../services/watcher.js";
+import type { ProjectsDirWatcher } from "../services/projects-dir-watcher.js";
 import { copyEnvTomlWithPortOffset } from "../services/env.js";
 import { getRepoInfo } from "../services/repos.js";
 import { generateCodeWorkspace } from "../services/code-workspace.js";
-import type { PushFn } from "./index.js";
+import type { PushFn, PushPatchFn } from "./index.js";
 
 export function registerWorkspaceHandlers(
   appState: AppState,
-  watcher: ProjectsWatcher,
-  envWatcher: EnvWatcher,
+  projectsDirWatcher: ProjectsDirWatcher,
   terminalManager: TerminalManager,
   scriptSupervisor: ScriptSupervisor,
-  gitWatcher: GitWatcher,
   sessionWatcher: SessionWatcher,
   pushFn: PushFn,
+  pushPatch: PushPatchFn,
 ): void {
   registerMethod("workspaces.create", async (params) => {
     const { projectId, ...input } = params;
-    const workspace = await createWorkspace(appState, projectId, input, pushFn);
+    const workspace = await createWorkspace(appState, projectId, input, pushPatch);
     sessionWatcher.refresh();
     return workspace;
   });
@@ -40,11 +38,8 @@ export function registerWorkspaceHandlers(
     const workspace = appState.getWorkspace(workspaceId);
     if (!workspace) throw new Error(`Workspace not found: ${workspaceId}`);
 
-    const project = appState.rescanProject(workspace.projectId);
-    if (project) {
-      const updated = project.workspaces.find((w) => w.id === workspaceId);
-      if (updated) pushFn("workspace:changed", { workspace: updated });
-    }
+    appState.rescanProject(workspace.projectId);
+    pushPatch({ projects: appState.getState().projects });
   });
 
   registerMethod("workspaces.delete", async (params) => {
@@ -61,24 +56,19 @@ export function registerWorkspaceHandlers(
     terminalManager.destroyByWorkspaceId(workspaceId);
     await scriptSupervisor.stopAll(project.slug, workspace.slug);
 
-    gitWatcher.unwatchProject(project.slug);
-
     // Stop file watchers that hold directory handles (prevents EPERM on Windows)
-    await watcher.stop();
-    await envWatcher.stop();
+    projectsDirWatcher.stop();
 
     const projectDir = appState.getProjectDir(project.slug);
     const wsDir = appState.getWorkspaceDir(workspaceId);
     try {
       await cleanupWorktrees(projectDir, wsDir);
     } finally {
-      await watcher.start();
-      await envWatcher.start();
+      await projectsDirWatcher.start();
     }
 
-    gitWatcher.watchProject(project.slug);
     appState.rescanProject(project.slug);
-    pushFn("state:resync", { state: appState.getState() });
+    pushPatch({ projects: appState.getState().projects });
 
     sessionWatcher.refresh();
   });
@@ -122,7 +112,7 @@ async function createWorkspace(
   appState: AppState,
   projectId: string,
   input: CreateWorkspaceInput,
-  pushFn: PushFn,
+  pushPatch: PushPatchFn,
 ): Promise<Workspace> {
   const project = appState.getProject(projectId);
   if (!project) throw new Error(`Project not found: ${projectId}`);
@@ -184,7 +174,7 @@ async function createWorkspace(
 
   // Rescan project and push updated state
   appState.rescanProject(project.slug);
-  pushFn("state:resync", { state: appState.getState() });
+  pushPatch({ projects: appState.getState().projects });
 
   const workspace = appState.getWorkspace(`${project.slug}/${input.slug}`);
   if (!workspace) throw new Error("Workspace created but not found in state after rescan");

@@ -75,29 +75,15 @@ describe("useScriptsStore", () => {
   // -----------------------------------------------------------------------
 
   describe("loadConfig()", () => {
-    it("sets loading, calls transport, sets config", async () => {
-      const config = makeConfig({ hasFile: true });
-      mockRequest.mockResolvedValueOnce(config);
+    it("sets loading, currentWorkspaceId, resets config, and clears loading", async () => {
+      await useScriptsStore.getState().loadConfig("proj1/ws1");
 
-      const promise = useScriptsStore.getState().loadConfig("proj1/ws1");
-
-      expect(useScriptsStore.getState().loading).toBe(true);
+      // loadConfig no longer calls transport — config comes from app store via state:patch
+      expect(mockRequest).not.toHaveBeenCalled();
       expect(useScriptsStore.getState().currentWorkspaceId).toBe("proj1/ws1");
       expect(useScriptsStore.getState().selectedLog).toBeNull();
       expect(useScriptsStore.getState().activeTab).toBe("scripts");
-
-      await promise;
-
-      expect(mockRequest).toHaveBeenCalledWith("scripts.load", { workspaceId: "proj1/ws1" });
-      expect(useScriptsStore.getState().config).toEqual(config);
-      expect(useScriptsStore.getState().loading).toBe(false);
-    });
-
-    it("clears loading on error", async () => {
-      mockRequest.mockRejectedValueOnce(new Error("fail"));
-
-      await useScriptsStore.getState().loadConfig("proj1/ws1");
-
+      expect(useScriptsStore.getState().config).toBeNull();
       expect(useScriptsStore.getState().loading).toBe(false);
     });
 
@@ -106,7 +92,6 @@ describe("useScriptsStore", () => {
         selectedLog: { service: "api", script: "dev" },
         activeTab: "output",
       });
-      mockRequest.mockResolvedValueOnce(makeConfig());
 
       await useScriptsStore.getState().loadConfig("proj1/ws2");
 
@@ -345,123 +330,25 @@ describe("useScriptsStore", () => {
   // -----------------------------------------------------------------------
 
   describe("subscribePush()", () => {
-    it("subscribes to three events and returns unsubscribe", () => {
+    it("subscribes to two events and returns unsubscribe", () => {
       const unsub1 = vi.fn();
       const unsub2 = vi.fn();
-      const unsub3 = vi.fn();
-      mockSubscribe
-        .mockReturnValueOnce(unsub1)
-        .mockReturnValueOnce(unsub2)
-        .mockReturnValueOnce(unsub3);
+      mockSubscribe.mockReturnValueOnce(unsub1).mockReturnValueOnce(unsub2);
 
       const unsubAll = useScriptsStore.getState().subscribePush();
 
-      expect(mockSubscribe).toHaveBeenCalledWith("scripts:status", expect.any(Function));
       expect(mockSubscribe).toHaveBeenCalledWith("scripts:log", expect.any(Function));
-      expect(mockSubscribe).toHaveBeenCalledWith("scripts:reload", expect.any(Function));
+      expect(mockSubscribe).toHaveBeenCalledWith("scripts:discovering", expect.any(Function));
+      expect(mockSubscribe).not.toHaveBeenCalledWith("scripts:status", expect.any(Function));
+      expect(mockSubscribe).not.toHaveBeenCalledWith("scripts:reload", expect.any(Function));
 
       unsubAll();
       expect(unsub1).toHaveBeenCalled();
       expect(unsub2).toHaveBeenCalled();
-      expect(unsub3).toHaveBeenCalled();
-    });
-
-    it("scripts:status updates config statuses for matching workspace", () => {
-      const status = makeScriptStatus({ health: "stopped" });
-      const config = makeConfig({ statuses: [status] });
-      useScriptsStore.setState({ config, currentWorkspaceId: "proj1/ws1" });
-
-      // biome-ignore lint: test mock
-      mockSubscribe.mockImplementation((event: string, cb: (...args: any[]) => void) => {
-        if (event === "scripts:status") {
-          cb({
-            service: "api",
-            script: "dev",
-            status: { ...status, health: "running", pid: 1234 },
-          });
-        }
-        return vi.fn();
-      });
-
-      useScriptsStore.getState().subscribePush();
-
-      const updatedStatuses = useScriptsStore.getState().config!.statuses;
-      expect(updatedStatuses[0]!.health).toBe("running");
-      expect(updatedStatuses[0]!.pid).toBe(1234);
-    });
-
-    it("scripts:status ignores events from different workspace", () => {
-      const config = makeConfig({ statuses: [] });
-      useScriptsStore.setState({ config, currentWorkspaceId: "proj1/ws1" });
-
-      // biome-ignore lint: test mock
-      mockSubscribe.mockImplementation((event: string, cb: (...args: any[]) => void) => {
-        if (event === "scripts:status") {
-          cb({
-            service: "api",
-            script: "dev",
-            status: makeScriptStatus({ projectId: "proj2", workspace: "ws2" }),
-          });
-        }
-        return vi.fn();
-      });
-
-      useScriptsStore.getState().subscribePush();
-
-      expect(useScriptsStore.getState().config!.statuses).toHaveLength(0);
-    });
-
-    it("scripts:status adds new status if not found", () => {
-      const config = makeConfig({ statuses: [] });
-      useScriptsStore.setState({ config, currentWorkspaceId: "proj1/ws1" });
-
-      const newStatus = makeScriptStatus({
-        scriptId: "8080:api:dev",
-        projectId: "proj1",
-        workspace: "ws1",
-        health: "running",
-      });
-
-      // biome-ignore lint: test mock
-      mockSubscribe.mockImplementation((event: string, cb: (...args: any[]) => void) => {
-        if (event === "scripts:status") {
-          cb({ service: "api", script: "dev", status: newStatus });
-        }
-        return vi.fn();
-      });
-
-      useScriptsStore.getState().subscribePush();
-
-      expect(useScriptsStore.getState().config!.statuses).toHaveLength(1);
-      expect(useScriptsStore.getState().config!.statuses[0]).toEqual(newStatus);
-    });
-
-    it("scripts:status skips update if nothing changed", () => {
-      const status = makeScriptStatus({ health: "running", pid: 1234, exitCode: null });
-      const config = makeConfig({ statuses: [status] });
-      useScriptsStore.setState({ config, currentWorkspaceId: "proj1/ws1" });
-
-      const setMock = vi.spyOn(useScriptsStore, "setState");
-
-      // biome-ignore lint: test mock
-      mockSubscribe.mockImplementation((event: string, cb: (...args: any[]) => void) => {
-        if (event === "scripts:status") {
-          // Same health, pid, exitCode = no-op
-          cb({ service: "api", script: "dev", status: { ...status } });
-        }
-        return vi.fn();
-      });
-
-      useScriptsStore.getState().subscribePush();
-
-      // Should not have called setState beyond subscribePush setup
-      // The status callback should return early
-      const configAfter = useScriptsStore.getState().config!;
-      expect(configAfter.statuses[0]!.health).toBe("running");
-      setMock.mockRestore();
     });
 
     it("scripts:log appends log line", () => {
+      vi.useFakeTimers();
       const logs = new Map<string, string[]>();
       logs.set("8080:api:dev", ["line1"]);
       useScriptsStore.setState({ logs });
@@ -475,11 +362,14 @@ describe("useScriptsStore", () => {
       });
 
       useScriptsStore.getState().subscribePush();
+      vi.advanceTimersByTime(50);
 
       expect(useScriptsStore.getState().logs.get("8080:api:dev")).toEqual(["line1", "line2"]);
+      vi.useRealTimers();
     });
 
     it("scripts:log creates new log entry if none exists", () => {
+      vi.useFakeTimers();
       // biome-ignore lint: test mock
       mockSubscribe.mockImplementation((event: string, cb: (...args: any[]) => void) => {
         if (event === "scripts:log") {
@@ -489,11 +379,14 @@ describe("useScriptsStore", () => {
       });
 
       useScriptsStore.getState().subscribePush();
+      vi.advanceTimersByTime(50);
 
       expect(useScriptsStore.getState().logs.get("new-script")).toEqual(["first line"]);
+      vi.useRealTimers();
     });
 
     it("scripts:log caps at MAX_LOG_LINES (1000)", () => {
+      vi.useFakeTimers();
       const existingLines = Array.from({ length: 1000 }, (_, i) => `line-${i}`);
       const logs = new Map<string, string[]>();
       logs.set("script-1", existingLines);
@@ -508,50 +401,13 @@ describe("useScriptsStore", () => {
       });
 
       useScriptsStore.getState().subscribePush();
+      vi.advanceTimersByTime(50);
 
       const logLines = useScriptsStore.getState().logs.get("script-1")!;
       expect(logLines).toHaveLength(1000);
       expect(logLines[logLines.length - 1]).toBe("overflow-line");
       expect(logLines[0]).toBe("line-1"); // line-0 was dropped
-    });
-
-    it("scripts:reload clears discovering flag", () => {
-      useScriptsStore.setState({
-        discoveringProjects: new Set(["proj1"]),
-        currentWorkspaceId: "proj1/default",
-      });
-
-      // biome-ignore lint: test mock
-      mockSubscribe.mockImplementation((event: string, cb: (...args: any[]) => void) => {
-        if (event === "scripts:reload") {
-          cb({ projectId: "proj1" });
-        }
-        return vi.fn();
-      });
-
-      useScriptsStore.getState().subscribePush();
-
-      expect(useScriptsStore.getState().discoveringProjects.has("proj1")).toBe(false);
-    });
-
-    it("scripts:reload clears discoveryErrors for the project", () => {
-      useScriptsStore.setState({
-        discoveringProjects: new Set(["proj1"]),
-        discoveryErrors: new Map([["proj1", "some error"]]),
-        currentWorkspaceId: "proj1/default",
-      });
-
-      // biome-ignore lint: test mock
-      mockSubscribe.mockImplementation((event: string, cb: (...args: any[]) => void) => {
-        if (event === "scripts:reload") {
-          cb({ projectId: "proj1" });
-        }
-        return vi.fn();
-      });
-
-      useScriptsStore.getState().subscribePush();
-
-      expect(useScriptsStore.getState().discoveryErrors.has("proj1")).toBe(false);
+      vi.useRealTimers();
     });
 
     it("scripts:discovering adds projectId to discoveringProjects", () => {
@@ -568,25 +424,6 @@ describe("useScriptsStore", () => {
       useScriptsStore.getState().subscribePush();
 
       expect(useScriptsStore.getState().discoveringProjects.has("proj1")).toBe(true);
-    });
-
-    it("scripts:status queues as pending when config is null", () => {
-      useScriptsStore.setState({ config: null, currentWorkspaceId: "proj1/ws1" });
-
-      const status = makeScriptStatus({ projectId: "proj1", workspace: "ws1" });
-
-      // biome-ignore lint: test mock
-      mockSubscribe.mockImplementation((event: string, cb: (...args: any[]) => void) => {
-        if (event === "scripts:status") {
-          cb({ service: "api", script: "dev", status });
-        }
-        return vi.fn();
-      });
-
-      useScriptsStore.getState().subscribePush();
-
-      expect(useScriptsStore.getState().pendingStatuses).toHaveLength(1);
-      expect(useScriptsStore.getState().pendingStatuses[0]).toEqual(status);
     });
   });
 
@@ -701,76 +538,6 @@ describe("useScriptsStore", () => {
 
       const { result } = renderHook(() => useDiscoveryError());
       expect(result.current).toBeNull();
-    });
-  });
-
-  // -----------------------------------------------------------------------
-  // loadConfig — pending status application
-  // -----------------------------------------------------------------------
-
-  describe("loadConfig() with pending statuses", () => {
-    it("applies pending statuses that match the workspace on config load", async () => {
-      const pendingStatus = makeScriptStatus({
-        scriptId: "8080:api:dev",
-        projectId: "proj1",
-        workspace: "ws1",
-        health: "running",
-        pid: 1234,
-      });
-      useScriptsStore.setState({ pendingStatuses: [pendingStatus] });
-
-      const config = makeConfig({
-        statuses: [
-          makeScriptStatus({
-            scriptId: "8080:api:dev",
-            health: "stopped",
-          }),
-        ],
-      });
-      mockRequest.mockResolvedValueOnce(config);
-
-      await useScriptsStore.getState().loadConfig("proj1/ws1");
-
-      const statuses = useScriptsStore.getState().config!.statuses;
-      expect(statuses[0]!.health).toBe("running");
-      expect(statuses[0]!.pid).toBe(1234);
-      expect(useScriptsStore.getState().pendingStatuses).toHaveLength(0);
-    });
-
-    it("ignores pending statuses from a different workspace", async () => {
-      const pendingStatus = makeScriptStatus({
-        scriptId: "9090:web:dev",
-        projectId: "proj2",
-        workspace: "ws2",
-        health: "running",
-      });
-      useScriptsStore.setState({ pendingStatuses: [pendingStatus] });
-
-      const config = makeConfig({ statuses: [] });
-      mockRequest.mockResolvedValueOnce(config);
-
-      await useScriptsStore.getState().loadConfig("proj1/ws1");
-
-      expect(useScriptsStore.getState().config!.statuses).toHaveLength(0);
-      expect(useScriptsStore.getState().pendingStatuses).toHaveLength(0);
-    });
-
-    it("adds pending status as new entry if not found in config", async () => {
-      const pendingStatus = makeScriptStatus({
-        scriptId: "8080:api:dev",
-        projectId: "proj1",
-        workspace: "ws1",
-        health: "running",
-      });
-      useScriptsStore.setState({ pendingStatuses: [pendingStatus] });
-
-      const config = makeConfig({ statuses: [] });
-      mockRequest.mockResolvedValueOnce(config);
-
-      await useScriptsStore.getState().loadConfig("proj1/ws1");
-
-      expect(useScriptsStore.getState().config!.statuses).toHaveLength(1);
-      expect(useScriptsStore.getState().config!.statuses[0]!.scriptId).toBe("8080:api:dev");
     });
   });
 });

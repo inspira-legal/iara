@@ -1,7 +1,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as crypto from "node:crypto";
-import type { EssencialKey, ResolvedServiceDef } from "@iara/contracts";
+import type { EssencialKey, ResolvedServiceDef, ScriptsConfig } from "@iara/contracts";
 import { ScriptSupervisor } from "@iara/orchestrator/supervisor";
 import type { InterpolationContext } from "@iara/orchestrator/interpolation";
 import { parseScriptsYaml } from "@iara/orchestrator/parser";
@@ -18,7 +18,7 @@ import { registerMethod } from "../router.js";
 import { runClaude, activeRuns, streamClaudeRun } from "../services/claude-runner.js";
 import { getEnvForService } from "../services/env.js";
 import { AppState } from "../services/state.js";
-import type { PushFn } from "./index.js";
+import type { PushFn, PushPatchFn } from "./index.js";
 
 /** Track projects with in-flight discovery to avoid duplicates */
 const pendingDiscovery = new Set<string>();
@@ -170,6 +170,7 @@ export function triggerDiscovery(
   appState: AppState,
   projectSlug: string,
   pushFn: PushFn,
+  pushPatch: PushPatchFn,
   existingYaml?: string,
   existingToml?: string,
   userPrompt?: string,
@@ -217,7 +218,38 @@ export function triggerDiscovery(
     () => {
       pendingDiscovery.delete(projectSlug);
       discoveryRequestMap.delete(requestId);
-      pushFn("scripts:reload", { projectId: projectSlug });
+      // Push updated scripts config for all workspaces in this project
+      const project = appState.getProject(projectSlug);
+      if (project) {
+        const scriptsUpdate: Record<string, ScriptsConfig> = {};
+        let services: ResolvedServiceDef[] = [];
+        let hasFile = false;
+        try {
+          if (fs.existsSync(pp.scriptsYaml)) {
+            const content = fs.readFileSync(pp.scriptsYaml, "utf-8");
+            const defs = parseScriptsYaml(content, repoNames);
+            services = defs.map(
+              (svc) =>
+                Object.assign(svc, {
+                  resolvedPort: typeof svc.config.port === "number" ? svc.config.port : 0,
+                  resolvedEnv: {},
+                }) as ResolvedServiceDef,
+            );
+            hasFile = true;
+          }
+        } catch {
+          // Best effort
+        }
+        for (const ws of project.workspaces) {
+          scriptsUpdate[ws.id] = {
+            services,
+            statuses: [],
+            hasFile,
+            filePath: pp.scriptsYaml,
+          };
+        }
+        pushPatch({ scripts: scriptsUpdate });
+      }
     },
   );
 
@@ -228,42 +260,8 @@ export function registerScriptHandlers(
   appState: AppState,
   supervisor: ScriptSupervisor,
   pushFn: PushFn,
+  pushPatch: PushPatchFn,
 ): void {
-  registerMethod("scripts.load", async (params) => {
-    const workspace = appState.getWorkspace(params.workspaceId);
-    if (!workspace) throw new Error(`Workspace not found: ${params.workspaceId}`);
-
-    const projectSlug = workspace.projectId;
-    const yamlPath = getScriptsYamlPath(appState, projectSlug);
-    if (!fs.existsSync(yamlPath)) {
-      // Auto-trigger discovery if iara-scripts.yaml doesn't exist yet
-      try {
-        triggerDiscovery(appState, projectSlug, pushFn);
-      } catch {
-        // Best effort — discovery failure is non-fatal
-      }
-
-      return {
-        services: [],
-        statuses: supervisor.status(projectSlug, workspace.slug),
-        hasFile: false,
-        filePath: yamlPath,
-      };
-    }
-
-    const { services } = loadResolvedConfig(appState, projectSlug, workspace.slug);
-
-    // Auto-detect services already running on their ports
-    await supervisor.autoDetect(projectSlug, workspace.slug, services);
-
-    return {
-      services,
-      statuses: supervisor.status(projectSlug, workspace.slug),
-      hasFile: true,
-      filePath: yamlPath,
-    };
-  });
-
   registerMethod("scripts.run", async (params) => {
     const workspace = appState.getWorkspace(params.workspaceId);
     if (!workspace) throw new Error(`Workspace not found: ${params.workspaceId}`);
@@ -322,13 +320,6 @@ export function registerScriptHandlers(
     await supervisor.stopAll(workspace.projectId, workspace.slug);
   });
 
-  registerMethod("scripts.status", async (params) => {
-    const workspace = appState.getWorkspace(params.workspaceId);
-    if (!workspace) throw new Error(`Workspace not found: ${params.workspaceId}`);
-
-    return supervisor.status(workspace.projectId, workspace.slug);
-  });
-
   registerMethod("scripts.logs", async (params) => {
     return supervisor.logs(params.scriptId, params.limit);
   });
@@ -345,10 +336,26 @@ export function registerScriptHandlers(
       ? fs.readFileSync(pp.envToml, "utf-8")
       : undefined;
 
-    const requestId = triggerDiscovery(appState, project.slug, pushFn, existingYaml, existingToml);
+    const requestId = triggerDiscovery(
+      appState,
+      project.slug,
+      pushFn,
+      pushPatch,
+      existingYaml,
+      existingToml,
+    );
     if (requestId === null) {
-      // Discovery skipped (no repos or no build config) — clear discovering state
-      pushFn("scripts:reload", { projectId: project.slug });
+      // Discovery skipped (no repos or no build config) — push empty scripts to clear discovering state
+      const scriptsUpdate: Record<string, ScriptsConfig> = {};
+      for (const ws of project.workspaces) {
+        scriptsUpdate[ws.id] = {
+          services: [],
+          statuses: [],
+          hasFile: false,
+          filePath: pp.scriptsYaml,
+        };
+      }
+      pushPatch({ scripts: scriptsUpdate });
     }
     return { requestId: requestId ?? "" };
   });

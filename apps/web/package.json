@@ -17,6 +17,7 @@
     "@dnd-kit/sortable": "^10.0.0",
     "@dnd-kit/utilities": "^3.2.2",
     "@iara/contracts": "workspace:*",
+    "@iara/shared": "workspace:*",
     "@tanstack/react-router": "^1.160.2",
     "@xterm/addon-clipboard": "^0.2.0",
     "@xterm/addon-fit": "^0.11.0",

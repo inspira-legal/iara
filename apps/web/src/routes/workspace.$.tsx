@@ -1,9 +1,9 @@
 import { useCallback, useEffect } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { GitFork } from "lucide-react";
-import type { RepoInfo } from "@iara/contracts";
 import { useAppStore } from "~/stores/app";
 import { useActiveSessionStore } from "~/stores/activeSession";
+import { useRepoPolling } from "~/hooks/useRepoPolling";
 import { RepoCard } from "~/components/RepoCard";
 import { SessionList } from "~/components/SessionList";
 import { WorkspacePicker } from "~/components/WorkspacePicker";
@@ -24,7 +24,7 @@ function WorkspaceDetailPage() {
     return s.getProject(projectId);
   });
   const repoInfo = useAppStore((s) => s.getRepoInfo(workspaceId!));
-  const refreshRepoInfo = useAppStore((s) => s.refreshRepoInfo);
+  useRepoPolling(workspaceId);
 
   // Redirect if workspace doesn't exist
   useEffect(() => {
@@ -32,22 +32,6 @@ function WorkspaceDetailPage() {
       void navigate({ to: "/" });
     }
   }, [workspace, navigate]);
-
-  // Load repo info
-  useEffect(() => {
-    if (project && workspaceId) {
-      void refreshRepoInfo(project.id, workspaceId, workspaceId);
-    }
-  }, [project, workspaceId, refreshRepoInfo]);
-
-  const handleRepoInfoUpdate = useCallback(
-    (updated: RepoInfo[]) => {
-      useAppStore.setState((s) => ({
-        repoInfo: { ...s.repoInfo, [workspaceId!]: updated },
-      }));
-    },
-    [workspaceId],
-  );
 
   const handleLaunch = useCallback(
     async (resumeSessionId?: string, sessionCwd?: string) => {
@@ -92,7 +76,6 @@ function WorkspaceDetailPage() {
                     repo={repo}
                     workspaceId={workspaceId}
                     projectId={project.id}
-                    onRepoInfoUpdate={handleRepoInfoUpdate}
                   />
                 ))}
               </div>

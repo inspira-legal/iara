@@ -132,15 +132,24 @@ export function BottomPanel({ panelRef }: { panelRef: RefObject<PanelImperativeH
     }
   }, [workspace, collapsed, panelRef]);
 
-  // Reload config when scripts.yaml changes on disk
+  // Sync config from app store when scripts data changes via state:patch
+  const appScripts = useAppStore((s) => (workspace ? s.scripts[workspace] : null));
+  const appStatuses = useAppStore((s) => (workspace ? s.scriptStatuses[workspace] : null));
   useEffect(() => {
-    const unsub = transport.subscribe("scripts:reload", ({ projectId: evtProjectId }) => {
-      if (workspace && projectId && evtProjectId === projectId) {
-        void loadConfig(workspace);
+    if (appScripts && workspace) {
+      const merged = appStatuses ? { ...appScripts, statuses: appStatuses } : appScripts;
+      useScriptsStore.setState({ config: merged, loading: false });
+      // Clear discovering state for this project
+      if (projectId) {
+        const next = new Set(useScriptsStore.getState().discoveringProjects);
+        if (next.delete(projectId)) {
+          const errors = new Map(useScriptsStore.getState().discoveryErrors);
+          errors.delete(projectId);
+          useScriptsStore.setState({ discoveringProjects: next, discoveryErrors: errors });
+        }
       }
-    });
-    return unsub;
-  }, [projectId, workspace, loadConfig]);
+    }
+  }, [appScripts, appStatuses, workspace, projectId]);
 
   // Auto-discover when project has no scripts.yaml (once per project)
   const discoveredForRef = useRef<string | null>(null);
