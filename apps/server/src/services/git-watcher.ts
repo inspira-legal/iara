@@ -18,7 +18,7 @@ export class GitWatcher {
   private watcher: ShallowWatcher;
   private debounce: ReturnType<typeof createKeyedDebounce<string>>;
   private fileToKey = new Map<string, string>();
-  private keyToSlug = new Map<string, { projectSlug: string; workspaceId: string | undefined }>();
+  private keyToSlug = new Map<string, { projectSlug: string; workspaceId: string }>();
   private activeWorkspaceId: string | null = null;
 
   constructor(
@@ -26,7 +26,9 @@ export class GitWatcher {
     private readonly pushPatch: PushPatchFn,
   ) {
     this.watcher = new ShallowWatcher({
-      onChange: (watchedPath) => {
+      onChange: (watchedPath, _eventType, filename) => {
+        // Only react to changes in index or HEAD files within .git dirs
+        if (filename && filename !== "index" && filename !== "HEAD") return;
         const key = this.fileToKey.get(watchedPath);
         if (key) this.debounce.schedule(key);
       },
@@ -57,11 +59,13 @@ export class GitWatcher {
   private watchProjectRoot(projectSlug: string): void {
     const projectDir = this.appState.getProjectDir(projectSlug);
     const repoNames = this.appState.discoverRepos(projectSlug);
-    const key = `project:${projectSlug}`;
+    const project = this.appState.getProject(projectSlug);
+    const mainWs = project?.workspaces.find((w) => w.slug === "main");
+    const wsId = mainWs?.id ?? `${projectSlug}/main`;
 
     for (const repoName of repoNames) {
       const repoDir = path.join(projectDir, repoName);
-      this.watchGitFiles(repoDir, key, projectSlug, undefined);
+      this.watchGitFiles(repoDir, wsId, projectSlug, wsId);
     }
   }
 
@@ -92,23 +96,22 @@ export class GitWatcher {
     repoDir: string,
     key: string,
     projectSlug: string,
-    workspaceId: string | undefined,
+    workspaceId: string,
   ): void {
     const gitDir = this.resolveGitDir(repoDir);
     if (!gitDir) return;
 
     this.keyToSlug.set(key, { projectSlug, workspaceId });
 
-    for (const file of ["index", "HEAD"]) {
-      const filePath = path.join(gitDir, file);
-      if (!this.watcher.has(filePath)) {
-        try {
-          fs.statSync(filePath);
-          this.watcher.add(filePath);
-          this.fileToKey.set(filePath, key);
-        } catch {
-          // File doesn't exist yet
-        }
+    // Watch the .git directory (not individual files) to survive atomic
+    // renames that git uses when updating index/HEAD on Linux.
+    if (!this.watcher.has(gitDir)) {
+      try {
+        fs.statSync(gitDir);
+        this.watcher.add(gitDir);
+        this.fileToKey.set(gitDir, key);
+      } catch {
+        // .git dir doesn't exist yet
       }
     }
   }
@@ -139,15 +142,11 @@ export class GitWatcher {
     this.debounce.cancel(key);
   }
 
-  private async refreshAndPush(
-    projectSlug: string,
-    workspaceId: string | undefined,
-  ): Promise<void> {
+  private async refreshAndPush(projectSlug: string, workspaceId: string): Promise<void> {
     try {
-      const wsSlug = workspaceId?.split("/")[1];
+      const wsSlug = workspaceId.split("/")[1];
       const repoInfo = await getRepoInfo(this.appState, projectSlug, wsSlug);
-      const key = workspaceId ?? `project:${projectSlug}`;
-      const update: Record<string, RepoInfo[]> = { [key]: repoInfo };
+      const update: Record<string, RepoInfo[]> = { [workspaceId]: repoInfo };
       this.pushPatch({ repoInfo: update });
     } catch {
       // Repo may have been deleted
@@ -155,8 +154,10 @@ export class GitWatcher {
   }
 
   unwatchProject(projectSlug: string): void {
-    const key = `project:${projectSlug}`;
-    this.removeWatchesForKey(key);
+    const project = this.appState.getProject(projectSlug);
+    const mainWs = project?.workspaces.find((w) => w.slug === "main");
+    const mainKey = mainWs?.id ?? `${projectSlug}/main`;
+    this.removeWatchesForKey(mainKey);
 
     // Also remove any active workspace watches for this project
     if (this.activeWorkspaceId?.startsWith(`${projectSlug}/`)) {
