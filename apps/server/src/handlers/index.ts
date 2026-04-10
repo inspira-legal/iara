@@ -3,9 +3,8 @@ import type { NotificationService } from "../services/notifications.js";
 import type { SessionWatcher } from "../services/session-watcher.js";
 import type { TerminalManager } from "../services/terminal.js";
 import type { AppState } from "../services/state.js";
-import type { EnvWatcher } from "../services/env-watcher.js";
 import type { GitWatcher } from "../services/git-watcher.js";
-import type { ProjectsWatcher } from "../services/watcher.js";
+import type { ProjectsDirWatcher } from "../services/projects-dir-watcher.js";
 import { registerAppHandlers } from "./app.js";
 import { registerScriptHandlers } from "./scripts.js";
 import { registerEnvHandlers } from "./env.js";
@@ -26,13 +25,12 @@ export type { PushFn, PushPatchFn };
 
 export interface HandlerDeps {
   appState: AppState;
-  watcher: ProjectsWatcher;
+  projectsDirWatcher: ProjectsDirWatcher;
   gitWatcher: GitWatcher;
   scriptSupervisor: ScriptSupervisor;
   notificationService: NotificationService;
   terminalManager: TerminalManager;
   sessionWatcher: SessionWatcher;
-  envWatcher: EnvWatcher;
   pushFn: PushFn;
   pushPatch: PushPatchFn;
 }
@@ -50,8 +48,7 @@ export function registerAllHandlers(deps: HandlerDeps): void {
   registerAppHandlers(deps.appState, deps.scriptSupervisor);
   registerProjectHandlers(
     deps.appState,
-    deps.watcher,
-    deps.envWatcher,
+    deps.projectsDirWatcher,
     deps.terminalManager,
     deps.scriptSupervisor,
     deps.gitWatcher,
@@ -61,8 +58,7 @@ export function registerAllHandlers(deps: HandlerDeps): void {
   );
   registerWorkspaceHandlers(
     deps.appState,
-    deps.watcher,
-    deps.envWatcher,
+    deps.projectsDirWatcher,
     deps.terminalManager,
     deps.scriptSupervisor,
     deps.gitWatcher,
@@ -72,7 +68,7 @@ export function registerAllHandlers(deps: HandlerDeps): void {
   );
   registerPromptHandlers(deps.appState);
   registerScriptHandlers(deps.appState, deps.scriptSupervisor, deps.pushFn, deps.pushPatch);
-  registerEnvHandlers(deps.appState, deps.envWatcher, deps.pushPatch);
+  registerEnvHandlers(deps.appState, deps.projectsDirWatcher, deps.pushPatch);
   registerGitHandlers();
   registerNotificationHandlers(deps.notificationService);
   registerFileHandlers(deps.appState);

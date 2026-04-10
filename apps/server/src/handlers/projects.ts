@@ -20,8 +20,7 @@ import type { TerminalManager } from "../services/terminal.js";
 import type { GitWatcher } from "../services/git-watcher.js";
 import type { SessionWatcher } from "../services/session-watcher.js";
 import type { AppState } from "../services/state.js";
-import type { EnvWatcher } from "../services/env-watcher.js";
-import type { ProjectsWatcher } from "../services/watcher.js";
+import type { ProjectsDirWatcher } from "../services/projects-dir-watcher.js";
 import type { PushFn, PushPatchFn } from "./index.js";
 import { triggerDiscovery, cancelDiscovery } from "./scripts.js";
 
@@ -66,8 +65,7 @@ function repoNameFromSource(source: string): string {
 
 export function registerProjectHandlers(
   appState: AppState,
-  watcher: ProjectsWatcher,
-  envWatcher: EnvWatcher,
+  projectsDirWatcher: ProjectsDirWatcher,
   terminalManager: TerminalManager,
   scriptSupervisor: ScriptSupervisor,
   gitWatcher: GitWatcher,
@@ -143,23 +141,20 @@ export function registerProjectHandlers(
     gitWatcher.unwatchProject(existing.slug);
 
     // Stop file watchers that hold directory handles (prevents EPERM on Windows)
-    await watcher.stop();
-    await envWatcher.stop();
+    projectsDirWatcher.stop();
 
     const projectDir = appState.getProjectDir(existing.slug);
     try {
       await rmGraceful(projectDir);
     } catch (err) {
-      await watcher.start();
-      await envWatcher.start();
+      await projectsDirWatcher.start();
       throw new Error(
         `Failed to delete project directory: ${err instanceof Error ? err.message : String(err)}`,
         { cause: err },
       );
     }
 
-    await watcher.start();
-    await envWatcher.start();
+    await projectsDirWatcher.start();
 
     appState.scan();
     sessionWatcher.refresh();

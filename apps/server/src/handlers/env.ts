@@ -6,13 +6,13 @@ import {
   validateEntries,
   writeEnvToml,
 } from "../services/env.js";
-import type { EnvWatcher } from "../services/env-watcher.js";
+import type { ProjectsDirWatcher } from "../services/projects-dir-watcher.js";
 import type { AppState } from "../services/state.js";
 import type { PushPatchFn } from "./index.js";
 
 export function registerEnvHandlers(
   appState: AppState,
-  envWatcher: EnvWatcher,
+  projectsDirWatcher: ProjectsDirWatcher,
   pushPatch: PushPatchFn,
 ): void {
   registerMethod("env.write", async (params) => {
@@ -27,7 +27,7 @@ export function registerEnvHandlers(
     const wsDir = appState.getWorkspaceDir(params.workspaceId);
 
     // Suppress watcher for this write (R6.5)
-    envWatcher.suppressWrite(wsDir);
+    projectsDirWatcher.suppressWrite(wsDir);
 
     writeEnvToml(wsDir, params.services);
 
@@ -47,7 +47,7 @@ export function registerEnvHandlers(
     const wsDir = appState.getWorkspaceDir(params.workspaceId);
 
     // Suppress watcher for this delete
-    envWatcher.suppressWrite(wsDir);
+    projectsDirWatcher.suppressWrite(wsDir);
 
     deleteEnvToml(wsDir);
 

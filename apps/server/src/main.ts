@@ -9,9 +9,8 @@ import { SocketServer, registerSocketHandlers } from "./socket.js";
 import { syncShellEnvironment } from "./services/shell-env.js";
 import { generatePluginDir } from "./services/plugins.js";
 import { SessionWatcher } from "./services/session-watcher.js";
-import { EnvWatcher } from "./services/env-watcher.js";
 import { AppState } from "./services/state.js";
-import { ProjectsWatcher } from "./services/watcher.js";
+import { ProjectsDirWatcher } from "./services/projects-dir-watcher.js";
 import { GitWatcher } from "./services/git-watcher.js";
 import { createPushPatch } from "./services/push.js";
 import * as os from "node:os";
@@ -52,23 +51,20 @@ registerSocketHandlers(socketServer, pushAll);
 const sessionWatcher = new SessionWatcher(pushPatch, appState);
 
 // FS watchers
-const watcher = new ProjectsWatcher(projectsDir, appState, pushPatch);
-await watcher.start();
+const projectsDirWatcher = new ProjectsDirWatcher(projectsDir, appState, pushPatch);
+await projectsDirWatcher.start();
 const gitWatcher = new GitWatcher(appState, pushPatch);
 gitWatcher.start();
-const envWatcher = new EnvWatcher(projectsDir, appState);
-await envWatcher.start();
 
 // Register all WS handlers
 registerAllHandlers({
   appState,
-  watcher,
+  projectsDirWatcher,
   gitWatcher,
   scriptSupervisor,
   notificationService,
   terminalManager,
   sessionWatcher,
-  envWatcher,
   pushFn: pushAll,
   pushPatch,
 });
@@ -111,13 +107,10 @@ httpServer.on("listening", async () => {
 function shutdown() {
   console.log("Shutting down...");
   try {
-    watcher.stop();
+    projectsDirWatcher.stop();
   } catch {}
   try {
     gitWatcher.stop();
-  } catch {}
-  try {
-    envWatcher.stop();
   } catch {}
   try {
     terminalManager.destroyAll();

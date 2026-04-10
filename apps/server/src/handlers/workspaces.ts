@@ -11,8 +11,7 @@ import type { GitWatcher } from "../services/git-watcher.js";
 import { registerMethod } from "../router.js";
 import type { SessionWatcher } from "../services/session-watcher.js";
 import { AppState } from "../services/state.js";
-import type { EnvWatcher } from "../services/env-watcher.js";
-import type { ProjectsWatcher } from "../services/watcher.js";
+import type { ProjectsDirWatcher } from "../services/projects-dir-watcher.js";
 import { copyEnvTomlWithPortOffset } from "../services/env.js";
 import { getRepoInfo } from "../services/repos.js";
 import { generateCodeWorkspace } from "../services/code-workspace.js";
@@ -20,8 +19,7 @@ import type { PushFn, PushPatchFn } from "./index.js";
 
 export function registerWorkspaceHandlers(
   appState: AppState,
-  watcher: ProjectsWatcher,
-  envWatcher: EnvWatcher,
+  projectsDirWatcher: ProjectsDirWatcher,
   terminalManager: TerminalManager,
   scriptSupervisor: ScriptSupervisor,
   gitWatcher: GitWatcher,
@@ -62,16 +60,14 @@ export function registerWorkspaceHandlers(
     gitWatcher.unwatchProject(project.slug);
 
     // Stop file watchers that hold directory handles (prevents EPERM on Windows)
-    await watcher.stop();
-    await envWatcher.stop();
+    projectsDirWatcher.stop();
 
     const projectDir = appState.getProjectDir(project.slug);
     const wsDir = appState.getWorkspaceDir(workspaceId);
     try {
       await cleanupWorktrees(projectDir, wsDir);
     } finally {
-      await watcher.start();
-      await envWatcher.start();
+      await projectsDirWatcher.start();
     }
 
     gitWatcher.watchProject(project.slug);
