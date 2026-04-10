@@ -17,7 +17,7 @@ import {
 } from "../services/repos.js";
 import type { ScriptSupervisor } from "@iara/orchestrator/supervisor";
 import type { TerminalManager } from "../services/terminal.js";
-import type { GitWatcher } from "../services/git-watcher.js";
+
 import type { SessionWatcher } from "../services/session-watcher.js";
 import type { AppState } from "../services/state.js";
 import type { ProjectsDirWatcher } from "../services/projects-dir-watcher.js";
@@ -68,7 +68,6 @@ export function registerProjectHandlers(
   projectsDirWatcher: ProjectsDirWatcher,
   terminalManager: TerminalManager,
   scriptSupervisor: ScriptSupervisor,
-  gitWatcher: GitWatcher,
   sessionWatcher: SessionWatcher,
   pushFn: PushFn,
   pushPatch: PushPatchFn,
@@ -138,8 +137,6 @@ export function registerProjectHandlers(
       await scriptSupervisor.stopAll(existing.slug, ws.slug);
     }
 
-    gitWatcher.unwatchProject(existing.slug);
-
     // Stop file watchers that hold directory handles (prevents EPERM on Windows)
     projectsDirWatcher.stop();
 
@@ -184,6 +181,13 @@ export function registerProjectHandlers(
       }
     }
     pushPatch({ repoInfo: repoInfoUpdate });
+  });
+
+  registerMethod("repos.refresh", async (params) => {
+    const projectSlug = params.workspaceId.split("/")[0]!;
+    const wsSlug = extractWorkspaceSlug(params.workspaceId);
+    const repoInfo = await getRepoInfo(appState, projectSlug, wsSlug);
+    pushPatch({ repoInfo: { [params.workspaceId]: repoInfo } });
   });
 
   registerMethod("repos.fetch", async (params) => {

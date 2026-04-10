@@ -3,6 +3,7 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { GitFork } from "lucide-react";
 import { useAppStore } from "~/stores/app";
 import { useActiveSessionStore } from "~/stores/activeSession";
+import { useRepoPolling } from "~/hooks/useRepoPolling";
 import { RepoCard } from "~/components/RepoCard";
 import { SessionList } from "~/components/SessionList";
 import { WorkspacePicker } from "~/components/WorkspacePicker";
@@ -23,6 +24,7 @@ function WorkspaceDetailPage() {
     return s.getProject(projectId);
   });
   const repoInfo = useAppStore((s) => s.getRepoInfo(workspaceId!));
+  useRepoPolling(workspaceId);
 
   // Redirect if workspace doesn't exist
   useEffect(() => {

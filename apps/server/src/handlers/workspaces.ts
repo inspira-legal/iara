@@ -7,7 +7,7 @@ import { gitWorktreeAdd, gitWorktreeRemove } from "@iara/shared/git";
 import { projectPaths, workspacePaths } from "@iara/shared/paths";
 import { rmGraceful } from "@iara/shared/fs";
 import type { TerminalManager } from "../services/terminal.js";
-import type { GitWatcher } from "../services/git-watcher.js";
+
 import { registerMethod } from "../router.js";
 import type { SessionWatcher } from "../services/session-watcher.js";
 import { AppState } from "../services/state.js";
@@ -22,7 +22,6 @@ export function registerWorkspaceHandlers(
   projectsDirWatcher: ProjectsDirWatcher,
   terminalManager: TerminalManager,
   scriptSupervisor: ScriptSupervisor,
-  gitWatcher: GitWatcher,
   sessionWatcher: SessionWatcher,
   pushFn: PushFn,
   pushPatch: PushPatchFn,
@@ -57,8 +56,6 @@ export function registerWorkspaceHandlers(
     terminalManager.destroyByWorkspaceId(workspaceId);
     await scriptSupervisor.stopAll(project.slug, workspace.slug);
 
-    gitWatcher.unwatchProject(project.slug);
-
     // Stop file watchers that hold directory handles (prevents EPERM on Windows)
     projectsDirWatcher.stop();
 
@@ -70,7 +67,6 @@ export function registerWorkspaceHandlers(
       await projectsDirWatcher.start();
     }
 
-    gitWatcher.watchProject(project.slug);
     appState.rescanProject(project.slug);
     pushPatch({ projects: appState.getState().projects });
 

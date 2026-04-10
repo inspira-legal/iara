@@ -4,6 +4,7 @@ import { RotateCw } from "lucide-react";
 import "@xterm/xterm/css/xterm.css";
 import { useAppStore } from "~/stores/app";
 import { useActiveSessionStore } from "~/stores/activeSession";
+import { useRepoPolling } from "~/hooks/useRepoPolling";
 import { ConnectedTerminal, destroyXTermInstance } from "~/components/ConnectedTerminal";
 import { ClaudeUnavailableOverlay } from "~/components/ClaudeUnavailableOverlay";
 import { WorkspaceHeader } from "~/components/WorkspaceHeader";
@@ -27,6 +28,7 @@ function ActiveSessionView() {
     return s.getProject(projectId);
   });
   const repoInfo = useAppStore((s) => s.getRepoInfo(entry.workspaceId));
+  useRepoPolling(entry.workspaceId || undefined);
 
   // Redirect to home if the session entry doesn't exist (id not in store)
   const entryExists = useActiveSessionStore((s) => s.entries.has(id));

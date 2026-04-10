@@ -11,7 +11,7 @@ import { generatePluginDir } from "./services/plugins.js";
 import { SessionWatcher } from "./services/session-watcher.js";
 import { AppState } from "./services/state.js";
 import { ProjectsDirWatcher } from "./services/projects-dir-watcher.js";
-import { GitWatcher } from "./services/git-watcher.js";
+
 import { createPushPatch } from "./services/push.js";
 import * as os from "node:os";
 import { stateDir } from "./env.js";
@@ -53,14 +53,10 @@ const sessionWatcher = new SessionWatcher(pushPatch, appState);
 // FS watchers
 const projectsDirWatcher = new ProjectsDirWatcher(projectsDir, appState, pushPatch);
 await projectsDirWatcher.start();
-const gitWatcher = new GitWatcher(appState, pushPatch);
-gitWatcher.start();
-
 // Register all WS handlers
 registerAllHandlers({
   appState,
   projectsDirWatcher,
-  gitWatcher,
   scriptSupervisor,
   notificationService,
   terminalManager,
@@ -108,9 +104,6 @@ function shutdown() {
   console.log("Shutting down...");
   try {
     projectsDirWatcher.stop();
-  } catch {}
-  try {
-    gitWatcher.stop();
   } catch {}
   try {
     terminalManager.destroyAll();

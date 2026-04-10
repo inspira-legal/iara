@@ -3,7 +3,7 @@ import type { NotificationService } from "../services/notifications.js";
 import type { SessionWatcher } from "../services/session-watcher.js";
 import type { TerminalManager } from "../services/terminal.js";
 import type { AppState } from "../services/state.js";
-import type { GitWatcher } from "../services/git-watcher.js";
+
 import type { ProjectsDirWatcher } from "../services/projects-dir-watcher.js";
 import { registerAppHandlers } from "./app.js";
 import { registerScriptHandlers } from "./scripts.js";
@@ -26,7 +26,7 @@ export type { PushFn, PushPatchFn };
 export interface HandlerDeps {
   appState: AppState;
   projectsDirWatcher: ProjectsDirWatcher;
-  gitWatcher: GitWatcher;
+
   scriptSupervisor: ScriptSupervisor;
   notificationService: NotificationService;
   terminalManager: TerminalManager;
@@ -51,7 +51,6 @@ export function registerAllHandlers(deps: HandlerDeps): void {
     deps.projectsDirWatcher,
     deps.terminalManager,
     deps.scriptSupervisor,
-    deps.gitWatcher,
     deps.sessionWatcher,
     deps.pushFn,
     deps.pushPatch,
@@ -61,7 +60,6 @@ export function registerAllHandlers(deps: HandlerDeps): void {
     deps.projectsDirWatcher,
     deps.terminalManager,
     deps.scriptSupervisor,
-    deps.gitWatcher,
     deps.sessionWatcher,
     deps.pushFn,
     deps.pushPatch,

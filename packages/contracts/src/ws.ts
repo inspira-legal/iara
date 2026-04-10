@@ -55,6 +55,7 @@ export type WsMethods = {
   // Repos
   "repos.validateUrl": { params: { url: string }; result: void };
   "repos.add": { params: { projectId: string } & AddRepoInput; result: void };
+  "repos.refresh": { params: { workspaceId: string }; result: void };
   "repos.fetch": { params: { projectId: string; workspaceId?: string }; result: void };
   "repos.sync": { params: { projectId: string; workspaceId?: string }; result: SyncResult[] };
   "repos.listBranches": {

@@ -114,6 +114,34 @@ describe("getRepoInfo()", () => {
     ]);
   });
 
+  it("passes --no-optional-locks to all read-only git commands", async () => {
+    const projectSlug = "proj";
+    const appState = createMockAppState(projectSlug, ["repo1"]);
+
+    mockExecGit((args) => {
+      if (args.includes("--show-current")) return { stdout: "main\n", stderr: "" };
+      if (args.includes("--porcelain")) return { stdout: "", stderr: "" };
+      if (args.includes("rev-list")) return { stdout: "0\t0", stderr: "" };
+      return { stdout: "", stderr: "" };
+    });
+
+    await getRepoInfo(appState, projectSlug);
+
+    const calls = vi.mocked(execGitAsync).mock.calls;
+    // branch --show-current
+    expect(
+      calls.some((c) => c[0][0] === "--no-optional-locks" && c[0].includes("--show-current")),
+    ).toBe(true);
+    // status --porcelain
+    expect(
+      calls.some((c) => c[0][0] === "--no-optional-locks" && c[0].includes("--porcelain")),
+    ).toBe(true);
+    // rev-list
+    expect(calls.some((c) => c[0][0] === "--no-optional-locks" && c[0].includes("rev-list"))).toBe(
+      true,
+    );
+  });
+
   it("returns empty array when no repos", async () => {
     const appState = createMockAppState("proj", []);
     const result = await getRepoInfo(appState, "proj");
