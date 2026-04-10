@@ -84,8 +84,8 @@ function persistSessions(): void {
   sessionsCache.set(persisted);
 }
 
-function invalidateSessions(workspaceId: string): void {
-  void useAppStore.getState().refreshSessions(workspaceId);
+function invalidateSessions(_workspaceId: string): void {
+  // Session data is pushed from the server via state:patch — no client-side refresh needed.
 }
 
 /** Destroy shell terminals for a specific session entry. */
@@ -399,18 +399,4 @@ transport.subscribe(
   },
 );
 
-// Sync session titles when server detects JSONL changes
-transport.subscribe("session:changed", ({ workspaceId }: { workspaceId: string }) => {
-  const entries = useActiveSessionStore.getState().entries;
-  // Only fetch if we have active sessions for this workspace
-  const hasActiveEntries = [...entries.values()].some((e) => e.workspaceId === workspaceId);
-  if (!hasActiveEntries) return;
-
-  void transport.request("sessions.list", { workspaceId }).then((sessions) => {
-    for (const session of sessions) {
-      if (session.title) {
-        useActiveSessionStore.getState().updateTitle(session.id, session.title);
-      }
-    }
-  });
-});
+// Session titles are synced via state:patch — the server pushes updated session data directly.

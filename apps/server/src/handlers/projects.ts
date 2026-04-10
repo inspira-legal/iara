@@ -1,5 +1,6 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
+import type { RepoInfo } from "@iara/contracts";
 import { gitClone, gitInit } from "@iara/shared/git";
 import { projectPaths } from "@iara/shared/paths";
 import { rmGraceful } from "@iara/shared/fs";
@@ -21,7 +22,7 @@ import type { SessionWatcher } from "../services/session-watcher.js";
 import type { AppState } from "../services/state.js";
 import type { EnvWatcher } from "../services/env-watcher.js";
 import type { ProjectsWatcher } from "../services/watcher.js";
-import type { PushFn } from "./index.js";
+import type { PushFn, PushPatchFn } from "./index.js";
 import { triggerDiscovery, cancelDiscovery } from "./scripts.js";
 
 /** Extract workspace slug from a workspaceId like "project/ws-slug". */
@@ -72,6 +73,7 @@ export function registerProjectHandlers(
   gitWatcher: GitWatcher,
   sessionWatcher: SessionWatcher,
   pushFn: PushFn,
+  pushPatch: PushPatchFn,
 ): void {
   registerMethod("projects.create", async (params) => {
     const { slug, repoSources } = params;
@@ -106,11 +108,11 @@ export function registerProjectHandlers(
     const project = repoSources.length > 0 ? appState.rescanProject(slug) : null;
     const result = project ?? appState.createEmptyProject(slug);
 
-    pushFn("project:changed", { project: result });
+    pushPatch({ projects: appState.getState().projects });
 
     // Auto-discover scripts after repos are cloned (async, non-blocking)
     try {
-      triggerDiscovery(appState, slug, pushFn);
+      triggerDiscovery(appState, slug, pushFn, pushPatch);
     } catch (err) {
       console.error("Auto-discovery failed:", err);
     }
@@ -123,10 +125,8 @@ export function registerProjectHandlers(
     const existing = appState.getProject(id);
     if (!existing) throw new Error(`Project not found: ${id}`);
 
-    const project = appState.rescanProject(existing.slug);
-    if (project) {
-      pushFn("project:changed", { project });
-    }
+    appState.rescanProject(existing.slug);
+    pushPatch({ projects: appState.getState().projects });
   });
 
   registerMethod("projects.delete", async (params) => {
@@ -163,14 +163,8 @@ export function registerProjectHandlers(
 
     appState.scan();
     sessionWatcher.refresh();
-    pushFn("state:resync", { state: appState.getState() });
-  });
-
-  registerMethod("repos.getInfo", async (params) => {
-    const project = appState.getProject(params.projectId);
-    if (!project) throw new Error(`Project not found: ${params.projectId}`);
-    const wsSlug = extractWorkspaceSlug(params.workspaceId);
-    return getRepoInfo(appState, project.slug, wsSlug);
+    const { projects, settings } = appState.getState();
+    pushPatch({ projects, settings });
   });
 
   registerMethod("repos.validateUrl", async (params) => {
@@ -184,6 +178,17 @@ export function registerProjectHandlers(
     await addRepo(appState, projectId, project.slug, input, (progress) => {
       pushFn("clone:progress", progress);
     });
+    // Push updated repo info for all workspaces in this project
+    const repoInfoUpdate: Record<string, RepoInfo[]> = {};
+    for (const ws of appState.getProject(projectId)?.workspaces ?? []) {
+      try {
+        const info = await getRepoInfo(appState, project.slug, ws.slug);
+        repoInfoUpdate[ws.id] = info;
+      } catch {
+        repoInfoUpdate[ws.id] = [];
+      }
+    }
+    pushPatch({ repoInfo: repoInfoUpdate });
   });
 
   registerMethod("repos.fetch", async (params) => {
@@ -197,7 +202,19 @@ export function registerProjectHandlers(
     const project = appState.getProject(params.projectId);
     if (!project) throw new Error(`Project not found: ${params.projectId}`);
     const wsSlug = extractWorkspaceSlug(params.workspaceId);
-    return syncRepos(appState, project.slug, wsSlug);
+    const result = syncRepos(appState, project.slug, wsSlug);
+    // Push updated repo info after sync
+    const repoInfoUpdate: Record<string, RepoInfo[]> = {};
+    for (const ws of project.workspaces) {
+      try {
+        const info = await getRepoInfo(appState, project.slug, ws.slug);
+        repoInfoUpdate[ws.id] = info;
+      } catch {
+        repoInfoUpdate[ws.id] = [];
+      }
+    }
+    pushPatch({ repoInfo: repoInfoUpdate });
+    return result;
   });
 
   registerMethod("repos.listBranches", async (params) => {

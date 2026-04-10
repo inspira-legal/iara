@@ -9,14 +9,16 @@ import type {
   ResolvedServiceDef,
   ScriptOutputLevel,
   ScriptStatus,
-  WsPushEvents,
 } from "@iara/contracts";
 import { cleanEnv } from "@iara/shared/env";
 import { isWindows, spawnWithLoginShell, killProcessTree } from "@iara/shared/platform";
 import { interpolate } from "./interpolation.js";
 import type { InterpolationContext } from "./interpolation.js";
 
-type PushFn = <E extends keyof WsPushEvents>(event: E, params: WsPushEvents[E]) => void;
+interface SupervisorCallbacks {
+  onLog: (params: { scriptId: string; service: string; script: string; line: string }) => void;
+  onStatusChange: (params: { service: string; script: string; status: ScriptStatus }) => void;
+}
 
 interface RunningScript {
   scriptId: string;
@@ -43,7 +45,7 @@ const HEALTH_RECHECK_INTERVAL = 30_000;
 export class ScriptSupervisor {
   private running = new Map<string, RunningScript>();
 
-  constructor(private readonly pushFn: PushFn) {}
+  constructor(private readonly callbacks: SupervisorCallbacks) {}
 
   private key(port: number, service: string, script: string): string {
     return `${port}:${service}:${script}`;
@@ -75,7 +77,7 @@ export class ScriptSupervisor {
       .join(" && ");
 
     // Log the command being executed
-    this.pushFn("scripts:log", {
+    this.callbacks.onLog({
       scriptId: key,
       service: opts.service,
       script: opts.script,
@@ -85,7 +87,7 @@ export class ScriptSupervisor {
     // Validate cwd exists — spawn throws misleading ENOENT otherwise
     if (!existsSync(opts.cwd)) {
       const errorLine = `[iara] Directory not found: ${opts.cwd}`;
-      this.pushFn("scripts:log", {
+      this.callbacks.onLog({
         scriptId: key,
         service: opts.service,
         script: opts.script,
@@ -143,7 +145,7 @@ export class ScriptSupervisor {
       if (entry.logs.length > MAX_LOG_LINES) {
         entry.logs.shift();
       }
-      this.pushFn("scripts:log", {
+      this.callbacks.onLog({
         scriptId: key,
         service: opts.service,
         script: opts.script,
@@ -466,14 +468,14 @@ export class ScriptSupervisor {
       try {
         const svcKey = this.key(svc.resolvedPort, svc.name, opts.category);
         if (isLongRunning && svc.resolvedPort > 0) {
-          this.pushFn("scripts:log", {
+          this.callbacks.onLog({
             scriptId: svcKey,
             service: svc.name,
             script: opts.category,
             line: `[iara] Waiting for ${svc.name} to be healthy on port ${svc.resolvedPort}...`,
           });
           await this.waitForHealth(svc.resolvedPort, svc.name, opts.category, svc.timeout);
-          this.pushFn("scripts:log", {
+          this.callbacks.onLog({
             scriptId: svcKey,
             service: svc.name,
             script: opts.category,
@@ -578,7 +580,7 @@ export class ScriptSupervisor {
   }
 
   private pushStatus(entry: RunningScript): void {
-    this.pushFn("scripts:status", {
+    this.callbacks.onStatusChange({
       service: entry.service,
       script: entry.script,
       status: {

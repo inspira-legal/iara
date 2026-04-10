@@ -1,5 +1,4 @@
 import { registerMethod } from "../router.js";
-import { pushAll } from "../ws.js";
 import {
   deleteEnvToml,
   generateDotEnvFiles,
@@ -9,15 +8,13 @@ import {
 } from "../services/env.js";
 import type { EnvWatcher } from "../services/env-watcher.js";
 import type { AppState } from "../services/state.js";
+import type { PushPatchFn } from "./index.js";
 
-export function registerEnvHandlers(appState: AppState, envWatcher: EnvWatcher): void {
-  registerMethod("env.list", async (params) => {
-    const workspace = appState.getWorkspace(params.workspaceId);
-    if (!workspace) throw new Error(`Workspace not found: ${params.workspaceId}`);
-    const wsDir = appState.getWorkspaceDir(params.workspaceId);
-    return readEnvToml(wsDir);
-  });
-
+export function registerEnvHandlers(
+  appState: AppState,
+  envWatcher: EnvWatcher,
+  pushPatch: PushPatchFn,
+): void {
   registerMethod("env.write", async (params) => {
     const workspace = appState.getWorkspace(params.workspaceId);
     if (!workspace) throw new Error(`Workspace not found: ${params.workspaceId}`);
@@ -38,7 +35,9 @@ export function registerEnvHandlers(appState: AppState, envWatcher: EnvWatcher):
     const repoNames = appState.discoverRepos(workspace.projectId);
     generateDotEnvFiles(wsDir, repoNames);
 
-    pushAll("env:changed", { workspaceId: params.workspaceId });
+    // Push updated env data
+    const envData = readEnvToml(wsDir);
+    pushPatch({ env: { [params.workspaceId]: envData } });
   });
 
   registerMethod("env.delete", async (params) => {
@@ -52,6 +51,6 @@ export function registerEnvHandlers(appState: AppState, envWatcher: EnvWatcher):
 
     deleteEnvToml(wsDir);
 
-    pushAll("env:changed", { workspaceId: params.workspaceId });
+    pushPatch({ env: { [params.workspaceId]: { services: [] } } });
   });
 }

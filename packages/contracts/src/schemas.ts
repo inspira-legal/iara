@@ -4,20 +4,6 @@ import { z } from "zod";
 // File schemas — what lives on disk (no derived fields like id, slug)
 // ---------------------------------------------------------------------------
 
-/** @deprecated No longer used — project metadata is derived from the filesystem. */
-export const ProjectFileSchema = z.object({
-  name: z.string(),
-});
-export type ProjectFile = z.infer<typeof ProjectFileSchema>;
-
-/** @deprecated No longer used — workspace metadata is derived from the filesystem. */
-export const WorkspaceFileSchema = z.object({
-  name: z.string(),
-  branch: z.string().optional(),
-  branches: z.record(z.string(), z.string()).optional(),
-});
-export type WorkspaceFile = z.infer<typeof WorkspaceFileSchema>;
-
 export const SettingsFileSchema = z.record(z.string(), z.string());
 export type SettingsFile = z.infer<typeof SettingsFileSchema>;
 

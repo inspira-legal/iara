@@ -2,8 +2,9 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import * as os from "node:os";
 import * as watcher from "@parcel/watcher";
-import type { PushFn } from "../types.js";
-import { computeProjectHash } from "./sessions.js";
+import type { SessionInfo } from "@iara/contracts";
+import type { PushPatchFn } from "../types.js";
+import { computeProjectHash, listSessions } from "./sessions.js";
 import type { AppState } from "./state.js";
 
 const DEBOUNCE_MS = 500;
@@ -18,11 +19,11 @@ export class SessionWatcher {
   private subscriptions = new Map<string, watcher.AsyncSubscription>();
   private hashToWorkspaceIds = new Map<string, Set<string>>();
   private debounceTimers = new Map<string, ReturnType<typeof setTimeout>>();
-  private pushAll: PushFn;
+  private pushPatch: PushPatchFn;
   private appState: AppState;
 
-  constructor(pushAll: PushFn, appState: AppState) {
-    this.pushAll = pushAll;
+  constructor(pushPatch: PushPatchFn, appState: AppState) {
+    this.pushPatch = pushPatch;
     this.appState = appState;
   }
 
@@ -110,9 +111,26 @@ export class SessionWatcher {
         this.debounceTimers.delete(hash);
         const workspaceIds = this.hashToWorkspaceIds.get(hash);
         if (workspaceIds) {
+          const sessionsUpdate: Record<string, SessionInfo[]> = {};
+          const dirs: string[] = [];
+          const wsIds: string[] = [];
           for (const workspaceId of workspaceIds) {
-            this.pushAll("session:changed", { workspaceId });
+            const wsDir = this.appState.getWorkspaceDir(workspaceId);
+            dirs.push(wsDir);
+            wsIds.push(workspaceId);
           }
+          // Load sessions for all affected workspaces and push
+          void Promise.allSettled(
+            wsIds.map(async (wsId, i) => {
+              try {
+                sessionsUpdate[wsId] = await listSessions([dirs[i]!]);
+              } catch {
+                sessionsUpdate[wsId] = [];
+              }
+            }),
+          ).then(() => {
+            this.pushPatch({ sessions: sessionsUpdate });
+          });
         }
       }, DEBOUNCE_MS),
     );

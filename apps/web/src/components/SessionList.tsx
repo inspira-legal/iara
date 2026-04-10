@@ -1,4 +1,3 @@
-import { useEffect } from "react";
 import { Clock, MessageSquare, Play, Plus, Terminal } from "lucide-react";
 import type { SessionInfo } from "@iara/contracts";
 import { useAppStore } from "~/stores/app";
@@ -8,21 +7,10 @@ type SessionListProps = {
 } & ({ workspaceId: string; projectId?: never } | { projectId: string; workspaceId?: never });
 
 export function SessionList({ workspaceId, projectId, onLaunch }: SessionListProps) {
-  const refreshSessions = useAppStore((s) => s.refreshSessions);
-  const refreshSessionsByProject = useAppStore((s) => s.refreshSessionsByProject);
   const getSessions = useAppStore((s) => s.getSessions);
 
   const key = workspaceId ?? `project:${projectId}`;
   const sessions = getSessions(key);
-
-  // SWR: background refresh
-  useEffect(() => {
-    if (workspaceId) {
-      void refreshSessions(workspaceId);
-    } else {
-      void refreshSessionsByProject(projectId!);
-    }
-  }, [workspaceId, projectId, refreshSessions, refreshSessionsByProject]);
 
   return (
     <div>

@@ -86,6 +86,13 @@ import { ScriptSupervisor, topologicalSort } from "./supervisor.js";
 // Helpers
 // ---------------------------------------------------------------------------
 
+function createMockCallbacks() {
+  return {
+    onLog: vi.fn(),
+    onStatusChange: vi.fn(),
+  };
+}
+
 function makeResolved(
   name: string,
   dependsOn: string[] = [],
@@ -222,9 +229,9 @@ describe("ScriptSupervisor", () => {
   // -----------------------------------------------------------------------
 
   describe("constructor", () => {
-    it("creates instance with push function", () => {
-      const push = vi.fn();
-      const supervisor = new ScriptSupervisor(push);
+    it("creates instance with callbacks", () => {
+      const callbacks = createMockCallbacks();
+      const supervisor = new ScriptSupervisor(callbacks);
       expect(supervisor).toBeDefined();
     });
   });
@@ -235,20 +242,18 @@ describe("ScriptSupervisor", () => {
 
   describe("start()", () => {
     it("spawns a process and pushes starting status", () => {
-      const push = vi.fn();
-      const supervisor = new ScriptSupervisor(push);
+      const callbacks = createMockCallbacks();
+      const supervisor = new ScriptSupervisor(callbacks);
 
       supervisor.start(defaultStartOpts());
 
-      expect(push).toHaveBeenCalledWith(
-        "scripts:log",
+      expect(callbacks.onLog).toHaveBeenCalledWith(
         expect.objectContaining({
           scriptId: "3000:api:dev",
           line: expect.stringContaining("npm start"),
         }),
       );
-      expect(push).toHaveBeenCalledWith(
-        "scripts:status",
+      expect(callbacks.onStatusChange).toHaveBeenCalledWith(
         expect.objectContaining({
           service: "api",
           script: "dev",
@@ -261,51 +266,51 @@ describe("ScriptSupervisor", () => {
     });
 
     it("joins multiple commands with &&", () => {
-      const push = vi.fn();
-      const supervisor = new ScriptSupervisor(push);
+      const callbacks = createMockCallbacks();
+      const supervisor = new ScriptSupervisor(callbacks);
 
       supervisor.start(defaultStartOpts({ commands: ["cmd1", "cmd2"] }));
 
-      const logCall = push.mock.calls.find((c) => c[0] === "scripts:log");
-      expect(logCall![1].line).toBe("> cmd1 && cmd2");
+      const logCall = callbacks.onLog.mock.calls.find((c) => c[0].line.startsWith(">"));
+      expect(logCall![0].line).toBe("> cmd1 && cmd2");
     });
 
     it("marks non-long-running as running immediately", () => {
-      const push = vi.fn();
-      const supervisor = new ScriptSupervisor(push);
+      const callbacks = createMockCallbacks();
+      const supervisor = new ScriptSupervisor(callbacks);
 
       supervisor.start(defaultStartOpts({ isLongRunning: false }));
 
-      const statusCalls = push.mock.calls.filter((c) => c[0] === "scripts:status");
-      const lastStatus = statusCalls[statusCalls.length - 1]![1];
+      const statusCalls = callbacks.onStatusChange.mock.calls;
+      const lastStatus = statusCalls[statusCalls.length - 1]![0];
       expect(lastStatus.status.health).toBe("running");
     });
 
     it("marks long-running without port as running immediately", () => {
-      const push = vi.fn();
-      const supervisor = new ScriptSupervisor(push);
+      const callbacks = createMockCallbacks();
+      const supervisor = new ScriptSupervisor(callbacks);
 
       supervisor.start(defaultStartOpts({ isLongRunning: true, port: 0 }));
 
-      const statusCalls = push.mock.calls.filter((c) => c[0] === "scripts:status");
-      const lastStatus = statusCalls[statusCalls.length - 1]![1];
+      const statusCalls = callbacks.onStatusChange.mock.calls;
+      const lastStatus = statusCalls[statusCalls.length - 1]![0];
       expect(lastStatus.status.health).toBe("running");
     });
 
     it("marks long-running with negative port as running immediately", () => {
-      const push = vi.fn();
-      const supervisor = new ScriptSupervisor(push);
+      const callbacks = createMockCallbacks();
+      const supervisor = new ScriptSupervisor(callbacks);
 
       supervisor.start(defaultStartOpts({ isLongRunning: true, port: -1 }));
 
-      const statusCalls = push.mock.calls.filter((c) => c[0] === "scripts:status");
-      const lastStatus = statusCalls[statusCalls.length - 1]![1];
+      const statusCalls = callbacks.onStatusChange.mock.calls;
+      const lastStatus = statusCalls[statusCalls.length - 1]![0];
       expect(lastStatus.status.health).toBe("running");
     });
 
     it("starts health check for long-running with port > 0", () => {
-      const push = vi.fn();
-      const supervisor = new ScriptSupervisor(push);
+      const callbacks = createMockCallbacks();
+      const supervisor = new ScriptSupervisor(callbacks);
 
       supervisor.start(defaultStartOpts({ isLongRunning: true, port: 3000 }));
 
@@ -314,8 +319,8 @@ describe("ScriptSupervisor", () => {
     });
 
     it("stops existing script with same key before starting new one", () => {
-      const push = vi.fn();
-      const supervisor = new ScriptSupervisor(push);
+      const callbacks = createMockCallbacks();
+      const supervisor = new ScriptSupervisor(callbacks);
 
       supervisor.start(defaultStartOpts());
 
@@ -326,107 +331,109 @@ describe("ScriptSupervisor", () => {
     });
 
     it("reuses pinned-port service if already running", () => {
-      const push = vi.fn();
-      const supervisor = new ScriptSupervisor(push);
+      const callbacks = createMockCallbacks();
+      const supervisor = new ScriptSupervisor(callbacks);
 
       supervisor.start(defaultStartOpts({ port: 3000 }));
-      const callCount = push.mock.calls.length;
+      const logCount = callbacks.onLog.mock.calls.length;
+      const statusCount = callbacks.onStatusChange.mock.calls.length;
 
       supervisor.start(defaultStartOpts({ port: 3000 }));
 
-      expect(push.mock.calls.length).toBe(callCount);
+      expect(callbacks.onLog.mock.calls.length).toBe(logCount);
+      expect(callbacks.onStatusChange.mock.calls.length).toBe(statusCount);
     });
 
     it("handles child exit with code 0 for long-running (stopped)", () => {
-      const push = vi.fn();
-      const supervisor = new ScriptSupervisor(push);
+      const callbacks = createMockCallbacks();
+      const supervisor = new ScriptSupervisor(callbacks);
 
       supervisor.start(defaultStartOpts({ isLongRunning: true, port: 0 }));
       mockChild.emit("exit", 0);
 
-      const statusCalls = push.mock.calls.filter((c) => c[0] === "scripts:status");
-      const lastStatus = statusCalls[statusCalls.length - 1]![1];
+      const statusCalls = callbacks.onStatusChange.mock.calls;
+      const lastStatus = statusCalls[statusCalls.length - 1]![0];
       expect(lastStatus.status.health).toBe("stopped");
       expect(lastStatus.status.exitCode).toBe(0);
       expect(lastStatus.status.pid).toBeNull();
     });
 
     it("handles child exit with non-zero code for long-running (unhealthy)", () => {
-      const push = vi.fn();
-      const supervisor = new ScriptSupervisor(push);
+      const callbacks = createMockCallbacks();
+      const supervisor = new ScriptSupervisor(callbacks);
 
       supervisor.start(defaultStartOpts({ isLongRunning: true, port: 0 }));
       mockChild.emit("exit", 1);
 
-      const statusCalls = push.mock.calls.filter((c) => c[0] === "scripts:status");
-      const lastStatus = statusCalls[statusCalls.length - 1]![1];
+      const statusCalls = callbacks.onStatusChange.mock.calls;
+      const lastStatus = statusCalls[statusCalls.length - 1]![0];
       expect(lastStatus.status.health).toBe("unhealthy");
     });
 
     it("handles child exit with code 0 for one-shot (success)", () => {
-      const push = vi.fn();
-      const supervisor = new ScriptSupervisor(push);
+      const callbacks = createMockCallbacks();
+      const supervisor = new ScriptSupervisor(callbacks);
 
       supervisor.start(defaultStartOpts({ isLongRunning: false }));
       mockChild.emit("exit", 0);
 
-      const statusCalls = push.mock.calls.filter((c) => c[0] === "scripts:status");
-      const lastStatus = statusCalls[statusCalls.length - 1]![1];
+      const statusCalls = callbacks.onStatusChange.mock.calls;
+      const lastStatus = statusCalls[statusCalls.length - 1]![0];
       expect(lastStatus.status.health).toBe("success");
     });
 
     it("handles child exit with non-zero code for one-shot (failed)", () => {
-      const push = vi.fn();
-      const supervisor = new ScriptSupervisor(push);
+      const callbacks = createMockCallbacks();
+      const supervisor = new ScriptSupervisor(callbacks);
 
       supervisor.start(defaultStartOpts({ isLongRunning: false }));
       mockChild.emit("exit", 1);
 
-      const statusCalls = push.mock.calls.filter((c) => c[0] === "scripts:status");
-      const lastStatus = statusCalls[statusCalls.length - 1]![1];
+      const statusCalls = callbacks.onStatusChange.mock.calls;
+      const lastStatus = statusCalls[statusCalls.length - 1]![0];
       expect(lastStatus.status.health).toBe("failed");
     });
 
     it("handles child exit with null code", () => {
-      const push = vi.fn();
-      const supervisor = new ScriptSupervisor(push);
+      const callbacks = createMockCallbacks();
+      const supervisor = new ScriptSupervisor(callbacks);
 
       supervisor.start(defaultStartOpts({ isLongRunning: false }));
       mockChild.emit("exit", null);
 
-      const statusCalls = push.mock.calls.filter((c) => c[0] === "scripts:status");
-      const lastStatus = statusCalls[statusCalls.length - 1]![1];
+      const statusCalls = callbacks.onStatusChange.mock.calls;
+      const lastStatus = statusCalls[statusCalls.length - 1]![0];
       expect(lastStatus.status.exitCode).toBe(1);
       expect(lastStatus.status.health).toBe("failed");
     });
 
     it("captures stdout output", () => {
-      const push = vi.fn();
-      const supervisor = new ScriptSupervisor(push);
+      const callbacks = createMockCallbacks();
+      const supervisor = new ScriptSupervisor(callbacks);
 
       supervisor.start(defaultStartOpts());
       mockChild.stdout.emit("data", Buffer.from("hello world\n"));
 
-      const logCalls = push.mock.calls.filter((c) => c[0] === "scripts:log");
-      const lines = logCalls.map((c) => c[1].line);
+      const logCalls = callbacks.onLog.mock.calls;
+      const lines = logCalls.map((c) => c[0].line);
       expect(lines).toContain("hello world");
     });
 
     it("captures stderr output", () => {
-      const push = vi.fn();
-      const supervisor = new ScriptSupervisor(push);
+      const callbacks = createMockCallbacks();
+      const supervisor = new ScriptSupervisor(callbacks);
 
       supervisor.start(defaultStartOpts());
       mockChild.stderr.emit("data", Buffer.from("error msg\n"));
 
-      const logCalls = push.mock.calls.filter((c) => c[0] === "scripts:log");
-      const lines = logCalls.map((c) => c[1].line);
+      const logCalls = callbacks.onLog.mock.calls;
+      const lines = logCalls.map((c) => c[0].line);
       expect(lines).toContain("error msg");
     });
 
     it("handles stdout error events", () => {
-      const push = vi.fn();
-      const supervisor = new ScriptSupervisor(push);
+      const callbacks = createMockCallbacks();
+      const supervisor = new ScriptSupervisor(callbacks);
       const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
 
       supervisor.start(defaultStartOpts());
@@ -440,8 +447,8 @@ describe("ScriptSupervisor", () => {
     });
 
     it("handles stderr error events", () => {
-      const push = vi.fn();
-      const supervisor = new ScriptSupervisor(push);
+      const callbacks = createMockCallbacks();
+      const supervisor = new ScriptSupervisor(callbacks);
       const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
 
       supervisor.start(defaultStartOpts());
@@ -455,8 +462,8 @@ describe("ScriptSupervisor", () => {
     });
 
     it("trims logs to MAX_LOG_LINES", () => {
-      const push = vi.fn();
-      const supervisor = new ScriptSupervisor(push);
+      const callbacks = createMockCallbacks();
+      const supervisor = new ScriptSupervisor(callbacks);
 
       supervisor.start(defaultStartOpts());
 
@@ -473,8 +480,8 @@ describe("ScriptSupervisor", () => {
       (noPidChild as any).pid = undefined;
       mockChild = noPidChild;
 
-      const push = vi.fn();
-      const supervisor = new ScriptSupervisor(push);
+      const callbacks = createMockCallbacks();
+      const supervisor = new ScriptSupervisor(callbacks);
       supervisor.start(defaultStartOpts());
 
       const statuses = supervisor.status();
@@ -493,8 +500,8 @@ describe("ScriptSupervisor", () => {
   describe("health checks (long-running with port)", () => {
     it("becomes healthy when port check succeeds", async () => {
       vi.useFakeTimers();
-      const push = vi.fn();
-      const supervisor = new ScriptSupervisor(push);
+      const callbacks = createMockCallbacks();
+      const supervisor = new ScriptSupervisor(callbacks);
 
       supervisor.start(defaultStartOpts({ isLongRunning: true, port: 3000 }));
       expect(supervisor.status()[0]!.health).toBe("starting");
@@ -509,8 +516,8 @@ describe("ScriptSupervisor", () => {
 
     it("becomes unhealthy after max retries", async () => {
       vi.useFakeTimers();
-      const push = vi.fn();
-      const supervisor = new ScriptSupervisor(push);
+      const callbacks = createMockCallbacks();
+      const supervisor = new ScriptSupervisor(callbacks);
 
       // timeout=6s, HEALTH_CHECK_INTERVAL=3s => maxRetries = ceil(6000/3000) = 2
       supervisor.start(defaultStartOpts({ isLongRunning: true, port: 3000, timeout: 6 }));
@@ -531,8 +538,8 @@ describe("ScriptSupervisor", () => {
 
     it("transitions from healthy to unhealthy on re-check failure", async () => {
       vi.useFakeTimers();
-      const push = vi.fn();
-      const supervisor = new ScriptSupervisor(push);
+      const callbacks = createMockCallbacks();
+      const supervisor = new ScriptSupervisor(callbacks);
 
       supervisor.start(defaultStartOpts({ isLongRunning: true, port: 3000 }));
 
@@ -552,8 +559,8 @@ describe("ScriptSupervisor", () => {
 
     it("recovers from unhealthy to healthy on re-check success", async () => {
       vi.useFakeTimers();
-      const push = vi.fn();
-      const supervisor = new ScriptSupervisor(push);
+      const callbacks = createMockCallbacks();
+      const supervisor = new ScriptSupervisor(callbacks);
 
       supervisor.start(defaultStartOpts({ isLongRunning: true, port: 3000 }));
 
@@ -578,8 +585,8 @@ describe("ScriptSupervisor", () => {
 
     it("clears health check timer on exit", async () => {
       vi.useFakeTimers();
-      const push = vi.fn();
-      const supervisor = new ScriptSupervisor(push);
+      const callbacks = createMockCallbacks();
+      const supervisor = new ScriptSupervisor(callbacks);
 
       supervisor.start(defaultStartOpts({ isLongRunning: true, port: 3000 }));
 
@@ -594,8 +601,8 @@ describe("ScriptSupervisor", () => {
 
     it("stays healthy on re-check when still healthy", async () => {
       vi.useFakeTimers();
-      const push = vi.fn();
-      const supervisor = new ScriptSupervisor(push);
+      const callbacks = createMockCallbacks();
+      const supervisor = new ScriptSupervisor(callbacks);
 
       supervisor.start(defaultStartOpts({ isLongRunning: true, port: 3000 }));
 
@@ -605,14 +612,12 @@ describe("ScriptSupervisor", () => {
       expect(supervisor.status()[0]!.health).toBe("healthy");
 
       // Re-check succeeds — should stay healthy (no status change)
-      const callsBefore = push.mock.calls.length;
+      const callsBefore = callbacks.onStatusChange.mock.calls.length;
       mockPortInUse();
       await vi.advanceTimersByTimeAsync(30_000);
       expect(supervisor.status()[0]!.health).toBe("healthy");
       // No extra status push when already healthy
-      const statusCallsAfter = push.mock.calls
-        .slice(callsBefore)
-        .filter((c) => c[0] === "scripts:status");
+      const statusCallsAfter = callbacks.onStatusChange.mock.calls.slice(callsBefore);
       expect(statusCallsAfter).toHaveLength(0);
 
       supervisor.stopAll("proj1", "default");
@@ -626,26 +631,26 @@ describe("ScriptSupervisor", () => {
 
   describe("stop()", () => {
     it("stops a running script", async () => {
-      const push = vi.fn();
-      const supervisor = new ScriptSupervisor(push);
+      const callbacks = createMockCallbacks();
+      const supervisor = new ScriptSupervisor(callbacks);
 
       await supervisor.start(defaultStartOpts());
       await supervisor.stop("3000:api:dev");
 
-      const statusCalls = push.mock.calls.filter((c) => c[0] === "scripts:status");
-      const lastStatus = statusCalls[statusCalls.length - 1]![1];
+      const statusCalls = callbacks.onStatusChange.mock.calls;
+      const lastStatus = statusCalls[statusCalls.length - 1]![0];
       expect(lastStatus.status.health).toBe("stopped");
     });
 
     it("no-op for non-existent key", () => {
-      const push = vi.fn();
-      const supervisor = new ScriptSupervisor(push);
+      const callbacks = createMockCallbacks();
+      const supervisor = new ScriptSupervisor(callbacks);
       supervisor.stop("nonexistent");
     });
 
     it("removes entry from running map", async () => {
-      const push = vi.fn();
-      const supervisor = new ScriptSupervisor(push);
+      const callbacks = createMockCallbacks();
+      const supervisor = new ScriptSupervisor(callbacks);
 
       await supervisor.start(defaultStartOpts());
       expect(supervisor.status()).toHaveLength(1);
@@ -656,8 +661,8 @@ describe("ScriptSupervisor", () => {
 
     it("clears health check timer on stop", async () => {
       vi.useFakeTimers();
-      const push = vi.fn();
-      const supervisor = new ScriptSupervisor(push);
+      const callbacks = createMockCallbacks();
+      const supervisor = new ScriptSupervisor(callbacks);
 
       supervisor.start(defaultStartOpts({ isLongRunning: true, port: 3000 }));
       supervisor.stop("3000:api:dev");
@@ -670,8 +675,8 @@ describe("ScriptSupervisor", () => {
 
   describe("stopAll()", () => {
     it("stops all running scripts for the given workspace", () => {
-      const push = vi.fn();
-      const supervisor = new ScriptSupervisor(push);
+      const callbacks = createMockCallbacks();
+      const supervisor = new ScriptSupervisor(callbacks);
 
       supervisor.start(defaultStartOpts({ service: "api", port: 3000 }));
       mockChild = createMockChild(99999);
@@ -679,16 +684,16 @@ describe("ScriptSupervisor", () => {
 
       supervisor.stopAll("proj1", "default");
 
-      const statusCalls = push.mock.calls.filter(
-        (c) => c[0] === "scripts:status" && c[1].status.health === "stopped",
+      const statusCalls = callbacks.onStatusChange.mock.calls.filter(
+        (c) => c[0].status.health === "stopped",
       );
       expect(statusCalls.length).toBe(2);
       expect(supervisor.status()).toEqual([]);
     });
 
     it("does not stop scripts from other workspaces", () => {
-      const push = vi.fn();
-      const supervisor = new ScriptSupervisor(push);
+      const callbacks = createMockCallbacks();
+      const supervisor = new ScriptSupervisor(callbacks);
 
       supervisor.start(defaultStartOpts({ workspace: "ws1", port: 3000 }));
       mockChild = createMockChild(99999);
@@ -711,12 +716,12 @@ describe("ScriptSupervisor", () => {
 
   describe("status()", () => {
     it("returns empty array when nothing running", () => {
-      const supervisor = new ScriptSupervisor(vi.fn());
+      const supervisor = new ScriptSupervisor(createMockCallbacks());
       expect(supervisor.status()).toEqual([]);
     });
 
     it("returns all running scripts", () => {
-      const supervisor = new ScriptSupervisor(vi.fn());
+      const supervisor = new ScriptSupervisor(createMockCallbacks());
       supervisor.start(defaultStartOpts({ service: "api", port: 3000 }));
       mockChild = createMockChild(99999);
       supervisor.start(defaultStartOpts({ service: "web", port: 4000 }));
@@ -726,7 +731,7 @@ describe("ScriptSupervisor", () => {
     });
 
     it("filters by projectId", () => {
-      const supervisor = new ScriptSupervisor(vi.fn());
+      const supervisor = new ScriptSupervisor(createMockCallbacks());
       supervisor.start(defaultStartOpts({ projectId: "proj1", port: 3000 }));
       mockChild = createMockChild(99999);
       supervisor.start(defaultStartOpts({ projectId: "proj2", port: 4000 }));
@@ -736,7 +741,7 @@ describe("ScriptSupervisor", () => {
     });
 
     it("filters by projectId and workspace", () => {
-      const supervisor = new ScriptSupervisor(vi.fn());
+      const supervisor = new ScriptSupervisor(createMockCallbacks());
       supervisor.start(defaultStartOpts({ projectId: "proj1", workspace: "ws1", port: 3000 }));
       mockChild = createMockChild(99999);
       supervisor.start(defaultStartOpts({ projectId: "proj1", workspace: "ws2", port: 4000 }));
@@ -746,7 +751,7 @@ describe("ScriptSupervisor", () => {
     });
 
     it("returns correct shape", () => {
-      const supervisor = new ScriptSupervisor(vi.fn());
+      const supervisor = new ScriptSupervisor(createMockCallbacks());
       supervisor.start(defaultStartOpts());
 
       const s = supervisor.status()[0]!;
@@ -767,12 +772,12 @@ describe("ScriptSupervisor", () => {
 
   describe("logs()", () => {
     it("returns empty array for non-existent script", () => {
-      const supervisor = new ScriptSupervisor(vi.fn());
+      const supervisor = new ScriptSupervisor(createMockCallbacks());
       expect(supervisor.logs("nonexistent")).toEqual([]);
     });
 
     it("returns buffered logs", () => {
-      const supervisor = new ScriptSupervisor(vi.fn());
+      const supervisor = new ScriptSupervisor(createMockCallbacks());
       supervisor.start(defaultStartOpts());
 
       mockChild.stdout.emit("data", Buffer.from("line1\nline2\n"));
@@ -783,7 +788,7 @@ describe("ScriptSupervisor", () => {
     });
 
     it("respects limit parameter", () => {
-      const supervisor = new ScriptSupervisor(vi.fn());
+      const supervisor = new ScriptSupervisor(createMockCallbacks());
       supervisor.start(defaultStartOpts());
 
       for (let i = 0; i < 10; i++) {
@@ -795,7 +800,7 @@ describe("ScriptSupervisor", () => {
     });
 
     it("uses default limit of 100", () => {
-      const supervisor = new ScriptSupervisor(vi.fn());
+      const supervisor = new ScriptSupervisor(createMockCallbacks());
       supervisor.start(defaultStartOpts());
 
       for (let i = 0; i < 200; i++) {
@@ -813,8 +818,8 @@ describe("ScriptSupervisor", () => {
 
   describe("startChecked()", () => {
     it("starts normally when port is not in use", async () => {
-      const push = vi.fn();
-      const supervisor = new ScriptSupervisor(push);
+      const callbacks = createMockCallbacks();
+      const supervisor = new ScriptSupervisor(callbacks);
 
       mockPortFree();
       await supervisor.startChecked(defaultStartOpts({ isLongRunning: true, port: 3000 }));
@@ -824,8 +829,8 @@ describe("ScriptSupervisor", () => {
     });
 
     it("attaches to existing service when port is in use", async () => {
-      const push = vi.fn();
-      const supervisor = new ScriptSupervisor(push);
+      const callbacks = createMockCallbacks();
+      const supervisor = new ScriptSupervisor(callbacks);
 
       mockPortInUse();
       await supervisor.startChecked(defaultStartOpts({ isLongRunning: true, port: 5000 }));
@@ -837,8 +842,8 @@ describe("ScriptSupervisor", () => {
     });
 
     it("does not check port for non-long-running scripts", async () => {
-      const push = vi.fn();
-      const supervisor = new ScriptSupervisor(push);
+      const callbacks = createMockCallbacks();
+      const supervisor = new ScriptSupervisor(callbacks);
 
       await supervisor.startChecked(defaultStartOpts({ isLongRunning: false, port: 5000 }));
 
@@ -847,8 +852,8 @@ describe("ScriptSupervisor", () => {
     });
 
     it("does not check port when port is 0", async () => {
-      const push = vi.fn();
-      const supervisor = new ScriptSupervisor(push);
+      const callbacks = createMockCallbacks();
+      const supervisor = new ScriptSupervisor(callbacks);
 
       await supervisor.startChecked(defaultStartOpts({ isLongRunning: true, port: 0 }));
 
@@ -857,8 +862,8 @@ describe("ScriptSupervisor", () => {
     });
 
     it("attaches with correct log message when port is in use", async () => {
-      const push = vi.fn();
-      const supervisor = new ScriptSupervisor(push);
+      const callbacks = createMockCallbacks();
+      const supervisor = new ScriptSupervisor(callbacks);
 
       mockPortInUse();
       await supervisor.startChecked(defaultStartOpts({ isLongRunning: true, port: 5000 }));
@@ -874,7 +879,7 @@ describe("ScriptSupervisor", () => {
 
   describe("autoDetect()", () => {
     it("skips services with port <= 0", async () => {
-      const supervisor = new ScriptSupervisor(vi.fn());
+      const supervisor = new ScriptSupervisor(createMockCallbacks());
 
       await supervisor.autoDetect("proj1", "default", [{ name: "svc", resolvedPort: 0 }]);
 
@@ -882,7 +887,7 @@ describe("ScriptSupervisor", () => {
     });
 
     it("skips already tracked services", async () => {
-      const supervisor = new ScriptSupervisor(vi.fn());
+      const supervisor = new ScriptSupervisor(createMockCallbacks());
       supervisor.start(defaultStartOpts({ service: "api", port: 3000, script: "dev" }));
 
       await supervisor.autoDetect("proj1", "default", [{ name: "api", resolvedPort: 3000 }]);
@@ -891,8 +896,8 @@ describe("ScriptSupervisor", () => {
     });
 
     it("detects services running on ports", async () => {
-      const push = vi.fn();
-      const supervisor = new ScriptSupervisor(push);
+      const callbacks = createMockCallbacks();
+      const supervisor = new ScriptSupervisor(callbacks);
 
       mockPortInUse();
       await supervisor.autoDetect("proj1", "default", [{ name: "api", resolvedPort: 5000 }]);
@@ -905,7 +910,7 @@ describe("ScriptSupervisor", () => {
     });
 
     it("skips services where port check fails", async () => {
-      const supervisor = new ScriptSupervisor(vi.fn());
+      const supervisor = new ScriptSupervisor(createMockCallbacks());
 
       mockPortFree();
       await supervisor.autoDetect("proj1", "default", [{ name: "api", resolvedPort: 5000 }]);
@@ -914,7 +919,7 @@ describe("ScriptSupervisor", () => {
     });
 
     it("detects multiple services", async () => {
-      const supervisor = new ScriptSupervisor(vi.fn());
+      const supervisor = new ScriptSupervisor(createMockCallbacks());
 
       mockPortInUse();
       mockPortInUse();
@@ -927,8 +932,8 @@ describe("ScriptSupervisor", () => {
     });
 
     it("includes detection log message", async () => {
-      const push = vi.fn();
-      const supervisor = new ScriptSupervisor(push);
+      const callbacks = createMockCallbacks();
+      const supervisor = new ScriptSupervisor(callbacks);
 
       mockPortInUse();
       await supervisor.autoDetect("proj1", "default", [{ name: "api", resolvedPort: 5000 }]);
@@ -944,8 +949,8 @@ describe("ScriptSupervisor", () => {
 
   describe("runAll()", () => {
     it("starts services in topological order", async () => {
-      const push = vi.fn();
-      const supervisor = new ScriptSupervisor(push);
+      const callbacks = createMockCallbacks();
+      const supervisor = new ScriptSupervisor(callbacks);
 
       const services: ResolvedServiceDef[] = [
         makeResolved("api", [], {
@@ -969,8 +974,8 @@ describe("ScriptSupervisor", () => {
     });
 
     it("skips services without the requested category", async () => {
-      const push = vi.fn();
-      const supervisor = new ScriptSupervisor(push);
+      const callbacks = createMockCallbacks();
+      const supervisor = new ScriptSupervisor(callbacks);
 
       const services: ResolvedServiceDef[] = [
         makeResolved("api", [], { resolvedPort: 3000, essencial: {} }),
@@ -988,8 +993,8 @@ describe("ScriptSupervisor", () => {
     });
 
     it("runs one-shot scripts (non-dev category)", async () => {
-      const push = vi.fn();
-      const supervisor = new ScriptSupervisor(push);
+      const callbacks = createMockCallbacks();
+      const supervisor = new ScriptSupervisor(callbacks);
 
       const services: ResolvedServiceDef[] = [
         makeResolved("api", [], {
@@ -1011,8 +1016,8 @@ describe("ScriptSupervisor", () => {
 
     it("waits for dependency health before starting dependents", async () => {
       vi.useFakeTimers();
-      const push = vi.fn();
-      const supervisor = new ScriptSupervisor(push);
+      const callbacks = createMockCallbacks();
+      const supervisor = new ScriptSupervisor(callbacks);
 
       const services: ResolvedServiceDef[] = [
         makeResolved("db", [], {
@@ -1059,8 +1064,8 @@ describe("ScriptSupervisor", () => {
 
     it("continues to start remaining services if dependency health fails", async () => {
       vi.useFakeTimers();
-      const push = vi.fn();
-      const supervisor = new ScriptSupervisor(push);
+      const callbacks = createMockCallbacks();
+      const supervisor = new ScriptSupervisor(callbacks);
 
       const services: ResolvedServiceDef[] = [
         makeResolved("db", [], {
@@ -1106,8 +1111,8 @@ describe("ScriptSupervisor", () => {
 
     it("handles long-running without port dependency (waitForRunning)", async () => {
       vi.useFakeTimers();
-      const push = vi.fn();
-      const supervisor = new ScriptSupervisor(push);
+      const callbacks = createMockCallbacks();
+      const supervisor = new ScriptSupervisor(callbacks);
 
       const services: ResolvedServiceDef[] = [
         makeResolved("watcher", [], {
@@ -1143,8 +1148,8 @@ describe("ScriptSupervisor", () => {
 
     it("handles one-shot dependency (waitForExit)", async () => {
       vi.useFakeTimers();
-      const push = vi.fn();
-      const supervisor = new ScriptSupervisor(push);
+      const callbacks = createMockCallbacks();
+      const supervisor = new ScriptSupervisor(callbacks);
 
       const child1 = createMockChild(1111);
       const child2 = createMockChild(2222);
@@ -1190,8 +1195,8 @@ describe("ScriptSupervisor", () => {
 
     it("handles waitForExit timeout", async () => {
       vi.useFakeTimers();
-      const push = vi.fn();
-      const supervisor = new ScriptSupervisor(push);
+      const callbacks = createMockCallbacks();
+      const supervisor = new ScriptSupervisor(callbacks);
 
       const services: ResolvedServiceDef[] = [
         makeResolved("setup", [], {
@@ -1223,8 +1228,8 @@ describe("ScriptSupervisor", () => {
 
     it("handles waitForExit with failed exit code", async () => {
       vi.useFakeTimers();
-      const push = vi.fn();
-      const supervisor = new ScriptSupervisor(push);
+      const callbacks = createMockCallbacks();
+      const supervisor = new ScriptSupervisor(callbacks);
 
       const child1 = createMockChild(1111);
       const child2 = createMockChild(2222);
@@ -1266,8 +1271,8 @@ describe("ScriptSupervisor", () => {
     });
 
     it("does not wait for services with no dependents", async () => {
-      const push = vi.fn();
-      const supervisor = new ScriptSupervisor(push);
+      const callbacks = createMockCallbacks();
+      const supervisor = new ScriptSupervisor(callbacks);
 
       const services: ResolvedServiceDef[] = [
         makeResolved("api", [], {
@@ -1292,8 +1297,8 @@ describe("ScriptSupervisor", () => {
     });
 
     it("interpolates {config.port} refs in commands", async () => {
-      const push = vi.fn();
-      const supervisor = new ScriptSupervisor(push);
+      const callbacks = createMockCallbacks();
+      const supervisor = new ScriptSupervisor(callbacks);
 
       const services: ResolvedServiceDef[] = [
         makeResolved("api", [], {
@@ -1313,9 +1318,9 @@ describe("ScriptSupervisor", () => {
         cwd: () => "/tmp",
       });
 
-      const logCalls = push.mock.calls.filter((c) => c[0] === "scripts:log");
-      const commandLog = logCalls.find((c) => c[1].line.includes("start --port"));
-      expect(commandLog?.[1].line).toContain("start --port 3000");
+      const logCalls = callbacks.onLog.mock.calls;
+      const commandLog = logCalls.find((c) => c[0].line.includes("start --port"));
+      expect(commandLog?.[0].line).toContain("start --port 3000");
     });
   });
 
@@ -1326,8 +1331,8 @@ describe("ScriptSupervisor", () => {
   describe("waitForRunning edge case", () => {
     it("resolves when entry is removed (no entry found)", async () => {
       vi.useFakeTimers();
-      const push = vi.fn();
-      const supervisor = new ScriptSupervisor(push);
+      const callbacks = createMockCallbacks();
+      const supervisor = new ScriptSupervisor(callbacks);
 
       const services: ResolvedServiceDef[] = [
         makeResolved("watcher", [], {
@@ -1366,8 +1371,8 @@ describe("ScriptSupervisor", () => {
   describe("waitForHealth edge case", () => {
     it("rejects when entry is removed before becoming healthy", async () => {
       vi.useFakeTimers();
-      const push = vi.fn();
-      const supervisor = new ScriptSupervisor(push);
+      const callbacks = createMockCallbacks();
+      const supervisor = new ScriptSupervisor(callbacks);
 
       const services: ResolvedServiceDef[] = [
         makeResolved("db", [], {
@@ -1414,8 +1419,8 @@ describe("ScriptSupervisor", () => {
   describe("waitForExit edge case", () => {
     it("resolves when entry is removed during wait", async () => {
       vi.useFakeTimers();
-      const push = vi.fn();
-      const supervisor = new ScriptSupervisor(push);
+      const callbacks = createMockCallbacks();
+      const supervisor = new ScriptSupervisor(callbacks);
 
       const services: ResolvedServiceDef[] = [
         makeResolved("setup", [], {

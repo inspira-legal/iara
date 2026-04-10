@@ -13,7 +13,6 @@ import { registerGitHandlers } from "./git.js";
 import { registerNotificationHandlers } from "./notifications.js";
 import { registerProjectHandlers } from "./projects.js";
 import { registerPromptHandlers } from "./prompts.js";
-import { registerSessionHandlers } from "./sessions.js";
 import { registerSettingsHandlers } from "./settings.js";
 import { registerWorkspaceHandlers } from "./workspaces.js";
 import { registerFileHandlers } from "./files.js";
@@ -22,8 +21,8 @@ import { registerTerminalHandlers } from "./terminal.js";
 import { registerMethod } from "../router.js";
 import { activeRuns } from "../services/claude-runner.js";
 
-import type { PushFn } from "../types.js";
-export type { PushFn };
+import type { PushFn, PushPatchFn } from "../types.js";
+export type { PushFn, PushPatchFn };
 
 export interface HandlerDeps {
   appState: AppState;
@@ -35,6 +34,7 @@ export interface HandlerDeps {
   sessionWatcher: SessionWatcher;
   envWatcher: EnvWatcher;
   pushFn: PushFn;
+  pushPatch: PushPatchFn;
 }
 
 export function registerAllHandlers(deps: HandlerDeps): void {
@@ -47,7 +47,7 @@ export function registerAllHandlers(deps: HandlerDeps): void {
     }
   });
 
-  registerAppHandlers(deps.appState);
+  registerAppHandlers(deps.appState, deps.scriptSupervisor);
   registerProjectHandlers(
     deps.appState,
     deps.watcher,
@@ -57,6 +57,7 @@ export function registerAllHandlers(deps: HandlerDeps): void {
     deps.gitWatcher,
     deps.sessionWatcher,
     deps.pushFn,
+    deps.pushPatch,
   );
   registerWorkspaceHandlers(
     deps.appState,
@@ -67,14 +68,14 @@ export function registerAllHandlers(deps: HandlerDeps): void {
     deps.gitWatcher,
     deps.sessionWatcher,
     deps.pushFn,
+    deps.pushPatch,
   );
-  registerSessionHandlers(deps.appState);
   registerPromptHandlers(deps.appState);
-  registerScriptHandlers(deps.appState, deps.scriptSupervisor, deps.pushFn);
-  registerEnvHandlers(deps.appState, deps.envWatcher);
+  registerScriptHandlers(deps.appState, deps.scriptSupervisor, deps.pushFn, deps.pushPatch);
+  registerEnvHandlers(deps.appState, deps.envWatcher, deps.pushPatch);
   registerGitHandlers();
   registerNotificationHandlers(deps.notificationService);
   registerFileHandlers(deps.appState);
   registerTerminalHandlers(deps.appState, deps.terminalManager);
-  registerSettingsHandlers(deps.appState, deps.pushFn);
+  registerSettingsHandlers(deps.appState, deps.pushPatch);
 }

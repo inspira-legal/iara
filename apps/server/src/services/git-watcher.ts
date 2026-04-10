@@ -1,6 +1,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
-import type { PushFn } from "../types.js";
+import type { RepoInfo } from "@iara/contracts";
+import type { PushPatchFn } from "../types.js";
 import type { AppState } from "./state.js";
 import { getRepoInfo } from "./repos.js";
 
@@ -16,7 +17,7 @@ export class GitWatcher {
 
   constructor(
     private readonly appState: AppState,
-    private readonly pushFn: PushFn,
+    private readonly pushPatch: PushPatchFn,
   ) {}
 
   /** Scan all projects and start watching their repos. */
@@ -119,11 +120,9 @@ export class GitWatcher {
     try {
       const wsSlug = workspaceId?.split("/")[1];
       const repoInfo = await getRepoInfo(this.appState, projectSlug, wsSlug);
-      this.pushFn("repos:changed", {
-        projectId: projectSlug,
-        ...(workspaceId ? { workspaceId } : {}),
-        repoInfo,
-      });
+      const key = workspaceId ?? `project:${projectSlug}`;
+      const update: Record<string, RepoInfo[]> = { [key]: repoInfo };
+      this.pushPatch({ repoInfo: update });
     } catch {
       // Repo may have been deleted
     }

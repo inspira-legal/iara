@@ -27,10 +27,6 @@ import type {
 // ---------------------------------------------------------------------------
 
 export type WsMethods = {
-  // App
-  "app.info": { params: Record<string, never>; result: AppInfo };
-  "app.capabilities": { params: Record<string, never>; result: AppCapabilities };
-
   // State
   "state.init": {
     params: Record<string, never>;
@@ -39,6 +35,11 @@ export type WsMethods = {
       settings: Record<string, string>;
       repoInfo: Record<string, RepoInfo[]>;
       sessions: Record<string, SessionInfo[]>;
+      env: Record<string, EnvData>;
+      scripts: Record<string, ScriptsConfig>;
+      scriptStatuses: Record<string, ScriptStatus[]>;
+      appInfo: AppInfo;
+      capabilities: AppCapabilities;
     };
   };
 
@@ -52,7 +53,6 @@ export type WsMethods = {
   };
 
   // Repos
-  "repos.getInfo": { params: { projectId: string; workspaceId?: string }; result: RepoInfo[] };
   "repos.validateUrl": { params: { url: string }; result: void };
   "repos.add": { params: { projectId: string } & AddRepoInput; result: void };
   "repos.fetch": { params: { projectId: string; workspaceId?: string }; result: void };
@@ -98,7 +98,6 @@ export type WsMethods = {
   };
 
   // Scripts
-  "scripts.load": { params: { workspaceId: string }; result: ScriptsConfig };
   "scripts.run": {
     params: { workspaceId: string; service: string; script: string };
     result: void;
@@ -109,12 +108,10 @@ export type WsMethods = {
     result: void;
   };
   "scripts.stopAll": { params: { workspaceId: string }; result: void };
-  "scripts.status": { params: { workspaceId: string }; result: ScriptStatus[] };
   "scripts.logs": { params: { scriptId: string; limit?: number }; result: string[] };
   "scripts.discover": { params: { projectId: string }; result: { requestId: string } };
 
   // Env
-  "env.list": { params: { workspaceId: string }; result: EnvData };
   "env.write": {
     params: {
       workspaceId: string;
@@ -170,25 +167,28 @@ export type WsMethods = {
 // ---------------------------------------------------------------------------
 
 export type WsPushEvents = {
+  // State push — carries data, replaces all granular push events
+  "state:patch": {
+    projects?: Project[];
+    settings?: Record<string, string>;
+    repoInfo?: Record<string, RepoInfo[]>;
+    sessions?: Record<string, SessionInfo[]>;
+    env?: Record<string, EnvData>;
+    scripts?: Record<string, ScriptsConfig>;
+    scriptStatuses?: Record<string, ScriptStatus[]>;
+  };
+
+  // Streaming/transient events (unchanged)
   "terminal:data": { terminalId: string; data: string };
   "terminal:exit": { terminalId: string; exitCode: number };
-  "scripts:status": { service: string; script: string; status: ScriptStatus };
+  "session:updated": { terminalId: string; sessionId: string };
   "scripts:log": { scriptId: string; service: string; script: string; line: string };
   "scripts:discovering": { projectId: string };
-  "scripts:reload": { projectId: string };
   notification: { title: string; body: string; type?: string };
   "clone:progress": CloneProgress;
-  "session:changed": { workspaceId: string };
-  "session:updated": { terminalId: string; sessionId: string };
-  "env:changed": { workspaceId: string };
-  "settings:changed": { key: string; value: string };
   "claude:progress": { requestId: string; progress: ClaudeProgress };
   "claude:result": { requestId: string; result: unknown };
   "claude:error": { requestId: string; error: string };
-  "project:changed": { project: Project };
-  "workspace:changed": { workspace: Workspace };
-  "state:resync": { state: { projects: Project[]; settings: Record<string, string> } };
-  "repos:changed": { projectId: string; workspaceId?: string; repoInfo: RepoInfo[] };
 };
 
 // ---------------------------------------------------------------------------

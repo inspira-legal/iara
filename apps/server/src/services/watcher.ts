@@ -1,6 +1,6 @@
 import * as path from "node:path";
 import type { AsyncSubscription } from "@parcel/watcher";
-import type { PushFn } from "../types.js";
+import type { PushPatchFn } from "../types.js";
 import type { AppState } from "./state.js";
 
 export class ProjectsWatcher {
@@ -12,7 +12,7 @@ export class ProjectsWatcher {
   constructor(
     private readonly projectsDir: string,
     private readonly appState: AppState,
-    private readonly pushFn: PushFn,
+    private readonly pushPatch: PushPatchFn,
   ) {}
 
   async start(): Promise<void> {
@@ -116,16 +116,13 @@ export class ProjectsWatcher {
 
       if (needsFullResync) {
         this.appState.scan();
-        this.pushFn("state:resync", { state: this.appState.getState() });
-      } else {
-        for (const project of rescanned.values()) {
-          this.pushFn("project:changed", { project });
-        }
       }
+
+      this.pushPatch({ projects: this.appState.getState().projects });
     } catch {
       // FS may be in inconsistent state during deletions — full resync
       this.appState.scan();
-      this.pushFn("state:resync", { state: this.appState.getState() });
+      this.pushPatch({ projects: this.appState.getState().projects });
     }
   }
 

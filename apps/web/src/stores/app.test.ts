@@ -75,6 +75,10 @@ const INITIAL_STATE = {
   settings: {},
   repoInfo: {},
   sessions: {},
+  env: {},
+  scripts: {},
+  scriptStatuses: {},
+  appInfo: null,
   selectedWorkspaceId: null,
   initialized: false,
 };
@@ -128,8 +132,17 @@ describe("useAppStore", () => {
     it("calls transport.request('state.init') and sets state", async () => {
       const projects = [makeProject()];
       const settings = { theme: "dark" };
-      mockRequest.mockResolvedValueOnce({ projects, settings, repoInfo: {}, sessions: {} });
-      mockRequest.mockResolvedValueOnce({ claude: true, platform: "linux" });
+      mockRequest.mockResolvedValueOnce({
+        projects,
+        settings,
+        repoInfo: {},
+        sessions: {},
+        env: {},
+        scripts: {},
+        scriptStatuses: {},
+        appInfo: { version: "0.0.1", platform: "linux", isDev: true },
+        capabilities: { claude: true, platform: "linux" },
+      });
 
       await useAppStore.getState().init();
 
@@ -142,7 +155,6 @@ describe("useAppStore", () => {
 
     it("propagates transport errors", async () => {
       mockRequest.mockRejectedValueOnce(new Error("network"));
-      mockRequest.mockResolvedValueOnce({ claude: true, platform: "linux" });
       await expect(useAppStore.getState().init()).rejects.toThrow("network");
       expect(useAppStore.getState().initialized).toBe(false);
     });
@@ -297,170 +309,13 @@ describe("useAppStore", () => {
   // -----------------------------------------------------------------------
 
   describe("updateSetting()", () => {
-    it("optimistically updates the setting and calls transport", async () => {
-      useAppStore.setState({ settings: { theme: "light" } });
-      mockRequest.mockResolvedValueOnce(undefined);
-
-      await useAppStore.getState().updateSetting("theme", "dark");
-
-      expect(useAppStore.getState().settings.theme).toBe("dark");
-      expect(mockRequest).toHaveBeenCalledWith("settings.set", { key: "theme", value: "dark" });
-    });
-
-    it("adds a new setting key", async () => {
+    it("adds a new setting key optimistically", async () => {
       useAppStore.setState({ settings: {} });
       mockRequest.mockResolvedValueOnce(undefined);
 
       await useAppStore.getState().updateSetting("newKey", "newValue");
 
       expect(useAppStore.getState().settings.newKey).toBe("newValue");
-    });
-  });
-
-  // -----------------------------------------------------------------------
-  // onProjectChanged
-  // -----------------------------------------------------------------------
-
-  describe("onProjectChanged()", () => {
-    it("replaces an existing project", () => {
-      const proj = makeProject({ id: "proj1", name: "Old Name" });
-      useAppStore.setState({ projects: [proj] });
-
-      const updated = makeProject({ id: "proj1", name: "New Name" });
-      useAppStore.getState().onProjectChanged(updated);
-
-      expect(useAppStore.getState().projects[0]!.name).toBe("New Name");
-      expect(useAppStore.getState().projects).toHaveLength(1);
-    });
-
-    it("adds a new project if not found", () => {
-      const proj1 = makeProject({ id: "proj1" });
-      useAppStore.setState({ projects: [proj1] });
-
-      const proj2 = makeProject({ id: "proj2" });
-      useAppStore.getState().onProjectChanged(proj2);
-
-      expect(useAppStore.getState().projects).toHaveLength(2);
-    });
-  });
-
-  // -----------------------------------------------------------------------
-  // onWorkspaceChanged
-  // -----------------------------------------------------------------------
-
-  describe("onWorkspaceChanged()", () => {
-    it("replaces an existing workspace in the parent project", () => {
-      const ws = makeWorkspace({ id: "proj1/ws1", name: "Old" });
-      const proj = makeProject({ id: "proj1", workspaces: [ws] });
-      useAppStore.setState({ projects: [proj] });
-
-      const updated = makeWorkspace({ id: "proj1/ws1", projectId: "proj1", name: "Updated" });
-      useAppStore.getState().onWorkspaceChanged(updated);
-
-      expect(useAppStore.getState().projects[0]!.workspaces[0]!.name).toBe("Updated");
-    });
-
-    it("adds a new workspace if not found in project", () => {
-      const proj = makeProject({ id: "proj1", workspaces: [] });
-      useAppStore.setState({ projects: [proj] });
-
-      const ws = makeWorkspace({ id: "proj1/ws-new", projectId: "proj1" });
-      useAppStore.getState().onWorkspaceChanged(ws);
-
-      expect(useAppStore.getState().projects[0]!.workspaces).toHaveLength(1);
-      expect(useAppStore.getState().projects[0]!.workspaces[0]!.id).toBe("proj1/ws-new");
-    });
-
-    it("does nothing if project is not found", () => {
-      const proj = makeProject({ id: "proj1" });
-      useAppStore.setState({ projects: [proj] });
-
-      const ws = makeWorkspace({ id: "unknown/ws1", projectId: "unknown" });
-      useAppStore.getState().onWorkspaceChanged(ws);
-
-      // State unchanged
-      expect(useAppStore.getState().projects).toHaveLength(1);
-      expect(useAppStore.getState().projects[0]!.workspaces).toHaveLength(1);
-    });
-  });
-
-  // -----------------------------------------------------------------------
-  // onStateResync
-  // -----------------------------------------------------------------------
-
-  describe("onStateResync()", () => {
-    it("replaces full state", () => {
-      useAppStore.setState({ projects: [makeProject()], settings: { a: "1" } });
-
-      const newProjects = [makeProject({ id: "new" })];
-      const newSettings = { b: "2" };
-      useAppStore.getState().onStateResync({ projects: newProjects, settings: newSettings });
-
-      expect(useAppStore.getState().projects).toEqual(newProjects);
-      expect(useAppStore.getState().settings).toEqual(newSettings);
-    });
-
-    it("prunes repoInfo for deleted workspaces", () => {
-      const ws = makeWorkspace({ id: "proj1/ws1" });
-      const proj = makeProject({ id: "proj1", workspaces: [ws] });
-      useAppStore.setState({
-        projects: [proj],
-        repoInfo: {
-          "proj1/ws1": [{ branch: "main", ahead: 0, behind: 0, hasChanges: false }] as any,
-          "proj1/ws-deleted": [{ branch: "feat", ahead: 1, behind: 0, hasChanges: true }] as any,
-        },
-      });
-
-      useAppStore.getState().onStateResync({ projects: [proj], settings: {} });
-
-      const repoInfo = useAppStore.getState().repoInfo;
-      expect(repoInfo["proj1/ws1"]).toBeDefined();
-      expect(repoInfo["proj1/ws-deleted"]).toBeUndefined();
-    });
-
-    it("prunes sessions for deleted workspaces", () => {
-      const ws = makeWorkspace({ id: "proj1/ws1" });
-      const proj = makeProject({ id: "proj1", workspaces: [ws] });
-      useAppStore.setState({
-        projects: [proj],
-        sessions: {
-          "proj1/ws1": [{ id: "sess1" }] as any,
-          "proj1/ws-deleted": [{ id: "sess2" }] as any,
-        },
-      });
-
-      useAppStore.getState().onStateResync({ projects: [proj], settings: {} });
-
-      const sessions = useAppStore.getState().sessions;
-      expect(sessions["proj1/ws1"]).toBeDefined();
-      expect(sessions["proj1/ws-deleted"]).toBeUndefined();
-    });
-
-    it("keeps repoInfo and sessions when all workspaces are still valid", () => {
-      const ws = makeWorkspace({ id: "proj1/ws1" });
-      const proj = makeProject({ id: "proj1", workspaces: [ws] });
-      useAppStore.setState({
-        projects: [proj],
-        repoInfo: { "proj1/ws1": [] },
-        sessions: { "proj1/ws1": [] },
-      });
-
-      useAppStore.getState().onStateResync({ projects: [proj], settings: {} });
-
-      expect(useAppStore.getState().repoInfo["proj1/ws1"]).toBeDefined();
-      expect(useAppStore.getState().sessions["proj1/ws1"]).toBeDefined();
-    });
-  });
-
-  // -----------------------------------------------------------------------
-  // onSettingsChanged
-  // -----------------------------------------------------------------------
-
-  describe("onSettingsChanged()", () => {
-    it("updates a single setting key", () => {
-      useAppStore.setState({ settings: { a: "1", b: "2" } });
-      useAppStore.getState().onSettingsChanged("a", "updated");
-      expect(useAppStore.getState().settings).toEqual({ a: "updated", b: "2" });
     });
   });
 
@@ -508,87 +363,95 @@ describe("useAppStore", () => {
   });
 
   // -----------------------------------------------------------------------
-  // subscribePush
+  // subscribePush — state:patch handler
   // -----------------------------------------------------------------------
 
   describe("subscribePush()", () => {
-    it("subscribes to events and returns unsubscribe function", () => {
-      const unsubs = Array.from({ length: 6 }, () => vi.fn());
-      for (const unsub of unsubs) {
-        mockSubscribe.mockReturnValueOnce(unsub);
-      }
+    it("subscribes to state:patch and returns unsubscribe function", () => {
+      const unsub = vi.fn();
+      mockSubscribe.mockReturnValueOnce(unsub);
 
       const unsubAll = useAppStore.getState().subscribePush();
 
-      expect(mockSubscribe).toHaveBeenCalledWith("project:changed", expect.any(Function));
-      expect(mockSubscribe).toHaveBeenCalledWith("workspace:changed", expect.any(Function));
-      expect(mockSubscribe).toHaveBeenCalledWith("state:resync", expect.any(Function));
-      expect(mockSubscribe).toHaveBeenCalledWith("settings:changed", expect.any(Function));
-      expect(mockSubscribe).toHaveBeenCalledWith("session:changed", expect.any(Function));
-      expect(mockSubscribe).toHaveBeenCalledWith("repos:changed", expect.any(Function));
+      expect(mockSubscribe).toHaveBeenCalledWith("state:patch", expect.any(Function));
 
       unsubAll();
-      for (const unsub of unsubs) {
-        expect(unsub).toHaveBeenCalled();
-      }
+      expect(unsub).toHaveBeenCalled();
     });
 
-    it("project:changed callback calls onProjectChanged", () => {
-      mockSubscribe.mockImplementation((event: string, cb: (...args: unknown[]) => void) => {
-        if (event === "project:changed") {
-          const proj = makeProject({ id: "push-proj", name: "Pushed" });
-          cb({ project: proj });
-        }
+    it("state:patch with projects replaces projects", () => {
+      let patchCb: ((...args: unknown[]) => void) | undefined;
+      mockSubscribe.mockImplementation((_event: string, cb: (...args: unknown[]) => void) => {
+        patchCb = cb;
         return vi.fn();
       });
 
       useAppStore.getState().subscribePush();
 
-      expect(useAppStore.getState().projects.find((p) => p.id === "push-proj")).toBeDefined();
+      const newProjects = [makeProject({ id: "new-proj" })];
+      patchCb!({ projects: newProjects });
+
+      expect(useAppStore.getState().projects).toEqual(newProjects);
     });
 
-    it("workspace:changed callback calls onWorkspaceChanged", () => {
-      const proj = makeProject({ id: "proj1", workspaces: [] });
-      useAppStore.setState({ projects: [proj] });
+    it("state:patch with settings replaces settings", () => {
+      useAppStore.setState({ settings: { old: "val" } });
 
-      mockSubscribe.mockImplementation((event: string, cb: (...args: unknown[]) => void) => {
-        if (event === "workspace:changed") {
-          const ws = makeWorkspace({ id: "proj1/pushed-ws", projectId: "proj1" });
-          cb({ workspace: ws });
-        }
+      let patchCb: ((...args: unknown[]) => void) | undefined;
+      mockSubscribe.mockImplementation((_event: string, cb: (...args: unknown[]) => void) => {
+        patchCb = cb;
         return vi.fn();
       });
 
       useAppStore.getState().subscribePush();
+      patchCb!({ settings: { theme: "dark" } });
 
-      expect(useAppStore.getState().projects[0]!.workspaces).toHaveLength(1);
+      expect(useAppStore.getState().settings).toEqual({ theme: "dark" });
     });
 
-    it("state:resync callback calls onStateResync", () => {
-      mockSubscribe.mockImplementation((event: string, cb: (...args: unknown[]) => void) => {
-        if (event === "state:resync") {
-          cb({ state: { projects: [makeProject({ id: "resync" })], settings: { x: "y" } } });
-        }
+    it("state:patch with repoInfo merges by key", () => {
+      useAppStore.setState({
+        repoInfo: {
+          "proj1/ws1": [{ branch: "main" }] as any,
+          "proj1/ws2": [{ branch: "feat" }] as any,
+        },
+      });
+
+      let patchCb: ((...args: unknown[]) => void) | undefined;
+      mockSubscribe.mockImplementation((_event: string, cb: (...args: unknown[]) => void) => {
+        patchCb = cb;
         return vi.fn();
       });
 
       useAppStore.getState().subscribePush();
+      patchCb!({ repoInfo: { "proj1/ws1": [{ branch: "develop" }] } });
 
-      expect(useAppStore.getState().projects).toHaveLength(1);
-      expect(useAppStore.getState().projects[0]!.id).toBe("resync");
-      expect(useAppStore.getState().settings).toEqual({ x: "y" });
+      expect(useAppStore.getState().repoInfo["proj1/ws1"]).toEqual([{ branch: "develop" }]);
+      // ws2 preserved
+      expect(useAppStore.getState().repoInfo["proj1/ws2"]).toEqual([{ branch: "feat" }]);
     });
 
-    it("state:resync prunes terminal entries for deleted workspaces", async () => {
+    it("state:patch with projects prunes orphaned entries", () => {
       mockTerminalEntries.current = new Map([
         ["id-1", { workspaceId: "proj1/ws1" }],
         ["id-stale", { workspaceId: "proj1/ws-stale" }],
       ]);
       mockScriptsGetState.mockReturnValue({ currentWorkspaceId: null });
 
-      let resyncCb: ((...args: unknown[]) => void) | undefined = undefined;
-      mockSubscribe.mockImplementation((event: string, cb: (...args: unknown[]) => void) => {
-        if (event === "state:resync") resyncCb = cb;
+      useAppStore.setState({
+        repoInfo: {
+          "proj1/ws1": [],
+          "proj1/ws-stale": [],
+        },
+        sessions: {
+          "proj1/ws1": [],
+          "proj1/ws-stale": [],
+        },
+      });
+
+      let patchCb: ((...args: unknown[]) => void) | undefined;
+      mockSubscribe.mockImplementation((_event: string, cb: (...args: unknown[]) => void) => {
+        patchCb = cb;
         return vi.fn();
       });
 
@@ -596,19 +459,23 @@ describe("useAppStore", () => {
 
       const ws = makeWorkspace({ id: "proj1/ws1" });
       const proj = makeProject({ id: "proj1", workspaces: [ws] });
-      await resyncCb!({ state: { projects: [proj], settings: {} } });
+      patchCb!({ projects: [proj] });
 
+      expect(useAppStore.getState().repoInfo["proj1/ws1"]).toBeDefined();
+      expect(useAppStore.getState().repoInfo["proj1/ws-stale"]).toBeUndefined();
+      expect(useAppStore.getState().sessions["proj1/ws1"]).toBeDefined();
+      expect(useAppStore.getState().sessions["proj1/ws-stale"]).toBeUndefined();
       expect(mockTerminalDestroy).toHaveBeenCalledWith("id-stale");
       expect(mockTerminalDestroy).not.toHaveBeenCalledWith("id-1");
     });
 
-    it("state:resync prunes scripts store when currentWorkspaceId is stale", async () => {
+    it("state:patch with projects prunes scripts store when currentWorkspaceId is stale", () => {
       mockTerminalEntries.current = new Map();
       mockScriptsGetState.mockReturnValue({ currentWorkspaceId: "proj1/ws-stale" });
 
-      let resyncCb: ((...args: unknown[]) => void) | undefined = undefined;
-      mockSubscribe.mockImplementation((event: string, cb: (...args: unknown[]) => void) => {
-        if (event === "state:resync") resyncCb = cb;
+      let patchCb: ((...args: unknown[]) => void) | undefined;
+      mockSubscribe.mockImplementation((_event: string, cb: (...args: unknown[]) => void) => {
+        patchCb = cb;
         return vi.fn();
       });
 
@@ -616,7 +483,7 @@ describe("useAppStore", () => {
 
       const ws = makeWorkspace({ id: "proj1/ws1" });
       const proj = makeProject({ id: "proj1", workspaces: [ws] });
-      await resyncCb!({ state: { projects: [proj], settings: {} } });
+      patchCb!({ projects: [proj] });
 
       expect(mockScriptsSetState).toHaveBeenCalledWith({
         config: null,
@@ -626,13 +493,13 @@ describe("useAppStore", () => {
       });
     });
 
-    it("state:resync does not prune scripts store when currentWorkspaceId is still valid", async () => {
+    it("state:patch with projects does not prune scripts store when currentWorkspaceId is valid", () => {
       mockTerminalEntries.current = new Map();
       mockScriptsGetState.mockReturnValue({ currentWorkspaceId: "proj1/ws1" });
 
-      let resyncCb: ((...args: unknown[]) => void) | undefined = undefined;
-      mockSubscribe.mockImplementation((event: string, cb: (...args: unknown[]) => void) => {
-        if (event === "state:resync") resyncCb = cb;
+      let patchCb: ((...args: unknown[]) => void) | undefined;
+      mockSubscribe.mockImplementation((_event: string, cb: (...args: unknown[]) => void) => {
+        patchCb = cb;
         return vi.fn();
       });
 
@@ -640,74 +507,9 @@ describe("useAppStore", () => {
 
       const ws = makeWorkspace({ id: "proj1/ws1" });
       const proj = makeProject({ id: "proj1", workspaces: [ws] });
-      await resyncCb!({ state: { projects: [proj], settings: {} } });
+      patchCb!({ projects: [proj] });
 
       expect(mockScriptsSetState).not.toHaveBeenCalled();
-    });
-
-    it("session:changed callback triggers refreshSessions", () => {
-      mockSubscribe.mockImplementation((event: string, cb: (...args: unknown[]) => void) => {
-        if (event === "session:changed") {
-          cb({ workspaceId: "proj1/ws1" });
-        }
-        return vi.fn();
-      });
-
-      // Seed sessions so we can check refresh was called
-      mockRequest.mockResolvedValueOnce([{ id: "new-sess" }]);
-      useAppStore.getState().subscribePush();
-
-      // refreshSessions is called via void (fire-and-forget)
-      expect(mockRequest).toHaveBeenCalledWith("sessions.list", { workspaceId: "proj1/ws1" });
-    });
-
-    it("repos:changed callback uses workspaceId as key when present", () => {
-      mockSubscribe.mockImplementation((event: string, cb: (...args: unknown[]) => void) => {
-        if (event === "repos:changed") {
-          cb({
-            projectId: "proj1",
-            workspaceId: "proj1/ws1",
-            repoInfo: [{ branch: "main" }],
-          });
-        }
-        return vi.fn();
-      });
-
-      useAppStore.getState().subscribePush();
-
-      expect(useAppStore.getState().repoInfo["proj1/ws1"]).toEqual([{ branch: "main" }]);
-    });
-
-    it("repos:changed callback falls back to project:projectId key when workspaceId is null", () => {
-      mockSubscribe.mockImplementation((event: string, cb: (...args: unknown[]) => void) => {
-        if (event === "repos:changed") {
-          cb({
-            projectId: "proj1",
-            workspaceId: undefined,
-            repoInfo: [{ branch: "develop" }],
-          });
-        }
-        return vi.fn();
-      });
-
-      useAppStore.getState().subscribePush();
-
-      expect(useAppStore.getState().repoInfo["project:proj1"]).toEqual([{ branch: "develop" }]);
-    });
-
-    it("settings:changed callback calls onSettingsChanged", () => {
-      useAppStore.setState({ settings: { old: "val" } });
-
-      mockSubscribe.mockImplementation((event: string, cb: (...args: unknown[]) => void) => {
-        if (event === "settings:changed") {
-          cb({ key: "theme", value: "dark" });
-        }
-        return vi.fn();
-      });
-
-      useAppStore.getState().subscribePush();
-
-      expect(useAppStore.getState().settings.theme).toBe("dark");
     });
   });
 
@@ -791,85 +593,6 @@ describe("useAppStore", () => {
       await expect(useAppStore.getState().deleteWorkspace("proj1/ws2")).rejects.toThrow("fail");
 
       expect(useAppStore.getState().selectedWorkspaceId).toBe("proj1/ws2");
-    });
-  });
-
-  // -----------------------------------------------------------------------
-  // refreshRepoInfo / refreshSessions
-  // -----------------------------------------------------------------------
-
-  describe("refreshRepoInfo()", () => {
-    it("fetches and stores repo info", async () => {
-      const info = [{ branch: "main", ahead: 0, behind: 0, hasChanges: false }];
-      mockRequest.mockResolvedValueOnce(info);
-
-      await useAppStore.getState().refreshRepoInfo("proj1", "proj1/ws1", "proj1/ws1");
-
-      expect(mockRequest).toHaveBeenCalledWith("repos.getInfo", {
-        projectId: "proj1",
-        workspaceId: "proj1/ws1",
-      });
-      expect(useAppStore.getState().repoInfo["proj1/ws1"]).toEqual(info);
-    });
-
-    it("calls without workspaceId param when not provided", async () => {
-      const info = [{ branch: "main" }];
-      mockRequest.mockResolvedValueOnce(info);
-
-      await useAppStore.getState().refreshRepoInfo("proj1", "proj1/ws1");
-
-      expect(mockRequest).toHaveBeenCalledWith("repos.getInfo", { projectId: "proj1" });
-    });
-
-    it("keeps stale data on error", async () => {
-      useAppStore.setState({ repoInfo: { "proj1/ws1": [{ branch: "old" }] as any } });
-      mockRequest.mockRejectedValueOnce(new Error("fail"));
-
-      await useAppStore.getState().refreshRepoInfo("proj1", "proj1/ws1");
-
-      expect(useAppStore.getState().repoInfo["proj1/ws1"]).toEqual([{ branch: "old" }]);
-    });
-  });
-
-  describe("refreshSessions()", () => {
-    it("fetches and stores sessions", async () => {
-      const sessions = [{ id: "sess1" }];
-      mockRequest.mockResolvedValueOnce(sessions);
-
-      await useAppStore.getState().refreshSessions("proj1/ws1");
-
-      expect(mockRequest).toHaveBeenCalledWith("sessions.list", { workspaceId: "proj1/ws1" });
-      expect(useAppStore.getState().sessions["proj1/ws1"]).toEqual(sessions);
-    });
-
-    it("keeps stale data on error", async () => {
-      useAppStore.setState({ sessions: { "proj1/ws1": [{ id: "old" }] as any } });
-      mockRequest.mockRejectedValueOnce(new Error("fail"));
-
-      await useAppStore.getState().refreshSessions("proj1/ws1");
-
-      expect(useAppStore.getState().sessions["proj1/ws1"]).toEqual([{ id: "old" }]);
-    });
-  });
-
-  describe("refreshSessionsByProject()", () => {
-    it("fetches and stores sessions by project key", async () => {
-      const sessions = [{ id: "sess1" }];
-      mockRequest.mockResolvedValueOnce(sessions);
-
-      await useAppStore.getState().refreshSessionsByProject("proj1");
-
-      expect(mockRequest).toHaveBeenCalledWith("sessions.listByProject", { projectId: "proj1" });
-      expect(useAppStore.getState().sessions["project:proj1"]).toEqual(sessions);
-    });
-
-    it("keeps stale data on error", async () => {
-      useAppStore.setState({ sessions: { "project:proj1": [{ id: "old" }] as any } });
-      mockRequest.mockRejectedValueOnce(new Error("fail"));
-
-      await useAppStore.getState().refreshSessionsByProject("proj1");
-
-      expect(useAppStore.getState().sessions["project:proj1"]).toEqual([{ id: "old" }]);
     });
   });
 

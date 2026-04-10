@@ -22,9 +22,10 @@ export function GitSyncButton({ projectId, workspaceId, repoInfo, onSynced }: Gi
     setSyncing(true);
     const wsParam = workspaceId ? { workspaceId } : {};
     try {
-      await transport.request("repos.sync", { projectId, ...wsParam });
-      const info = await transport.request("repos.getInfo", { projectId, ...wsParam });
-      onSynced(info);
+      const results = await transport.request("repos.sync", { projectId, ...wsParam });
+      // Repo info will be updated via state:patch push; use the current repoInfo as callback
+      onSynced(repoInfo);
+      void results;
     } catch {
       // Best effort
     } finally {

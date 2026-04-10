@@ -65,26 +65,9 @@ export const useScriptsStore = create<ScriptsState & ScriptsActions>((set, get) 
       currentWorkspaceId: workspaceId,
       config: null,
     });
-    try {
-      const config = await transport.request("scripts.load", { workspaceId });
-      // Apply any statuses that arrived before config loaded
-      const pending = get().pendingStatuses;
-      if (pending.length > 0) {
-        const statuses = [...config.statuses];
-        for (const status of pending) {
-          const wsId = `${status.projectId}/${status.workspace}`;
-          if (wsId !== workspaceId) continue;
-          const idx = statuses.findIndex((s) => s.scriptId === status.scriptId);
-          if (idx >= 0) statuses[idx] = status;
-          else statuses.push(status);
-        }
-        set({ config: { ...config, statuses }, loading: false, pendingStatuses: [] });
-      } else {
-        set({ config, loading: false });
-      }
-    } catch {
-      set({ loading: false, pendingStatuses: [] });
-    }
+    // Config now comes from the app store's scripts field via state.init / state:patch.
+    // We just set loading: false and wait for the config to be applied externally.
+    set({ loading: false });
   },
 
   runScript: async (workspaceId, service, script) => {
@@ -157,50 +140,6 @@ export const useScriptsStore = create<ScriptsState & ScriptsActions>((set, get) 
   },
 
   subscribePush: () => {
-    const unsubStatus = transport.subscribe(
-      "scripts:status",
-      ({ status }: { service: string; script: string; status: ScriptStatus }) => {
-        const { config, currentWorkspaceId } = get();
-        if (!config) {
-          // Queue for when config loads
-          set({ pendingStatuses: [...get().pendingStatuses, status] });
-          return;
-        }
-        // Ignore statuses from other workspaces
-        const statusWorkspaceId = `${status.projectId}/${status.workspace}`;
-        if (statusWorkspaceId !== currentWorkspaceId) return;
-        const existing = config.statuses.findIndex((s) => s.scriptId === status.scriptId);
-        if (existing >= 0) {
-          const prev = config.statuses[existing]!;
-          if (
-            prev.health === status.health &&
-            prev.pid === status.pid &&
-            prev.exitCode === status.exitCode
-          ) {
-            return;
-          }
-        }
-        const next = [...config.statuses];
-        let staleScriptId: string | null = null;
-        if (existing >= 0) {
-          const prev = config.statuses[existing]!;
-          if (prev.scriptId !== status.scriptId) {
-            staleScriptId = prev.scriptId;
-          }
-          next[existing] = status;
-        } else {
-          next.push(status);
-        }
-        if (staleScriptId) {
-          const logs = new Map(get().logs);
-          logs.delete(staleScriptId);
-          set({ config: { ...config, statuses: next }, logs });
-        } else {
-          set({ config: { ...config, statuses: next } });
-        }
-      },
-    );
-
     const unsubLog = transport.subscribe(
       "scripts:log",
       ({ scriptId, line }: { scriptId: string; service: string; script: string; line: string }) => {
@@ -221,19 +160,9 @@ export const useScriptsStore = create<ScriptsState & ScriptsActions>((set, get) 
       },
     );
 
-    const unsubReload = transport.subscribe("scripts:reload", ({ projectId }) => {
-      const next = new Set(get().discoveringProjects);
-      next.delete(projectId);
-      const errors = new Map(get().discoveryErrors);
-      errors.delete(projectId);
-      set({ discoveringProjects: next, discoveryErrors: errors });
-    });
-
     return () => {
-      unsubStatus();
       unsubLog();
       unsubDiscovering();
-      unsubReload();
     };
   },
 }));

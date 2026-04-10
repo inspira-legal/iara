@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { GitBranch, GitFork, Plus, Trash2 } from "lucide-react";
-import type { RepoInfo } from "@iara/contracts";
 import { useAppStore } from "~/stores/app";
 import { transport } from "~/lib/ws-transport";
 import { RepoCard } from "~/components/RepoCard";
@@ -66,7 +65,6 @@ function ProjectManagement({
 }) {
   const cacheKey = mainWorkspaceId;
   const repoInfo = useAppStore((s) => s.getRepoInfo(cacheKey));
-  const refreshRepoInfo = useAppStore((s) => s.refreshRepoInfo);
   const deleteProject = useAppStore((s) => s.deleteProject);
   const deleteWorkspace = useAppStore((s) => s.deleteWorkspace);
 
@@ -81,16 +79,6 @@ function ProjectManagement({
     name: string;
   } | null>(null);
   const [deletingWorkspace, setDeletingWorkspace] = useState(false);
-
-  useEffect(() => {
-    void refreshRepoInfo(project.id, cacheKey, mainWorkspaceId);
-  }, [project.id, cacheKey, mainWorkspaceId, refreshRepoInfo]);
-
-  const updateRepoInfo = (info: RepoInfo[]) => {
-    useAppStore.setState((s) => ({
-      repoInfo: { ...s.repoInfo, [cacheKey]: info },
-    }));
-  };
 
   return (
     <>
@@ -165,8 +153,7 @@ function ProjectManagement({
         onClose={() => setShowAddRepo(false)}
         onAdd={async (input) => {
           await transport.request("repos.add", { projectId: project.id, ...input });
-          const info = await transport.request("repos.getInfo", { projectId: project.id });
-          updateRepoInfo(info);
+          // Repo info is pushed via state:patch after server-side add
         }}
       />
 
@@ -188,8 +175,7 @@ function ProjectManagement({
         onConfirm={async () => {
           setDeletingRepo(true);
           try {
-            const info = await transport.request("repos.getInfo", { projectId: project.id });
-            updateRepoInfo(info);
+            // Repo info is refreshed via state:patch after server-side changes
           } finally {
             setDeletingRepo(false);
           }
