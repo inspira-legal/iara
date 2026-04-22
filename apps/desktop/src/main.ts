@@ -385,9 +385,29 @@ function createWindow(): BrowserWindow {
     ],
   };
 
+  // macOS requires the first menu item to be the app menu; it also registers Cmd+Q.
+  const macAppMenu: Electron.MenuItemConstructorOptions = {
+    label: app.name,
+    submenu: [
+      { role: "about" },
+      { type: "separator" },
+      { role: "services" },
+      { type: "separator" },
+      { role: "hide" },
+      { role: "hideOthers" },
+      { role: "unhide" },
+      { type: "separator" },
+      { role: "quit" },
+    ],
+  };
+
+  const platformMenus: Electron.MenuItemConstructorOptions[] =
+    process.platform === "darwin" ? [macAppMenu] : [];
+
   if (isDevelopment) {
     Menu.setApplicationMenu(
       Menu.buildFromTemplate([
+        ...platformMenus,
         editMenu,
         {
           label: "View",
@@ -396,7 +416,7 @@ function createWindow(): BrowserWindow {
       ]),
     );
   } else {
-    Menu.setApplicationMenu(Menu.buildFromTemplate([editMenu]));
+    Menu.setApplicationMenu(Menu.buildFromTemplate([...platformMenus, editMenu]));
   }
 
   // Keyboard shortcuts handled at the Electron level (before Chromium processes them).

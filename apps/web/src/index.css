@@ -6,6 +6,12 @@
   scrollbar-color: oklch(0.336 0.007 285.775) transparent;
 }
 
+/* ── Disable macOS elastic bounce so wheel events reach xterm.js ── */
+html,
+body {
+  overscroll-behavior: none;
+}
+
 /* ── Disable text selection app-wide, re-enable for inputs/terminals ── */
 body {
   user-select: none;
