@@ -22,14 +22,20 @@ expand_path() {
 # .. / . components. Cross-platform: macOS BSD realpath + Linux GNU realpath.
 resolve_path() {
   EXPANDED=$(expand_path "$1")
+  # Ensure absolute path — relative paths are resolved against CWD so that the
+  # workspace prefix check works correctly on all platforms.
+  case "$EXPANDED" in
+    /*) ;;
+    *) EXPANDED="$(pwd)/$EXPANDED" ;;
+  esac
   # Existing path: use realpath (resolves symlinks, works on both platforms)
   RESOLVED=$(realpath "$EXPANDED" 2>/dev/null)
-  [ -n "$RESOLVED" ] && echo "$RESOLVED" && return
+  [ -n "$RESOLVED" ] && printf '%s\n' "$RESOLVED" && return
   # Non-existing path on Linux: GNU realpath -m resolves .. without existence
   RESOLVED=$(realpath -m "$EXPANDED" 2>/dev/null)
-  [ -n "$RESOLVED" ] && echo "$RESOLVED" && return
+  [ -n "$RESOLVED" ] && printf '%s\n' "$RESOLVED" && return
   # Fallback: awk-based normalization of .. and . (macOS-safe, no external deps)
-  echo "$EXPANDED" | awk '{
+  printf '%s\n' "$EXPANDED" | awk '{
     n = split($0, a, "/")
     j = 0
     for (i = 1; i <= n; i++) {
