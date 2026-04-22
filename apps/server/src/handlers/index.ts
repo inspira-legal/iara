@@ -23,7 +23,7 @@ import { activeRuns } from "../services/claude-runner.js";
 import type { PushFn, PushPatchFn } from "../types.js";
 export type { PushFn, PushPatchFn };
 
-export interface HandlerDeps {
+interface HandlerDeps {
   appState: AppState;
   projectsDirWatcher: ProjectsDirWatcher;
 

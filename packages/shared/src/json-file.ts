@@ -3,7 +3,7 @@ import * as path from "node:path";
 import type { z } from "zod";
 import { writeFileSync as writeFileAtomicSync } from "atomically";
 
-export interface JsonFileHandle<T> {
+interface JsonFileHandle<T> {
   /** Read + validate. With regenerate: self-heals on missing/corrupt. Without: throws. */
   read(): T;
   /** Validate + atomic write (write to .tmp, rename). */

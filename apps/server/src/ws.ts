@@ -23,7 +23,7 @@ export function pushAll<E extends keyof WsPushEvents>(event: E, params: WsPushEv
   }
 }
 
-export interface ServerOptions {
+interface ServerOptions {
   port: number;
   authToken: string;
   webDir?: string | undefined;

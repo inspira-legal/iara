@@ -35,7 +35,7 @@ const XTERM_THEME = {
   brightWhite: "#ffffff",
 };
 
-export interface XTermInstance {
+interface XTermInstance {
   term: Terminal;
   fitAddon: FitAddon;
   keybindingHandlers: KeybindingHandlers;

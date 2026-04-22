@@ -1,8 +1,8 @@
 import type { WsPushEvents } from "@iara/contracts";
 import type { pushAll as pushAllFn } from "../ws.js";
 
-export type StatePatch = WsPushEvents["state:patch"];
-export type PushPatchFn = (patch: StatePatch) => void;
+type StatePatch = WsPushEvents["state:patch"];
+type PushPatchFn = (patch: StatePatch) => void;
 
 /**
  * Create a coalescing push function that batches state:patch within the same

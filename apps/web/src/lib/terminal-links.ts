@@ -24,7 +24,7 @@ const REL_DIR_RE = /(?<!\w)((?:\.\.\/|\.\/|~\/)[\w.@\-+]+(?:\/[\w.@\-+]+){2,})/g
 const BARE_PATH_RE =
   /(?<![:\w/~.\\])((?:[a-zA-Z@][\w.@\-+]+\/)+[\w.@\-+]*\.\w+(?::\d+(?::\d+)?)?)(?![/\w@\-+])/g;
 
-export interface FileLink {
+interface FileLink {
   startIndex: number;
   length: number;
   text: string;
