@@ -391,8 +391,6 @@ function createWindow(): BrowserWindow {
     submenu: [
       { role: "about" },
       { type: "separator" },
-      { role: "services" },
-      { type: "separator" },
       { role: "hide" },
       { role: "hideOthers" },
       { role: "unhide" },
