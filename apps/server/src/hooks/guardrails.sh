@@ -18,10 +18,31 @@ expand_path() {
   esac
 }
 
-# Resolve a path: expand ~, then resolve with realpath
+# Resolve a path: expand ~, resolve symlinks where possible, and normalize
+# .. / . components. Cross-platform: macOS BSD realpath + Linux GNU realpath.
 resolve_path() {
   EXPANDED=$(expand_path "$1")
-  realpath -m "$EXPANDED" 2>/dev/null || echo "$EXPANDED"
+  # Existing path: use realpath (resolves symlinks, works on both platforms)
+  RESOLVED=$(realpath "$EXPANDED" 2>/dev/null)
+  [ -n "$RESOLVED" ] && echo "$RESOLVED" && return
+  # Non-existing path on Linux: GNU realpath -m resolves .. without existence
+  RESOLVED=$(realpath -m "$EXPANDED" 2>/dev/null)
+  [ -n "$RESOLVED" ] && echo "$RESOLVED" && return
+  # Fallback: awk-based normalization of .. and . (macOS-safe, no external deps)
+  echo "$EXPANDED" | awk '{
+    n = split($0, a, "/")
+    j = 0
+    for (i = 1; i <= n; i++) {
+      if (a[i] == ".." && j > 0) j--
+      else if (a[i] != "" && a[i] != ".") c[++j] = a[i]
+    }
+    out = (substr($0, 1, 1) == "/") ? "/" : ""
+    for (i = 1; i <= j; i++) {
+      out = out c[i]
+      if (i < j) out = out "/"
+    }
+    print out
+  }'
 }
 
 # Respect opt-out
