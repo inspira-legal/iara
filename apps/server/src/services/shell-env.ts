@@ -1,8 +1,31 @@
 import { execFile } from "node:child_process";
+import * as os from "node:os";
+import * as path from "node:path";
 
 /** Vars injected by Electron/iara — never overwrite from the login shell. */
 const PROTECTED_PREFIXES = ["IARA_", "ELECTRON_"];
 const PROTECTED_KEYS = new Set(["NODE_OPTIONS", "NODE_ENV"]);
+
+/**
+ * Common user-install directories that aren't in any system path but are where
+ * CLIs like `claude`, `pip --user` installs, `npm --global` (user prefix), and
+ * homebrew end up. Appended to PATH after the login shell sync so that a
+ * terminal emulator's custom injection (or a CLI installer's `.local/bin` drop)
+ * is still reachable from packaged builds.
+ */
+function userBinFallbacks(): string[] {
+  const home = os.homedir();
+  const paths = [
+    path.join(home, ".local/bin"),
+    path.join(home, ".claude/local"),
+    path.join(home, ".npm-global/bin"),
+    path.join(home, "bin"),
+  ];
+  if (process.platform === "darwin") {
+    paths.push("/opt/homebrew/bin", "/opt/homebrew/sbin", "/usr/local/bin");
+  }
+  return paths;
+}
 
 function isProtected(key: string): boolean {
   return PROTECTED_KEYS.has(key) || PROTECTED_PREFIXES.some((p) => key.startsWith(p));
@@ -19,6 +42,16 @@ function applyShellOutput(output: string): void {
       process.env[key] = value;
     }
   }
+}
+
+function appendMissingPathEntries(): void {
+  const current = process.env.PATH ?? "";
+  const existing = new Set(current.split(path.delimiter).filter(Boolean));
+  const additions = userBinFallbacks().filter((p) => !existing.has(p));
+  if (additions.length === 0) return;
+  process.env.PATH = current
+    ? `${current}${path.delimiter}${additions.join(path.delimiter)}`
+    : additions.join(path.delimiter);
 }
 
 /**
@@ -38,6 +71,7 @@ export function syncShellEnvironment(): Promise<void> {
       if (!err && stdout) {
         applyShellOutput(stdout);
       }
+      appendMissingPathEntries();
       resolve(); // Always resolve — fall back to existing env on error
     });
   });

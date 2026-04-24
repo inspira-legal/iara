@@ -7,8 +7,14 @@ interface ShallowWatcherOptions {
   onError?: (watchedPath: string, error: Error) => void;
 }
 
+interface WatchEntry {
+  handle: fs.FSWatcher;
+  /** True when we closed the handle ourselves — prevents double-firing onError. */
+  closedByUs: boolean;
+}
+
 export class ShallowWatcher {
-  private watchers = new Map<string, fs.FSWatcher>();
+  private watchers = new Map<string, WatchEntry>();
   private options: ShallowWatcherOptions;
 
   constructor(options: ShallowWatcherOptions) {
@@ -19,33 +25,57 @@ export class ShallowWatcher {
   add(targetPath: string): void {
     if (this.watchers.has(targetPath)) return;
 
+    const entry: WatchEntry = { handle: null as unknown as fs.FSWatcher, closedByUs: false };
+
+    const handleGone = () => {
+      if (this.watchers.get(targetPath) !== entry) return;
+      entry.closedByUs = true;
+      this.watchers.delete(targetPath);
+      entry.handle.close();
+      this.options.onError?.(
+        targetPath,
+        Object.assign(new Error(`ENOENT: ${targetPath}`), { code: "ENOENT" }),
+      );
+    };
+
     const handle = fs.watch(targetPath, (eventType, filename) => {
-      // On Linux, directory deletion emits "rename" instead of an error.
-      // Check if the watched path still exists; if not, treat as ENOENT.
-      if (eventType === "rename" && !fs.existsSync(targetPath)) {
-        this.remove(targetPath);
-        this.options.onError?.(
-          targetPath,
-          Object.assign(new Error(`ENOENT: ${targetPath}`), { code: "ENOENT" }),
-        );
+      // Linux emits "rename", macOS emits "change" when the watched directory is deleted.
+      if (!fs.existsSync(targetPath)) {
+        handleGone();
         return;
       }
       this.options.onChange(targetPath, eventType, filename);
     });
 
     handle.on("error", (err: Error) => {
-      this.remove(targetPath);
+      if (this.watchers.get(targetPath) !== entry) return;
+      entry.closedByUs = true;
+      this.watchers.delete(targetPath);
       this.options.onError?.(targetPath, err);
     });
 
-    this.watchers.set(targetPath, handle);
+    // macOS (FSEvents): the watcher closes when the watched directory is deleted.
+    // This catches the case where no 'rename' or 'error' event is emitted first.
+    handle.once("close", () => {
+      if (!entry.closedByUs && this.watchers.get(targetPath) === entry) {
+        this.watchers.delete(targetPath);
+        this.options.onError?.(
+          targetPath,
+          Object.assign(new Error(`ENOENT: ${targetPath}`), { code: "ENOENT" }),
+        );
+      }
+    });
+
+    entry.handle = handle;
+    this.watchers.set(targetPath, entry);
   }
 
   /** Remove a watched path. Closes the fs.watch handle. */
   remove(targetPath: string): void {
-    const handle = this.watchers.get(targetPath);
-    if (!handle) return;
-    handle.close();
+    const entry = this.watchers.get(targetPath);
+    if (!entry) return;
+    entry.closedByUs = true;
+    entry.handle.close();
     this.watchers.delete(targetPath);
   }
 
@@ -61,8 +91,9 @@ export class ShallowWatcher {
 
   /** Close all watches and clear internal state. */
   stop(): void {
-    for (const handle of this.watchers.values()) {
-      handle.close();
+    for (const entry of this.watchers.values()) {
+      entry.closedByUs = true;
+      entry.handle.close();
     }
     this.watchers.clear();
   }

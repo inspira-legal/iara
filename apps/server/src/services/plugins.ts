@@ -1,7 +1,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 
-export interface PluginConfig {
+interface PluginConfig {
   bridgePath: string;
   nodePath: string;
   socketPath: string;
@@ -53,7 +53,7 @@ export function generatePluginDir(serverDir: string, config: PluginConfig): stri
               hooks: [
                 {
                   type: "command",
-                  command: "sh ${CLAUDE_PLUGIN_ROOT}/scripts/guardrails.sh",
+                  command: 'sh "${CLAUDE_PLUGIN_ROOT}/scripts/guardrails.sh"',
                 },
               ],
             },
@@ -64,7 +64,7 @@ export function generatePluginDir(serverDir: string, config: PluginConfig): stri
               hooks: [
                 {
                   type: "command",
-                  command: `[ -n "$IARA_SERVER_SOCKET" ] && ELECTRON_RUN_AS_NODE=1 ${config.nodePath} ${config.bridgePath} status.tool-complete || true`,
+                  command: `[ -n "$IARA_SERVER_SOCKET" ] && ELECTRON_RUN_AS_NODE=1 "${config.nodePath}" "${config.bridgePath}" status.tool-complete || true`,
                 },
               ],
             },
@@ -75,7 +75,7 @@ export function generatePluginDir(serverDir: string, config: PluginConfig): stri
               hooks: [
                 {
                   type: "command",
-                  command: `[ -n "$IARA_SERVER_SOCKET" ] && ELECTRON_RUN_AS_NODE=1 ${config.nodePath} ${config.bridgePath} status.session-end || true`,
+                  command: `[ -n "$IARA_SERVER_SOCKET" ] && ELECTRON_RUN_AS_NODE=1 "${config.nodePath}" "${config.bridgePath}" status.session-end || true`,
                 },
               ],
             },
@@ -86,7 +86,7 @@ export function generatePluginDir(serverDir: string, config: PluginConfig): stri
               hooks: [
                 {
                   type: "command",
-                  command: `sh \${CLAUDE_PLUGIN_ROOT}/scripts/session-start.sh`,
+                  command: 'sh "${CLAUDE_PLUGIN_ROOT}/scripts/session-start.sh"',
                 },
               ],
             },
@@ -107,10 +107,10 @@ export function generatePluginDir(serverDir: string, config: PluginConfig): stri
     `#!/bin/sh
 # Extract session_id from stdin JSON and notify the server.
 # Fires on every SessionStart: new, resume, clear, compact.
-SESSION_ID=$(ELECTRON_RUN_AS_NODE=1 ${config.nodePath} -e "let d='';process.stdin.on('data',c=>d+=c);process.stdin.on('end',()=>{try{process.stdout.write(JSON.parse(d).session_id||'')}catch{}})")
+SESSION_ID=$(ELECTRON_RUN_AS_NODE=1 "${config.nodePath}" -e "let d='';process.stdin.on('data',c=>d+=c);process.stdin.on('end',()=>{try{process.stdout.write(JSON.parse(d).session_id||'')}catch{}})")
 [ -z "$SESSION_ID" ] && exit 0
 [ -z "$IARA_TERMINAL_ID" ] && exit 0
-IARA_DESKTOP_SOCKET="${config.socketPath}" ELECTRON_RUN_AS_NODE=1 ${config.nodePath} ${config.bridgePath} session.update-id sessionId="$SESSION_ID" terminalId="$IARA_TERMINAL_ID" || true
+IARA_DESKTOP_SOCKET="${config.socketPath}" ELECTRON_RUN_AS_NODE=1 "${config.nodePath}" "${config.bridgePath}" session.update-id sessionId="$SESSION_ID" terminalId="$IARA_TERMINAL_ID" || true
 `,
   );
 
@@ -124,7 +124,7 @@ Send a notification via the iara server.
 ## Usage
 
 \`\`\`bash
-IARA_DESKTOP_SOCKET="${config.socketPath}" ELECTRON_RUN_AS_NODE=1 ${config.nodePath} ${config.bridgePath} notify message="$ARGUMENTS"
+IARA_DESKTOP_SOCKET="${config.socketPath}" ELECTRON_RUN_AS_NODE=1 "${config.nodePath}" "${config.bridgePath}" notify message="$ARGUMENTS"
 \`\`\`
 
 Pass \`$ARGUMENTS\` as the notification message.
@@ -141,7 +141,7 @@ Control dev servers managed by iara.
 ## Usage
 
 \`\`\`bash
-IARA_DESKTOP_SOCKET="${config.socketPath}" ELECTRON_RUN_AS_NODE=1 ${config.nodePath} ${config.bridgePath} dev.$ARGUMENTS
+IARA_DESKTOP_SOCKET="${config.socketPath}" ELECTRON_RUN_AS_NODE=1 "${config.nodePath}" "${config.bridgePath}" dev.$ARGUMENTS
 \`\`\`
 
 Available methods:

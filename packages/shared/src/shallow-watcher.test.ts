@@ -121,4 +121,66 @@ describe("ShallowWatcher", () => {
     watcher = new ShallowWatcher({ onChange: vi.fn() });
     expect(() => watcher!.remove("/non/existent")).not.toThrow();
   });
+
+  it("remove() does not fire onError (closedByUs prevents spurious close event)", async () => {
+    const dir = tmpDir();
+    const onError = vi.fn();
+    watcher = new ShallowWatcher({ onChange: vi.fn(), onError });
+
+    watcher.add(dir);
+    await new Promise((r) => setTimeout(r, 50));
+
+    watcher.remove(dir);
+
+    // Wait long enough for any close event to have fired
+    await new Promise((r) => setTimeout(r, 100));
+
+    expect(onError).not.toHaveBeenCalled();
+    expect(watcher.has(dir)).toBe(false);
+  });
+
+  it("stop() does not fire onError for any watched path", async () => {
+    const dir1 = tmpDir();
+    const dir2 = tmpDir();
+    const onError = vi.fn();
+    watcher = new ShallowWatcher({ onChange: vi.fn(), onError });
+
+    watcher.add(dir1);
+    watcher.add(dir2);
+    await new Promise((r) => setTimeout(r, 50));
+
+    watcher.stop();
+
+    await new Promise((r) => setTimeout(r, 100));
+
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  it("directory deletion triggers onError exactly once (no double-fire between handleGone and close)", async () => {
+    const dir = tmpDir();
+    const onError = vi.fn();
+    watcher = new ShallowWatcher({ onChange: vi.fn(), onError });
+
+    watcher.add(dir);
+    await new Promise((r) => setTimeout(r, 50));
+
+    fs.rmSync(dir, { recursive: true, force: true });
+    tmpDirs = tmpDirs.filter((d) => d !== dir);
+
+    await vi.waitFor(
+      () => {
+        expect(onError).toHaveBeenCalled();
+      },
+      { timeout: 2000 },
+    );
+
+    // Give any trailing close event time to fire
+    await new Promise((r) => setTimeout(r, 200));
+
+    expect(onError).toHaveBeenCalledTimes(1);
+    expect(onError).toHaveBeenCalledWith(
+      dir,
+      expect.objectContaining({ message: expect.stringContaining("ENOENT") }),
+    );
+  });
 });

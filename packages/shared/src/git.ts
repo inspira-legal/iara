@@ -23,7 +23,7 @@ export class GitOperationError extends Error {
   }
 }
 
-export interface GitStatus {
+interface GitStatus {
   branch: string;
   dirtyFiles: string[];
 }

@@ -5,7 +5,7 @@ import {
   renameSession as sdkRenameSession,
 } from "@anthropic-ai/claude-agent-sdk";
 
-export interface SessionInfo {
+interface SessionInfo {
   id: string;
   filePath: string;
   /** The working directory where this session was originally created. */

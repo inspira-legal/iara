@@ -6,9 +6,7 @@ import { query } from "@anthropic-ai/claude-agent-sdk";
 import { z } from "zod";
 import type { ClaudeProgress } from "@iara/contracts";
 
-export type { ClaudeProgress };
-
-export interface ClaudeRunConfig {
+interface ClaudeRunConfig {
   cwd: string;
   prompt: string;
   systemPrompt?: string;
@@ -16,7 +14,7 @@ export interface ClaudeRunConfig {
   signal?: AbortSignal;
 }
 
-export interface ClaudeRun<T> {
+interface ClaudeRun<T> {
   progress: AsyncIterable<ClaudeProgress>;
   result: Promise<T>;
   abort: () => void;

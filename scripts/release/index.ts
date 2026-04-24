@@ -15,7 +15,16 @@
  */
 
 import { $ } from "zx";
-import { cpSync, existsSync, mkdirSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  cpSync,
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
 import { resolve } from "node:path";
 
 import { ROOT, STAGING, RELEASE, parseArgs } from "./config.js";
@@ -24,6 +33,24 @@ import { createBuildConfig } from "./electron-builder.js";
 
 /** Convert Windows backslashes to forward slashes for Git Bash compatibility. */
 const posix = (p: string) => p.replaceAll("\\", "/");
+
+/** Recursively restore the executable bit on known prebuilt helper binaries. */
+function restoreExecBits(root: string): void {
+  if (!existsSync(root)) return;
+  const execNames = new Set(["spawn-helper"]);
+  const visit = (dir: string) => {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const full = resolve(dir, entry.name);
+      if (entry.isDirectory()) {
+        visit(full);
+      } else if (entry.isFile() && execNames.has(entry.name)) {
+        const mode = statSync(full).mode;
+        chmodSync(full, mode | 0o111);
+      }
+    }
+  };
+  visit(root);
+}
 
 // ---------------------------------------------------------------------------
 // Main
@@ -132,6 +159,11 @@ writeFileSync(
 
 console.log("\n==> Installing server native dependencies...");
 await $({ cwd: posix(serverModulesDir) })`bun install --production`;
+
+// `bun install` extracts tarballs without preserving the executable bit on
+// prebuilt binaries. node-pty ships a `spawn-helper` binary per platform that
+// must be executable — without it, `posix_spawnp` fails at runtime.
+restoreExecBits(resolve(serverModulesDir, "node_modules"));
 
 writeFileSync(
   resolve(STAGING, "package.json"),

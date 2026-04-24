@@ -13,7 +13,7 @@ import {
   shell,
 } from "electron";
 import WebSocket from "ws";
-import { syncShellEnvironment } from "./services/shell-env.js";
+import { syncShellPath } from "./services/shell-env.js";
 import { BrowserPanel } from "./services/browser-panel.js";
 import {
   isWslAvailable,
@@ -27,7 +27,7 @@ import {
 import { isWindows, getStateDir } from "@iara/shared/platform";
 import { RotatingFileSink } from "./services/log-sink.js";
 
-syncShellEnvironment();
+syncShellPath();
 
 const isDevelopment = Boolean(process.env.VITE_DEV_SERVER_URL);
 const APP_SCHEME = "iara";
@@ -385,9 +385,27 @@ function createWindow(): BrowserWindow {
     ],
   };
 
+  // macOS requires the first menu item to be the app menu; it also registers Cmd+Q.
+  const macAppMenu: Electron.MenuItemConstructorOptions = {
+    label: app.name,
+    submenu: [
+      { role: "about" },
+      { type: "separator" },
+      { role: "hide" },
+      { role: "hideOthers" },
+      { role: "unhide" },
+      { type: "separator" },
+      { role: "quit" },
+    ],
+  };
+
+  const platformMenus: Electron.MenuItemConstructorOptions[] =
+    process.platform === "darwin" ? [macAppMenu] : [];
+
   if (isDevelopment) {
     Menu.setApplicationMenu(
       Menu.buildFromTemplate([
+        ...platformMenus,
         editMenu,
         {
           label: "View",
@@ -396,7 +414,7 @@ function createWindow(): BrowserWindow {
       ]),
     );
   } else {
-    Menu.setApplicationMenu(Menu.buildFromTemplate([editMenu]));
+    Menu.setApplicationMenu(Menu.buildFromTemplate([...platformMenus, editMenu]));
   }
 
   // Keyboard shortcuts handled at the Electron level (before Chromium processes them).

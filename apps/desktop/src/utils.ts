@@ -35,7 +35,7 @@ export function toWslPath(winPath: string): string {
 // Window state persistence
 // ---------------------------------------------------------------------------
 
-export interface WindowState {
+interface WindowState {
   x?: number;
   y?: number;
   width: number;
