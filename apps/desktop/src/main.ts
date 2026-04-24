@@ -13,7 +13,7 @@ import {
   shell,
 } from "electron";
 import WebSocket from "ws";
-import { syncShellEnvironment } from "./services/shell-env.js";
+import { syncShellPath } from "./services/shell-env.js";
 import { BrowserPanel } from "./services/browser-panel.js";
 import {
   isWslAvailable,
@@ -27,7 +27,7 @@ import {
 import { isWindows, getStateDir } from "@iara/shared/platform";
 import { RotatingFileSink } from "./services/log-sink.js";
 
-syncShellEnvironment();
+syncShellPath();
 
 const isDevelopment = Boolean(process.env.VITE_DEV_SERVER_URL);
 const APP_SCHEME = "iara";
