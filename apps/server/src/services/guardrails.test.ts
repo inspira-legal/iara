@@ -125,6 +125,48 @@ describe("Edit/Write guardrails", () => {
     expect(result.exitCode).toBe(2);
     expect(result.stderr).toContain("blocked");
   });
+
+  it("blocks deep path traversal (multiple .. segments) outside workspace", () => {
+    const result = run({
+      input: {
+        tool_name: "Write",
+        tool_input: { file_path: `${WORKSPACE_DIR}/a/b/../../../default/repo/file.ts` },
+      },
+    });
+    expect(result.exitCode).toBe(2);
+    expect(result.stderr).toContain("blocked");
+  });
+
+  it("allows path traversal that stays inside workspace", () => {
+    const result = run({
+      input: {
+        tool_name: "Write",
+        tool_input: { file_path: `${WORKSPACE_DIR}/src/../src/index.ts` },
+      },
+    });
+    expect(result.exitCode).toBe(0);
+  });
+
+  it("normalizes multiple consecutive slashes in workspace paths", () => {
+    const result = run({
+      input: {
+        tool_name: "Write",
+        tool_input: { file_path: `${WORKSPACE_DIR}//src///index.ts` },
+      },
+    });
+    expect(result.exitCode).toBe(0);
+  });
+
+  it("blocks paths with multiple slashes that still resolve outside workspace", () => {
+    const result = run({
+      input: {
+        tool_name: "Write",
+        tool_input: { file_path: "//tmp//something.txt" },
+      },
+    });
+    expect(result.exitCode).toBe(2);
+    expect(result.stderr).toContain("blocked");
+  });
 });
 
 // -- Bash --
