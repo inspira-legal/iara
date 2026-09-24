@@ -18,10 +18,29 @@ expand_path() {
   esac
 }
 
+# Lexically collapse "." and ".." (fallback where realpath lacks -m, e.g. macOS)
+normalize_path() {
+  case "$1" in
+    /*) P="$1" ;;
+    *) P="$PWD/$1" ;;
+  esac
+  echo "$P" | awk -F/ '{
+    n = 0
+    for (i = 1; i <= NF; i++) {
+      if ($i == "" || $i == ".") continue
+      if ($i == "..") { if (n > 0) n--; continue }
+      s[++n] = $i
+    }
+    out = ""
+    for (i = 1; i <= n; i++) out = out "/" s[i]
+    print (out == "" ? "/" : out)
+  }'
+}
+
 # Resolve a path: expand ~, then resolve with realpath
 resolve_path() {
   EXPANDED=$(expand_path "$1")
-  realpath -m "$EXPANDED" 2>/dev/null || echo "$EXPANDED"
+  realpath -m "$EXPANDED" 2>/dev/null || normalize_path "$EXPANDED"
 }
 
 # Respect opt-out
