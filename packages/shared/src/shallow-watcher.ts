@@ -20,9 +20,9 @@ export class ShallowWatcher {
     if (this.watchers.has(targetPath)) return;
 
     const handle = fs.watch(targetPath, (eventType, filename) => {
-      // On Linux, directory deletion emits "rename" instead of an error.
+      // Deletion emits an event instead of an error ("rename" on Linux, "change" on macOS).
       // Check if the watched path still exists; if not, treat as ENOENT.
-      if (eventType === "rename" && !fs.existsSync(targetPath)) {
+      if (!fs.existsSync(targetPath)) {
         this.remove(targetPath);
         this.options.onError?.(
           targetPath,

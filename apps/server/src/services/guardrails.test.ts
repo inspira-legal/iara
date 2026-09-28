@@ -1,5 +1,7 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { execFileSync } from "node:child_process";
+import * as fs from "node:fs";
+import * as os from "node:os";
 import * as path from "node:path";
 
 const SCRIPT = path.resolve(import.meta.dirname, "../hooks/guardrails.sh");
@@ -180,6 +182,78 @@ describe("Bash guardrails", () => {
     });
     expect(result.exitCode).toBe(2);
     expect(result.stderr).toContain("outside the workspace");
+  });
+});
+
+// -- Path resolution (native `realpath -m` and the macOS-style fallback) --
+
+describe.each([
+  { mode: "native realpath", fakeRealpath: false },
+  { mode: "fallback (realpath without -m)", fakeRealpath: true },
+])("path resolution: $mode", ({ fakeRealpath }) => {
+  let tmp: string;
+  let ws: string;
+  let env: Record<string, string>;
+
+  beforeAll(() => {
+    tmp = fs.mkdtempSync(path.join(os.tmpdir(), "iara-guardrails-"));
+    ws = path.join(tmp, "ws");
+    fs.mkdirSync(path.join(ws, "src"), { recursive: true });
+    fs.mkdirSync(path.join(tmp, "outside", "deep"), { recursive: true });
+    fs.symlinkSync("/", path.join(ws, "root"));
+    fs.symlinkSync("../outside/deep", path.join(ws, "deep"));
+    env = { IARA_WORKSPACE_DIR: ws };
+    if (fakeRealpath) {
+      const bin = path.join(tmp, "bin");
+      fs.mkdirSync(bin);
+      fs.writeFileSync(path.join(bin, "realpath"), "#!/bin/sh\nexit 1\n", { mode: 0o755 });
+      env.PATH = `${bin}:${process.env.PATH ?? ""}`;
+    }
+  });
+
+  afterAll(() => fs.rmSync(tmp, { recursive: true, force: true }));
+
+  const write = (file_path: string) =>
+    run({ env, input: { tool_name: "Write", tool_input: { file_path } } }).exitCode;
+  const bash = (command: string) =>
+    run({ env, input: { tool_name: "Bash", tool_input: { command } } }).exitCode;
+
+  it("allows .. that stays inside the workspace", () => {
+    expect(write(`${ws}/src/../lib/new.ts`)).toBe(0);
+    expect(write(`${ws}/./src/./a/../b.ts`)).toBe(0);
+  });
+
+  it("blocks .. that leaves the workspace", () => {
+    expect(write(`${ws}/../outside/file.ts`)).toBe(2);
+    expect(write(`${ws}/a/../../outside/file.ts`)).toBe(2);
+    expect(write(`${ws}${"/..".repeat(20)}/etc/passwd`)).toBe(2);
+  });
+
+  it("clamps .. past the filesystem root", () => {
+    expect(write(`/../..${ws}/file.ts`)).toBe(0);
+  });
+
+  it("does not match a sibling that shares the workspace prefix", () => {
+    expect(write(`${ws}x/file.ts`)).toBe(2);
+  });
+
+  it("blocks a symlink that points outside the workspace", () => {
+    expect(write(`${ws}/root/etc/passwd`)).toBe(2);
+  });
+
+  it("applies .. after following a symlink", () => {
+    // deep -> ../outside/deep, so deep/.. is outside/, not the workspace
+    expect(write(`${ws}/deep/../file.ts`)).toBe(2);
+  });
+
+  it("blocks escape sequences that echo would interpret", () => {
+    // echo turns \c into "stop output", truncating the path to ${ws}/a
+    expect(write(`${ws}/a\\c/../../outside/file.ts`)).toBe(2);
+  });
+
+  it("blocks Bash paths with .. that leave the workspace", () => {
+    expect(bash(`cat ${ws}/../outside/file.ts`)).toBe(2);
+    expect(bash(`cat ${ws}/src/../src/index.ts`)).toBe(0);
   });
 });
 
